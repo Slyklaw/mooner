@@ -48,7 +48,7 @@ fn Parser::current(self : Parser) -> Token {
 }
 
 ///|
-fn Parser::peek(self : Parser, offset : Int) -> Token {
+fn Parser::_peek(self : Parser, offset : Int) -> Token {
   let idx = self.pos + offset
   if idx < self.tokens.length() {
     self.tokens[idx]

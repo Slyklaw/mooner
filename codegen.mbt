@@ -117,10 +117,10 @@ fn CodeGen::emit_bytes(self : CodeGen, bytes : Array[Byte]) -> CodeGen {
 
 ///|
 fn CodeGen::emit32(self : CodeGen, v : Int) -> CodeGen {
-  let b0 = (v.to_uint() & 0xFF).to_byte()
-  let b1 = ((v.to_uint() >> 8) & 0xFF).to_byte()
-  let b2 = ((v.to_uint() >> 16) & 0xFF).to_byte()
-  let b3 = ((v.to_uint() >> 24) & 0xFF).to_byte()
+  let b0 = (v.reinterpret_as_uint() & 0xFF).to_byte()
+  let b1 = ((v.reinterpret_as_uint() >> 8) & 0xFF).to_byte()
+  let b2 = ((v.reinterpret_as_uint() >> 16) & 0xFF).to_byte()
+  let b3 = ((v.reinterpret_as_uint() >> 24) & 0xFF).to_byte()
   let g = self.emit_byte(b0).emit_byte(b1).emit_byte(b2).emit_byte(b3)
   g
 }
@@ -130,7 +130,7 @@ fn CodeGen::emit64(self : CodeGen, v : Int) -> CodeGen {
   let mut g = self
   let mut i = 0
   while i < 8 {
-    let b = ((v.to_uint() >> (i * 8)) & 0xFF).to_byte()
+    let b = ((v.reinterpret_as_uint() >> (i * 8)) & 0xFF).to_byte()
     g = g.emit_byte(b)
     i = i + 1
   }
@@ -245,7 +245,7 @@ fn CodeGen::emit_modrm_reg64(
 }
 
 ///|
-fn CodeGen::emit_rex(
+fn CodeGen::_emit_rex(
   self : CodeGen,
   w : Bool,
   r : Bool,
@@ -352,7 +352,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = g.emit_modrm_reg64(src, Reg64(dest))
       g
     }
-    Sub(Reg64(dest), Imm32(v)) => {
+    Sub(Reg64(_dest), Imm32(v)) => {
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
       let modrm_byte = modrm(3, 5, 4) // reg=101 (sub), rm=100 (rsp with SIB)
@@ -598,7 +598,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
 ///|
 fn CodeGen::add_string(self : CodeGen, s : String) -> (CodeGen, String) {
   let label = ".Lstr\{self.string_counter}"
-  let g = { ..self, string_counter: self.string_counter + 1 }
+  let g = { ..self, string_counter: self.string_counter + 1, strings: { let m = self.strings; m[s] = 0; m } }
   (g, label)
 }
 
@@ -702,26 +702,16 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         _ => g
       }
     }
-    CallExpr(func, args) => {
+    CallExpr(func, _args) => {
       let func_name = match func {
         Ident(name) => name
         _ => ""
       }
       let mut g = self
       match func_name {
-        "println" => {
+        "println" | "print" => {
           g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
           g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
-          g = g.emit_inst(Mov(Reg64("rsi"), Imm32(0)))
-          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(14)))
-          g = g.emit_inst(Syscall)
-          g
-        }
-        "print" => {
-          g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
-          g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
-          g = g.emit_inst(Mov(Reg64("rsi"), Imm32(0)))
-          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(14)))
           g = g.emit_inst(Syscall)
           g
         }
@@ -765,7 +755,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       let g = g.codegen_expr(body)
       g
     }
-    Func(name, params, _ret, body) => {
+    Func(name, _params, _ret, body) => {
       let mut g = self
       g = g.emit_inst(Jmp(".main_end"))
       g = g.define_label("\{name}")
@@ -797,6 +787,13 @@ pub fn codegen(ast : AST) -> Bytes {
   g = g.emit_inst(Mov(Reg64("rax"), Imm32(60)))
   g = g.emit_inst(Mov(Reg64("rdi"), Imm32(0)))
   g = g.emit_inst(Syscall)
+  for s, _offset in g.strings {
+    for i in 0..<s.length() {
+      let ch = s[i]
+      g = g.emit_byte(ch.to_int().reinterpret_as_uint().to_byte())
+    }
+    g = g.emit_byte(0)
+  }
   let code = g.code
   Bytes::from_array(code)
 }
