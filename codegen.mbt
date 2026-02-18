@@ -81,7 +81,7 @@ pub struct CodeGen {
   next_offset : Int
   current_func : String?
   func_bodies : Map[String, AST]
-  strings : Map[String, Int]
+  strings : Array[String]
   string_counter : Int
 }
 
@@ -96,7 +96,7 @@ fn CodeGen::new() -> CodeGen {
     next_offset: -8,
     current_func: None,
     func_bodies: Map::new(),
-    strings: Map::new(),
+    strings: [],
     string_counter: 0,
   }
 }
@@ -601,11 +601,7 @@ fn CodeGen::add_string(self : CodeGen, s : String) -> (CodeGen, String) {
   let g = {
     ..self,
     string_counter: self.string_counter + 1,
-    strings: {
-      let m = self.strings
-      m[s] = 0
-      m
-    },
+    strings: self.strings + [s],
   }
   (g, label)
 }
@@ -710,7 +706,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         _ => g
       }
     }
-    CallExpr(func, _args) => {
+    CallExpr(func, args) => {
       let func_name = match func {
         Ident(name) => name
         _ => ""
@@ -718,9 +714,19 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       let mut g = self
       match func_name {
         "println" | "print" => {
-          g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
-          g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
-          g = g.emit_inst(Syscall)
+          if args.length() >= 1 {
+            g = g.codegen_expr(args[0])
+            g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+            g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+            g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+            let arg0 = args[0]
+            let str_len = match arg0 {
+              String(s) => s.length()
+              _ => 8
+            }
+            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(str_len)))
+            g = g.emit_inst(Syscall)
+          }
           g
         }
         _ => g
@@ -764,15 +770,20 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g
     }
     Func(name, _params, _ret, body) => {
-      let mut g = self
-      g = g.emit_inst(Jmp(".main_end"))
-      g = g.define_label("\{name}")
-      g = g.emit_inst(Push(Reg64("rbp")))
-      g = g.emit_inst(Mov(Reg64("rbp"), Reg64("rsp")))
-      g = g.codegen_expr(body)
-      g = g.emit_inst(Pop(Reg64("rbp")))
-      g = g.emit_inst(Ret)
-      g
+      if name == "main" {
+        let g = self
+        g.codegen_expr(body)
+      } else {
+        let mut g = self
+        g = g.emit_inst(Jmp(".main_end"))
+        g = g.define_label("\{name}")
+        g = g.emit_inst(Push(Reg64("rbp")))
+        g = g.emit_inst(Mov(Reg64("rbp"), Reg64("rsp")))
+        g = g.codegen_expr(body)
+        g = g.emit_inst(Pop(Reg64("rbp")))
+        g = g.emit_inst(Ret)
+        g
+      }
     }
     ReturnExpr(e) => {
       let g = self.codegen_expr(e)
@@ -795,13 +806,43 @@ pub fn codegen(ast : AST) -> Bytes {
   g = g.emit_inst(Mov(Reg64("rax"), Imm32(60)))
   g = g.emit_inst(Mov(Reg64("rdi"), Imm32(0)))
   g = g.emit_inst(Syscall)
-  for s, _offset in g.strings {
-    for i in 0..<s.length() {
+  let mut str_idx = 0
+  while str_idx < g.strings.length() {
+    let s = g.strings[str_idx]
+    let mut i = 0
+    while i < s.length() {
       let ch = s[i]
       g = g.emit_byte(ch.to_int().reinterpret_as_uint().to_byte())
+      i = i + 1
     }
     g = g.emit_byte(0)
+    str_idx = str_idx + 1
+  }
+  str_idx = 0
+  while str_idx < g.string_counter {
+    let label = ".Lstr\{str_idx}"
+    g = g.define_label(label)
+    str_idx = str_idx + 1
   }
   let code = g.code
+  let mut i = 0
+  while i < g.pending_labels.length() {
+    let (label_name, ref_pos) = g.pending_labels[i]
+    match g.labels.get(label_name) {
+      Some(target_pos) => {
+        let offset = target_pos - (ref_pos + 4)
+        let b0 = (offset.reinterpret_as_uint() & 0xFF).to_byte()
+        let b1 = ((offset.reinterpret_as_uint() >> 8) & 0xFF).to_byte()
+        let b2 = ((offset.reinterpret_as_uint() >> 16) & 0xFF).to_byte()
+        let b3 = ((offset.reinterpret_as_uint() >> 24) & 0xFF).to_byte()
+        code[ref_pos] = b0
+        code[ref_pos + 1] = b1
+        code[ref_pos + 2] = b2
+        code[ref_pos + 3] = b3
+      }
+      None => ()
+    }
+    i = i + 1
+  }
   Bytes::from_array(code)
 }

@@ -31,16 +31,10 @@ pub fn compile_file(
 
   // Header is 64 + 56 = 120 bytes (0x78)
   // Code should start at 0x401000 (like GCC -nostdlib -s)
-  // File offset for code: 0x1000
+  // File offset for 0x1000
   // Padding: 0x1000 - 0x78 = 0xF88 bytes
   let padding_len = 0x1000 - 0x78
-  let padding : Array[Byte] = {
-    let mut arr : Array[Byte] = []
-    for _ in 0..<padding_len {
-      arr = arr + [0x00B] // padding byte
-    }
-    arr
-  }
+  let padding : Array[Byte] = Array::make(padding_len, 0x00B)
 
   let header : Array[Byte] = [
     // ELF header (64 bytes)
