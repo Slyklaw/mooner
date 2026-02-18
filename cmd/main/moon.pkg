@@ -1,6 +1,8 @@
-// import {
-//   "username/mooner" @lib,
-// }
+import {
+  "moonbitlang/x/fs",
+  "moonbitlang/x/sys",
+  "username/mooner" @lib,
+}
 
 options(
   "is-main": true,
