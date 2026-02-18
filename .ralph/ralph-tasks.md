@@ -2,7 +2,7 @@
 
 - [x] Set up project structure with moonbitlang/x dependency
 - [x] Implement minimal working ELF binary generation
-- [ ] Implement lexer/tokenizer for Moonbit
+- [x] Implement lexer/tokenizer for Moonbit
 - [ ] Implement parser for Moonbit (AST representation)
 - [ ] Implement semantic analysis (type checking)
 - [ ] Implement x86_64 code generation

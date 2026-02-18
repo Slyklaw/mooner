@@ -1,3 +1,4 @@
+///|
 /// Entry point for the CLI
 /// Run with `moon run cmd/main` from the project root
 fn main {
@@ -9,11 +10,7 @@ fn main {
   }
 
   let input_path = args[1]
-  let output_path = if args.length() >= 3 {
-    args[2]
-  } else {
-    "a.out"
-  }
+  let output_path = if args.length() >= 3 { args[2] } else { "a.out" }
 
   println("Compiling: \{input_path} -> \{output_path}")
 

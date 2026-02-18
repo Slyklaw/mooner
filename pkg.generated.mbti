@@ -1,0 +1,107 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "username/mooner"
+
+// Values
+pub fn compile_file(String, String) -> Result[Unit, String]
+
+pub fn tokenize(String) -> Array[Token]
+
+// Errors
+
+// Types and methods
+pub struct Lexer {
+  input : String
+  pos : Int
+  line : Int
+  column : Int
+}
+pub fn Lexer::new(String) -> Self
+pub fn Lexer::next_token(Self) -> (Token, Self)
+
+pub enum Token {
+  Fn
+  Let
+  If
+  Else
+  Match
+  Case
+  While
+  For
+  Break
+  Continue
+  Return
+  True
+  False
+  Unit
+  Self
+  Type
+  Interface
+  Impl
+  Pub
+  Priv
+  Override
+  Static
+  Virtual
+  Abstract
+  Underscore
+  Ident(String)
+  Int(Int)
+  UInt(UInt)
+  Float(Double)
+  String(String)
+  Char(Char)
+  Plus
+  Minus
+  Star
+  Slash
+  Percent
+  Ampersand
+  Pipe
+  Caret
+  Tilde
+  Bang
+  Question
+  Colon
+  ColonColon
+  Dot
+  DotDot
+  DotDotDot
+  Comma
+  Semicolon
+  Equal
+  PlusEqual
+  MinusEqual
+  StarEqual
+  SlashEqual
+  PercentEqual
+  AmpersandEqual
+  PipeEqual
+  CaretEqual
+  TildeEqual
+  QuestionEqual
+  EqEq
+  BangEqual
+  Lt
+  LtEqual
+  Gt
+  GtEqual
+  AmpersandAmpersand
+  PipePipe
+  LtLt
+  GtGt
+  LParen
+  RParen
+  LBracket
+  RBracket
+  LBrace
+  RBrace
+  Arrow
+  At
+  Eof
+}
+pub impl Show for Token
+
+// Type aliases
+
+// Traits
+
