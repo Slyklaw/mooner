@@ -3,7 +3,28 @@ pub fn compile_file(
   input_path : String,
   output_path : String,
 ) -> Result[Unit, String] {
-  let _ = input_path
+  // Read input file
+  let source = @fs.read_file_to_string(input_path) catch {
+    e => return Err("Failed to read input file: \{e}")
+  }
+
+  // Tokenize
+  let tokens = tokenize(source)
+
+  // Parse into AST
+  let ast = parse(tokens)
+
+  // Type check
+  let checker = TypeChecker::new()
+  let (checker, _) = checker.check(ast)
+
+  if checker.errors.length() > 0 {
+    let mut err_msg = ""
+    for err in checker.errors {
+      err_msg = err_msg + err.message + "\n"
+    }
+    return Err("Type errors:\n\{err_msg}")
+  }
 
   // Header is 64 + 56 = 120 bytes (0x78)
   // Code should start at 0x401000 (like GCC -nostdlib -s)

@@ -139,6 +139,40 @@ pub enum Token {
 }
 pub impl Show for Token
 
+pub enum Type {
+  TUnit
+  TBool
+  TInt
+  TFloat
+  TString
+  TChar
+  TFun(Array[Type], Type)
+  TTuple(Array[Type])
+  TArray(Type)
+  TUnknown
+}
+pub fn Type::eq(Self, Self) -> Bool
+pub impl Show for Type
+
+pub struct TypeChecker {
+  env : TypeEnv
+  errors : Array[TypeError]
+}
+pub fn TypeChecker::check(Self, AST) -> (Self, Type)
+pub fn TypeChecker::new() -> Self
+
+pub struct TypeEnv {
+  vars : Map[String, Type]
+  funcs : Map[String, (Array[Type], Type)]
+}
+pub fn TypeEnv::new() -> Self
+
+pub struct TypeError {
+  message : String
+}
+pub fn TypeError::new(String) -> Self
+pub impl Show for TypeError
+
 // Type aliases
 
 // Traits
