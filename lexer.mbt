@@ -368,7 +368,7 @@ fn Lexer::read_string(self : Lexer) -> (String, Lexer) {
 ///|
 fn Lexer::read_char(self : Lexer) -> (Char, Lexer) {
   let mut lexer = self.advance()
-  let mut ch = '\u00'
+  let mut ch = '?'
   match char_at(lexer.input, lexer.pos) {
     Some('\\') => {
       lexer = lexer.advance()
@@ -397,14 +397,14 @@ fn Lexer::read_char(self : Lexer) -> (Char, Lexer) {
           lexer = lexer.advance()
           ch = c
         }
-        None => ch = '\u00'
+        None => ch = '?'
       }
     }
     Some(c) => {
       lexer = lexer.advance()
       ch = c
     }
-    None => ch = '\u00'
+    None => ch = '?'
   }
   match char_at(lexer.input, lexer.pos) {
     Some('\'') => lexer = lexer.advance()

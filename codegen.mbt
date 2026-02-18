@@ -598,7 +598,15 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
 ///|
 fn CodeGen::add_string(self : CodeGen, s : String) -> (CodeGen, String) {
   let label = ".Lstr\{self.string_counter}"
-  let g = { ..self, string_counter: self.string_counter + 1, strings: { let m = self.strings; m[s] = 0; m } }
+  let g = {
+    ..self,
+    string_counter: self.string_counter + 1,
+    strings: {
+      let m = self.strings
+      m[s] = 0
+      m
+    },
+  }
   (g, label)
 }
 
