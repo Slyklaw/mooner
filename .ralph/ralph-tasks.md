@@ -6,6 +6,6 @@
 - [x] Implement parser for Moonbit (AST representation)
 - [x] Implement semantic analysis (type checking)
 - [x] Implement x86_64 code generation
-- [ ] Implement ELF binary writer
-- [ ] Implement CLI interface with command line argument
-- [ ] Test end-to-end compilation
+- [x] Implement ELF binary writer
+- [x] Implement CLI interface with command line argument
+- [x] Test end-to-end compilation
