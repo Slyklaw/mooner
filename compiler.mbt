@@ -26,6 +26,9 @@ pub fn compile_file(
     return Err("Type errors:\n\{err_msg}")
   }
 
+  // Generate x86_64 code
+  let code = codegen(ast)
+
   // Header is 64 + 56 = 120 bytes (0x78)
   // Code should start at 0x401000 (like GCC -nostdlib -s)
   // File offset for code: 0x1000
@@ -34,12 +37,12 @@ pub fn compile_file(
   let padding : Array[Byte] = {
     let mut arr : Array[Byte] = []
     for _ in 0..<padding_len {
-      arr = arr + [0x00]
+      arr = arr + [0x00B] // padding byte
     }
     arr
   }
 
-  let code = Bytes::from_array([
+  let header : Array[Byte] = [
     // ELF header (64 bytes)
     0x7F, 0x45, 0x4C, 0x46, // magic
      0x02, // 64-bit
@@ -67,23 +70,35 @@ pub fn compile_file(
      0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // p_offset = 0x1000
      0x00, 0x10, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, // p_vaddr = 0x401000
      0x00, 0x10, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, // p_paddr = 0x401000
-     0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // p_filesz = 32
-     0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // p_memsz = 32
-     0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // p_align = 0x1000
-  ])
+  ]
 
+  // Calculate code size
+  let code_len = code.length()
+  let padded_code_len = (code_len + 0xFFF) & 0xFFFFF000
+
+  let phdr_filesz : Array[Byte] = [
+    (padded_code_len & 0xFF).to_byte(),
+    ((padded_code_len >> 8) & 0xFF).to_byte(),
+    ((padded_code_len >> 16) & 0xFF).to_byte(),
+    ((padded_code_len >> 24) & 0xFF).to_byte(),
+    ((padded_code_len >> 32) & 0xFF).to_byte(),
+    ((padded_code_len >> 40) & 0xFF).to_byte(),
+    ((padded_code_len >> 48) & 0xFF).to_byte(),
+    ((padded_code_len >> 56) & 0xFF).to_byte(),
+  ]
+
+  let phdr_memsz = phdr_filesz
+
+  let phdr_align : Array[Byte] = [
+    0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // p_align = 0x1000
+  ]
+
+  let header_bytes = Bytes::from_array(header)
+  let phdr_bytes = Bytes::from_array(phdr_filesz + phdr_memsz + phdr_align)
   let padding_bytes = Bytes::from_array(padding)
+  let code_bytes = code
 
-  let code_section = Bytes::from_array([
-    // Code at 0x401000: exit(0)
-    0xB8, 0x3C, 0x00, 0x00, 0x00, // mov rax, 60
-     0x31, 0xFF, // xor edi, edi
-     0x0F, 0x05, // syscall
-     0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-    0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-  ])
-
-  let result = code + padding_bytes + code_section
+  let result = header_bytes + phdr_bytes + padding_bytes + code_bytes
 
   try {
     @fs.write_bytes_to_file(output_path, result)

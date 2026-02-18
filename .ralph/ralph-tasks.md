@@ -5,7 +5,7 @@
 - [x] Implement lexer/tokenizer for Moonbit
 - [x] Implement parser for Moonbit (AST representation)
 - [x] Implement semantic analysis (type checking)
-- [ ] Implement x86_64 code generation
+- [x] Implement x86_64 code generation
 - [ ] Implement ELF binary writer
 - [ ] Implement CLI interface with command line argument
 - [ ] Test end-to-end compilation

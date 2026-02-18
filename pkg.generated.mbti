@@ -2,6 +2,8 @@
 package "username/mooner"
 
 // Values
+pub fn codegen(AST) -> Bytes
+
 pub fn compile_file(String, String) -> Result[Unit, String]
 
 pub fn parse(Array[Token]) -> AST
@@ -40,6 +42,16 @@ pub enum AST {
 }
 pub impl Show for AST
 
+pub struct CodeGen {
+  code : Array[Byte]
+  labels : Map[String, Int]
+  pending_labels : Array[(String, Int)]
+  label_counter : Int
+  var_offsets : Map[String, Int]
+  next_offset : Int
+  current_func : String?
+}
+
 pub struct Lexer {
   input : String
   pos : Int
@@ -48,6 +60,15 @@ pub struct Lexer {
 }
 pub fn Lexer::new(String) -> Self
 pub fn Lexer::next_token(Self) -> (Token, Self)
+
+pub enum Operand {
+  Imm(Int)
+  Reg(String)
+  Stack(Int)
+  Label(String)
+  LabelAddr(String)
+}
+pub impl Show for Operand
 
 pub struct Parser {
   tokens : Array[Token]
@@ -172,6 +193,69 @@ pub struct TypeError {
 }
 pub fn TypeError::new(String) -> Self
 pub impl Show for TypeError
+
+pub enum X86Inst {
+  Mov(X86Operand, X86Operand)
+  Push(X86Operand)
+  Pop(X86Operand)
+  Add(X86Operand, X86Operand)
+  Sub(X86Operand, X86Operand)
+  Imul(X86Operand, X86Operand)
+  Idiv(X86Operand)
+  Cmp(X86Operand, X86Operand)
+  Test(X86Operand, X86Operand)
+  And(X86Operand, X86Operand)
+  Or(X86Operand, X86Operand)
+  Xor(X86Operand, X86Operand)
+  Not(X86Operand)
+  Neg(X86Operand)
+  Shl(X86Operand, X86Operand)
+  Shr(X86Operand, X86Operand)
+  Sar(X86Operand, X86Operand)
+  Jmp(String)
+  Je(String)
+  Jne(String)
+  Jg(String)
+  Jge(String)
+  Jl(String)
+  Jle(String)
+  Ja(String)
+  Jae(String)
+  Jb(String)
+  Jbe(String)
+  Jz(String)
+  Jnz(String)
+  Setz(X86Operand)
+  Setnz(X86Operand)
+  Setg(X86Operand)
+  Setge(X86Operand)
+  Setl(X86Operand)
+  Setle(X86Operand)
+  Seta(X86Operand)
+  Setae(X86Operand)
+  Setb(X86Operand)
+  Setbe(X86Operand)
+  Call(String)
+  Ret
+  Nop
+  Syscall
+}
+pub impl Show for X86Inst
+
+pub enum X86Operand {
+  Imm8(Int)
+  Imm32(Int)
+  Imm64(Int)
+  Reg8(String)
+  Reg32(String)
+  Reg64(String)
+  Stack8(Int)
+  Stack32(Int)
+  Stack64(Int)
+  RipRel32(String)
+  Label(String)
+}
+pub impl Show for X86Operand
 
 // Type aliases
 
