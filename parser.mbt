@@ -353,7 +353,13 @@ fn Parser::parse_function(self : Parser) -> (AST, Parser) {
     let (body, p5) = p4.parse_block_or_expr()
     (Func(name, params, ret_type, body), p5)
   } else {
-    (Func(name, [], None, Unit), p2)
+    let p3 = p2
+    if self_token_eq(p3.current(), LBrace) {
+      let (body, p4) = p3.parse_block()
+      (Func(name, [], None, body), p4)
+    } else {
+      (Func(name, [], None, Unit), p3)
+    }
   }
 }
 

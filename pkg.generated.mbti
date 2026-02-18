@@ -50,6 +50,9 @@ pub struct CodeGen {
   var_offsets : Map[String, Int]
   next_offset : Int
   current_func : String?
+  func_bodies : Map[String, AST]
+  strings : Map[String, Int]
+  string_counter : Int
 }
 
 pub struct Lexer {
@@ -239,6 +242,7 @@ pub enum X86Inst {
   Ret
   Nop
   Syscall
+  Lea(X86Operand, X86Operand)
 }
 pub impl Show for X86Inst
 

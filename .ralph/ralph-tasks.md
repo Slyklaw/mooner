@@ -9,3 +9,4 @@
 - [x] Implement ELF binary writer
 - [x] Implement CLI interface with command line argument
 - [x] Test end-to-end compilation
+
