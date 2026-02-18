@@ -300,7 +300,7 @@ fn parse_double(s : String) -> Double {
         result = result * 10.0 + digit.to_double()
       }
     } else if (c == 101 || c == 69) && i < s.length() - 1 {
-       // 'e' or 'E'
+      // 'e' or 'E'
       // Skip exponent for now - simplified
     }
     i = i + 1

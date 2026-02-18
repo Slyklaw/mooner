@@ -4,11 +4,42 @@ package "username/mooner"
 // Values
 pub fn compile_file(String, String) -> Result[Unit, String]
 
+pub fn parse(Array[Token]) -> AST
+
 pub fn tokenize(String) -> Array[Token]
 
 // Errors
 
 // Types and methods
+pub enum AST {
+  Unit
+  Bool(Bool)
+  Int(Int)
+  Float(Double)
+  String(String)
+  Char(Char)
+  Ident(String)
+  Block(Array[AST])
+  Func(String, Array[(String, AST?)], AST?, AST)
+  LetBind(String, AST?, AST, AST)
+  IfExpr(AST, AST, AST?)
+  MatchExpr(AST, Array[(AST, AST)])
+  WhileLoop(AST, AST)
+  ForLoop(AST?, AST?, AST?, AST)
+  ReturnExpr(AST)
+  Break
+  Continue
+  Binary(String, AST, AST)
+  Unary(String, AST)
+  CallExpr(AST, Array[AST])
+  IndexExpr(AST, AST)
+  FieldExpr(AST, String)
+  Tuple(Array[AST])
+  ArrayLit(Array[AST])
+  Assign(AST, AST)
+}
+pub impl Show for AST
+
 pub struct Lexer {
   input : String
   pos : Int
@@ -17,6 +48,13 @@ pub struct Lexer {
 }
 pub fn Lexer::new(String) -> Self
 pub fn Lexer::next_token(Self) -> (Token, Self)
+
+pub struct Parser {
+  tokens : Array[Token]
+  pos : Int
+}
+pub fn Parser::new(Array[Token]) -> Self
+pub fn Parser::parse(Self) -> AST
 
 pub enum Token {
   Fn
