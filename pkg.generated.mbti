@@ -40,6 +40,8 @@ pub enum AST {
   ArrayLit(Array[AST])
   Assign(AST, AST)
   AssignOp(String, AST, AST)
+  TypeDecl(String, Array[(String, String)])
+  StructLit(String, Array[(String, AST)])
 }
 pub impl Show for AST
 
@@ -58,6 +60,7 @@ pub struct CodeGen {
   floats : Array[Double]
   float_counter : Int
   loop_labels : Array[(String, String)]
+  struct_fields : Map[String, Array[String]]
 }
 
 pub struct Lexer {
@@ -178,6 +181,7 @@ pub enum Type {
   TFun(Array[Type], Type)
   TTuple(Array[Type])
   TArray(Type)
+  TStruct(String, Array[(String, Type)])
   TUnknown
 }
 pub fn Type::eq(Self, Self) -> Bool
@@ -193,6 +197,7 @@ pub fn TypeChecker::new() -> Self
 pub struct TypeEnv {
   vars : Map[String, Type]
   funcs : Map[String, (Array[Type], Type)]
+  types : Map[String, Type]
 }
 pub fn TypeEnv::new() -> Self
 

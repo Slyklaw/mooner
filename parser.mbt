@@ -26,6 +26,8 @@ pub enum AST {
   ArrayLit(Array[AST])
   Assign(AST, AST)
   AssignOp(String, AST, AST)
+  TypeDecl(String, Array[(String, String)])
+  StructLit(String, Array[(String, AST)])
 } derive(Show)
 
 ///|
@@ -189,6 +191,7 @@ fn Parser::parse_primary(self : Parser) -> (AST, Parser) {
     For => self.parse_for()
     Let => self.parse_let()
     Fn => self.parse_function()
+    Type => self.parse_type_decl()
     LBrace => self.parse_block()
     Return => {
       let p = self.advance()
@@ -380,6 +383,65 @@ fn Parser::parse_function(self : Parser) -> (AST, Parser) {
 }
 
 ///|
+fn Parser::parse_type_decl(self : Parser) -> (AST, Parser) {
+  // type Name { field1: Type1, field2: Type2 }
+  let p = self.skip(1)
+  let (name, p2) = p.parse_ident()
+  if self_token_eq(p2.current(), LBrace) {
+    let p3 = p2.skip(1)
+    let mut fields : Array[(String, String)] = []
+    let mut parser = p3
+    let mut done = false
+    while not(done) {
+      if self_token_eq(parser.current(), RBrace) {
+        parser = parser.advance()
+        done = true
+      } else if self_token_eq(parser.current(), Eof) {
+        done = true
+      } else {
+        let (field_name, p4) = parser.parse_ident()
+        let (field_type, p5) = if self_token_eq(p4.current(), Colon) {
+          let p6 = p4.skip(1)
+          let (t, p7) = p6.parse_type_name()
+          (t, p7)
+        } else {
+          ("Int", p4)
+        }
+        fields = fields + [(field_name, field_type)]
+        if self_token_eq(p5.current(), Comma) {
+          parser = p5.skip(1)
+        } else if self_token_eq(p5.current(), RBrace) {
+          parser = p5.advance()
+          done = true
+        } else {
+          parser = p5
+        }
+      }
+    }
+    (TypeDecl(name, fields), parser)
+  } else {
+    (TypeDecl(name, []), p2)
+  }
+}
+
+///|
+fn Parser::parse_type_name(self : Parser) -> (String, Parser) {
+  match self.current() {
+    Ident(name) => {
+      let p = self.advance()
+      if self_token_eq(p.current(), LtLt) {
+        let p2 = p.skip(1)
+        let (inner, p3) = p2.parse_type_name()
+        ("Array<\{inner}>", p3)
+      } else {
+        (name, p)
+      }
+    }
+    _ => ("Int", self)
+  }
+}
+
+///|
 fn Parser::parse_params(self : Parser) -> (Array[(String, AST?)], Parser) {
   let p = self.skip(1)
   if self_token_eq(p.current(), RParen) {
@@ -489,6 +551,49 @@ fn Parser::parse_postfix(self : Parser) -> (AST, Parser) {
       let (args, p3) = parser.parse_args()
       expr = CallExpr(expr, args)
       parser = p3
+    } else if self_token_eq(parser.current(), ColonColon) {
+      // Struct literal: TypeName::{ field: value, ... }
+      let type_name = match expr {
+        Ident(name) => name
+        _ => ""
+      }
+      let p3 = parser.skip(1)
+      if self_token_eq(p3.current(), LBrace) {
+        let p4 = p3.skip(1)
+        let mut fields : Array[(String, AST)] = []
+        let mut p5 = p4
+        let mut done2 = false
+        while not(done2) {
+          if self_token_eq(p5.current(), RBrace) {
+            p5 = p5.advance()
+            done2 = true
+          } else if self_token_eq(p5.current(), Eof) {
+            done2 = true
+          } else {
+            let (field_name, p6) = p5.parse_ident()
+            let (field_val, p7) = if self_token_eq(p6.current(), Colon) {
+              let p8 = p6.skip(1)
+              let (v, p9) = p8.parse_expr()
+              (v, p9)
+            } else {
+              (Unit, p6)
+            }
+            fields = fields + [(field_name, field_val)]
+            if self_token_eq(p7.current(), Comma) {
+              p5 = p7.skip(1)
+            } else if self_token_eq(p7.current(), RBrace) {
+              p5 = p7.advance()
+              done2 = true
+            } else {
+              p5 = p7
+            }
+          }
+        }
+        expr = StructLit(type_name, fields)
+        parser = p5
+      } else {
+        parser = p3
+      }
     } else if self_token_eq(parser.current(), Dot) {
       let p3 = parser.skip(1)
       // Check for numeric field (tuple index) or identifier

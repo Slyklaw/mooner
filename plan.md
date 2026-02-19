@@ -252,17 +252,20 @@ This document outlines features that need to be implemented to make Mooner a com
 
 ## Phase 4: Type System Enhancements
 
-### 4.1 User-Defined Types
+### 4.1 User-Defined Types ⚠️ PARTIAL
 
-**Location**: `type_checker.mbt`, `codegen.mbt`
+**Location**: `type_checker.mbt`, `codegen.mbt`, `parser.mbt`
 
-**Issue**: No support for custom types/structs.
+**Implementation** (partial):
+- ✅ Parse `type` declarations with field definitions
+- ✅ Added TypeDecl and StructLit AST nodes  
+- ✅ Added TStruct type in type checker
+- ⚠️ Code generation for struct field access not working correctly
+- ⚠️ Named field access requires type information at codegen time
 
-**Implementation**:
-- Parse `type` declarations
-- Store type definitions in type environment
-- Generate struct layouts
-- Implement type checking for struct operations
+**Known Limitations**:
+- Struct literal and field access not fully functional
+- Need to pass type information through codegen for named field access
 
 ### 4.2 Type Annotations in Code Generation
 
@@ -453,7 +456,7 @@ This document outlines features that need to be implemented to make Mooner a com
 | P2 | Tuple operations | Medium | ✅ COMPLETED |
 | P2 | Float support | Medium | ✅ COMPLETED (arithmetic, comparison) |
 | P2 | Complete stdlib functions | Medium | ⚠️ PARTIAL (input, char_to_int, int_to_char) |
-| P3 | User-defined types | High | ⚠️ NOT STARTED |
+| P3 | User-defined types | High | ⚠️ PARTIAL |
 | P3 | Bitwise operators | Low | ✅ COMPLETED |
 | P3 | Compound assignment operators | Low | ✅ COMPLETED |
 | P3 | String operations | Medium | ⚠️ PARTIAL |

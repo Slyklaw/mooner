@@ -102,6 +102,7 @@ pub struct CodeGen {
   floats : Array[Double]
   float_counter : Int
   loop_labels : Array[(String, String)]
+  struct_fields : Map[String, Array[String]]
 }
 
 ///|
@@ -121,6 +122,7 @@ fn CodeGen::new() -> CodeGen {
     floats: [],
     float_counter: 0,
     loop_labels: [],
+    struct_fields: Map::new(),
   }
 }
 
@@ -1636,8 +1638,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       }
     }
     FieldExpr(obj, field) => {
-      // Tuple field access: obj.field where field is a numeric string
-      // Elements are at increasing addresses from base: elem 0 at base, elem 1 at base+8, etc.
+      // Numeric field access (tuples and structs)
+      // Named fields are not yet supported - use numeric indices like p.0, p.1
       let idx = if field.length() > 0 {
         let c = field[0]
         if c >= '0' && c <= '9' {
@@ -1648,13 +1650,13 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       } else {
         0
       }
-      // Evaluate the tuple expression (gives rbp-relative offset of element 0)
+      // Evaluate the object expression (gives rbp-relative offset of element 0)
       let g = self.codegen_expr(obj)
       // Save the offset
       let g = g.emit_inst(Push(Reg64("rax")))
       // Compute index * 8
       let g = g.emit_inst(Mov(Reg64("rax"), Imm32(idx * 8)))
-      // Pop tuple offset into rcx
+      // Pop base offset into rcx
       let g = g.emit_inst(Pop(Reg64("rcx")))
       // Add: rcx = base_offset + index*8
       let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
@@ -2014,6 +2016,34 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         }
         _ => self.codegen_expr(value)
       }
+    TypeDecl(name, fields) => {
+      let field_names = fields.map(fn(f) { f.0 })
+      let sf = self.struct_fields
+      sf[name] = field_names
+      { ..self, struct_fields: sf }
+    }
+    StructLit(_type_name, fields) => {
+      // Allocate struct on stack by pushing fields in reverse order
+      // Field 0 ends up at lowest address, field 1 at lowest+8, etc.
+      let num_fields = fields.length()
+      if num_fields == 0 {
+        self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+      } else {
+        let struct_size = num_fields * 8
+        let first_field_offset = self.next_offset - struct_size
+        let mut g = { ..self, next_offset: first_field_offset }
+        // Push fields in reverse order so field 0 is at lowest address
+        let mut i = num_fields - 1
+        while i >= 0 {
+          let (_fname, fval) = fields[i]
+          g = g.codegen_expr(fval)
+          g = g.emit_inst(Push(Reg64("rax")))
+          i = i - 1
+        }
+        // Return rbp-relative offset of first field
+        g.emit_inst(Mov(Reg64("rax"), Imm32(first_field_offset)))
+      }
+    }
     _ => self
   }
 }

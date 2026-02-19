@@ -9,6 +9,7 @@ pub enum Type {
   TFun(Array[Type], Type)
   TTuple(Array[Type])
   TArray(Type)
+  TStruct(String, Array[(String, Type)])
   TUnknown
 } derive(Show)
 
@@ -46,6 +47,22 @@ pub fn Type::eq(self : Type, other : Type) -> Bool {
         eq
       }
     (TArray(t1), TArray(t2)) => t1.eq(t2)
+    (TStruct(n1, fs1), TStruct(n2, fs2)) =>
+      if n1 != n2 {
+        false
+      } else if fs1.length() != fs2.length() {
+        false
+      } else {
+        let mut eq = true
+        let mut i = 0
+        while eq && i < fs1.length() {
+          let (fn1, ft1) = fs1[i]
+          let (fn2, ft2) = fs2[i]
+          eq = fn1 == fn2 && ft1.eq(ft2)
+          i = i + 1
+        }
+        eq
+      }
     (TUnknown, _) => true
     (_, TUnknown) => true
     _ => false
@@ -66,11 +83,12 @@ pub fn TypeError::new(message : String) -> TypeError {
 pub struct TypeEnv {
   vars : Map[String, Type]
   funcs : Map[String, (Array[Type], Type)]
+  types : Map[String, Type]
 }
 
 ///|
 pub fn TypeEnv::new() -> TypeEnv {
-  { vars: Map::new(), funcs: Map::new() }
+  { vars: Map::new(), funcs: Map::new(), types: Map::new() }
 }
 
 ///|
@@ -101,6 +119,17 @@ fn TypeEnv::get_var(self : TypeEnv, name : String) -> Type {
 ///|
 fn TypeEnv::get_func(self : TypeEnv, name : String) -> (Array[Type], Type)? {
   self.funcs.get(name)
+}
+
+///|
+fn TypeEnv::add_type(self : TypeEnv, name : String, ty : Type) -> TypeEnv {
+  self.types[name] = ty
+  self
+}
+
+///|
+fn TypeEnv::get_type(self : TypeEnv, name : String) -> Type? {
+  self.types.get(name)
 }
 
 ///|
@@ -472,6 +501,41 @@ fn TypeChecker::check_expr(
       let (c2, _lhs_ty) = self.check_expr(lhs)
       let (c3, rhs_ty) = c2.check_expr(rhs)
       (c3, rhs_ty)
+    }
+    TypeDecl(name, fields) => {
+      let field_types : Array[(String, Type)] = fields.map(fn(f) {
+        let (fname, ftype) = f
+        let ty = match ftype {
+          "Int" => TInt
+          "Float" => TFloat
+          "Bool" => TBool
+          "String" => TString
+          "Char" => TChar
+          _ => TUnknown
+        }
+        (fname, ty)
+      })
+      let struct_ty = TStruct(name, field_types)
+      let c2 = self.env.add_type(name, struct_ty)
+      ({ ..self, env: c2 }, TUnit)
+    }
+    StructLit(type_name, fields) => {
+      let mut checker = self
+      let mut i = 0
+      while i < fields.length() {
+        let (_fname, fval) = fields[i]
+        let (c2, _) = checker.check_expr(fval)
+        checker = c2
+        i = i + 1
+      }
+      match checker.env.get_type(type_name) {
+        Some(t) => (checker, t)
+        None =>
+          (
+            checker.add_error(TypeError::new("Unknown type: \{type_name}")),
+            TUnknown,
+          )
+      }
     }
   }
 }
