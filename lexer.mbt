@@ -640,6 +640,8 @@ pub fn Lexer::next_token(self : Lexer) -> (Token, Lexer) {
           '=' =>
             if char_at(lexer2.input, lexer2.pos) == Some('=') {
               (EqEq, lexer2.advance())
+            } else if char_at(lexer2.input, lexer2.pos) == Some('>') {
+              (Arrow, lexer2.advance())
             } else {
               (Equal, lexer2)
             }

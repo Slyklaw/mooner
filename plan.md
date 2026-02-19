@@ -109,21 +109,20 @@ This document outlines features that need to be implemented to make Mooner a com
 - Break/continue not implemented
 - Return inside for loops doesn't clean up stack properly
 
-### 2.3 Match Expression Code Generation
+### 2.3 Match Expression Code Generation ✅ COMPLETED
 
-**Location**: `codegen.mbt` (missing implementation)
-
-**Issue**: Match expressions are parsed but not compiled.
+**Location**: `codegen.mbt:1196-1261`, `lexer.mbt:640-647`
 
 **Implementation**:
-- Generate code to evaluate the matched expression
-- Create labels for each case
-- Emit comparison and jumps for each pattern
-- Handle wildcard (`_`) case
-- Implement pattern matching for:
+- ✅ Generate code to evaluate the matched expression
+- ✅ Create labels for each case and end
+- ✅ Emit comparison and jumps for each pattern
+- ✅ Handle wildcard (`_`) case
+- ✅ Implemented pattern matching for:
   - Integer literals
   - Boolean values
-  - Tuple patterns
+  - Variable binding (Ident)
+- ✅ Fixed lexer to recognize `=>` as Arrow token
 
 ### 2.4 Break/Continue Statement Support ✅ COMPLETED
 
@@ -455,7 +454,7 @@ This document outlines features that need to be implemented to make Mooner a com
 | P1 | Return statement | Low | ✅ COMPLETED |
 | P1 | Division/Modulo | Low | ✅ COMPLETED |
 | P1 | Break/Continue | Medium | ✅ COMPLETED |
-| P2 | Match expression | High | ⚠️ NOT STARTED |
+| P2 | Match expression | High | ✅ COMPLETED |
 | P2 | Array operations | High | ⚠️ NOT STARTED |
 | P2 | Tuple operations | Medium | ⚠️ NOT STARTED |
 | P2 | Float support | Medium | ⚠️ NOT STARTED |
@@ -508,15 +507,16 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ While loops (with break/continue)
 - ✅ For loops (with break/continue)
 - ✅ Bitwise operators (`&`, `|`, `^`, `<<`, `>>`)
+- ✅ Match expressions with Int/Bool/wildcard patterns
 
 ### Known Limitations:
 - Return inside while/for loops doesn't clean up stack properly
 - Variable assignment (`x = value`) not implemented (only let bindings work)
-- Break/continue not implemented
 - Arrays/tuples not implemented
 - Float operations not implemented
 - No user-defined types
 - Limited stdlib functions
 - Parser only supports one top-level function (use nested functions for multiple functions)
+- Match patterns limited to Int, Bool, and wildcard (no tuples or guards)
 
 The compiler currently generates basic but functional code for simple expressions. Focus on making the core MoonBit features work correctly (fn main, println, basic operators). Consider adding a `-v`/`--verbose` flag to see generated code for debugging. Consider adding an `-O` flag for optimizations in the future. The goal is MoonBit language compatibility, not custom extensions.
