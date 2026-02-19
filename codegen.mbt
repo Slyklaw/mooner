@@ -71,6 +71,7 @@ pub enum X86Operand {
   StackBP64(Int) // rbp-relative addressing
   RipRel32(String)
   Label(String)
+  MemIndirect(String) // [reg] - register indirect addressing
 } derive(Show)
 
 ///|
@@ -353,6 +354,84 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = g.emit_modrm_reg64(src, StackBP64(offset))
       g
     }
+    Mov(Reg64(dest), MemIndirect(addr_reg)) => {
+      // mov reg64, [addr_reg]
+      let dest_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      let rm_code = match addr_reg {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      // REX.W + 8B + ModRM (mod=00, reg=dest, rm=addr_reg)
+      let g = self.emit_byte(0x48)
+      let g = g.emit_byte(0x8B)
+      // mod=00 (indirect), reg=dest_code, rm=rm_code
+      // But rsp and rbp need special handling
+      if addr_reg == "rsp" {
+        // Need SIB byte for rsp: mod=00, reg=dest, rm=100 (SIB), SIB=00,100,100
+        let g = g.emit_byte(modrm(0, dest_code, 4))
+        g.emit_byte(sib(0, 4, 4))
+      } else if addr_reg == "rbp" {
+        // rbp with mod=00 means disp32, so use mod=01 with disp8=0
+        let g = g.emit_byte(modrm(1, dest_code, 5))
+        g.emit_byte(0x00)
+      } else {
+        g.emit_byte(modrm(0, dest_code, rm_code))
+      }
+    }
+    Mov(MemIndirect(addr_reg), Reg64(src)) => {
+      // mov [addr_reg], reg64
+      let src_code = match src {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      let rm_code = match addr_reg {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      // REX.W + 89 + ModRM (mod=00, reg=src, rm=addr_reg)
+      let g = self.emit_byte(0x48)
+      let g = g.emit_byte(0x89)
+      if addr_reg == "rsp" {
+        let g = g.emit_byte(modrm(0, src_code, 4))
+        g.emit_byte(sib(0, 4, 4))
+      } else if addr_reg == "rbp" {
+        let g = g.emit_byte(modrm(1, src_code, 5))
+        g.emit_byte(0x00)
+      } else {
+        g.emit_byte(modrm(0, src_code, rm_code))
+      }
+    }
     Lea(Reg64(dest), RipRel32(label)) => {
       let reg_code = match dest {
         "rax" => 0
@@ -438,7 +517,8 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0xAF)
-      let g = g.emit_modrm_reg64(src, Reg64(dest))
+      // IMUL r64, r/m64: dest in reg field, src in r/m field
+      let g = g.emit_modrm_reg64(dest, Reg64(src))
       g
     }
     Idiv(Reg64(src)) => {
@@ -1083,6 +1163,60 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       }
       g
     }
+    ArrayLit(elems) => {
+      // Allocate array on stack by pushing elements
+      // Elements are pushed in reverse order so index 0 is at lowest address
+      // Result: rax = rbp-relative offset of first element
+      let num_elems = elems.length()
+      if num_elems == 0 {
+        // Empty array: return 0 offset
+        self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+      } else {
+        let array_size = num_elems * 8
+        let first_elem_offset = self.next_offset - array_size
+        let mut g = { ..self, next_offset: first_elem_offset }
+        // Push elements in reverse order (so index 0 ends up at lowest address)
+        let mut i = num_elems - 1
+        while i >= 0 {
+          g = g.codegen_expr(elems[i])
+          g = g.emit_inst(Push(Reg64("rax")))
+          i = i - 1
+        }
+        // After all pushes, rsp points to first element
+        // Return the rbp-relative offset of the first element
+        // We compute: offset = rsp - rbp (this will be negative)
+        // mov rax, rsp; sub rax, rbp
+        let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rsp")))
+        let g = g.emit_inst(Sub(Reg64("rax"), Reg64("rbp")))
+        g
+      }
+    }
+    IndexExpr(arr, idx) => {
+      // Array indexing: arr[idx]
+      // arr evaluates to an rbp-relative offset of first element (lowest address)
+      // Elements are at increasing addresses from there
+      let g = self.codegen_expr(arr)
+      // Save the offset
+      let g = g.emit_inst(Push(Reg64("rax")))
+      // Evaluate index
+      let g = g.codegen_expr(idx)
+      // Index is in rax, multiply by 8 for byte offset
+      let g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
+      let g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
+      // rax = index * 8
+      // Pop array offset into rcx
+      let g = g.emit_inst(Pop(Reg64("rcx")))
+      // Add offset: rcx = base_offset + index*8
+      let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+      // Now rcx contains the rbp-relative offset of the element
+      // Compute absolute address: rbx = rbp + rcx
+      let g = g.emit_inst(Push(Reg64("rbx")))
+      let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rbp")))
+      let g = g.emit_inst(Add(Reg64("rbx"), Reg64("rcx")))
+      // Load from [rbx]
+      let g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rbx")))
+      g.emit_inst(Pop(Reg64("rbx")))
+    }
     LetBind(name, _annot, value, body) => {
       // Evaluate value
       let g = self.codegen_expr(value)
@@ -1254,6 +1388,52 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g = g.define_label(end_label)
       g
     }
+    Assign(target, value) =>
+      match target {
+        Ident(name) =>
+          match self.var_offsets.get(name) {
+            Some(offset) => {
+              // Evaluate the new value
+              let g = self.codegen_expr(value)
+              // Store to existing variable location
+              g.emit_inst(Mov(StackBP64(offset), Reg64("rax")))
+            }
+            None =>
+              // Variable not found, just evaluate value
+              self.codegen_expr(value)
+          }
+        IndexExpr(arr, idx) => {
+          // Array element assignment: arr[idx] = value
+          let g = self.codegen_expr(arr)
+          // Save the offset
+          let g = g.emit_inst(Push(Reg64("rax")))
+          // Evaluate index
+          let g = g.codegen_expr(idx)
+          // Multiply index by 8
+          let g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
+          let g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
+          // rax = index * 8
+          // Pop array offset
+          let g = g.emit_inst(Pop(Reg64("rcx")))
+          // rcx = base_offset + index*8
+          let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+          // Evaluate value
+          let g = g.codegen_expr(value)
+          // Store value at [rbp + rcx]
+          let g = g.emit_inst(Push(Reg64("rbx")))
+          let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rbp")))
+          let g = g.emit_inst(Add(Reg64("rbx"), Reg64("rcx")))
+          let g = g.emit_inst(Mov(MemIndirect("rbx"), Reg64("rax")))
+          g.emit_inst(Pop(Reg64("rbx")))
+        }
+        FieldExpr(obj, _field) =>
+          // Field assignment: obj.field = value
+          // For now, just evaluate the value (struct assignment not implemented)
+          self.codegen_expr(value)
+        _ =>
+          // Unknown assignment target
+          self.codegen_expr(value)
+      }
     _ => self
   }
 }

@@ -261,6 +261,7 @@ pub enum X86Operand {
   StackBP64(Int)
   RipRel32(String)
   Label(String)
+  MemIndirect(String)
 }
 pub impl Show for X86Operand
 

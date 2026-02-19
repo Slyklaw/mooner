@@ -145,21 +145,16 @@ This document outlines features that need to be implemented to make Mooner a com
 - Properly handle functions with non-unit return types
 - Clean up stack frame before returning
 
-### 2.6 Array Operations
+### 2.6 Array Operations ✅ COMPLETED
 
-**Location**: `codegen.mbt` (missing implementation)
-
-**Issue**: Arrays are parsed but array literals and indexing aren't fully supported.
+**Location**: `codegen.mbt:1165-1225`, `codegen.mbt:357-434`
 
 **Implementation**:
-- Array literal code generation:
-  - Allocate memory for array (malloc syscall)
-  - Initialize each element
-  - Store pointer to array
-- Array indexing:
-  - Load array pointer
-  - Calculate element offset (index * element_size)
-  - Load/store array elements
+- ✅ Array literal code generation using stack allocation
+- ✅ Array indexing with computed address calculation
+- ✅ Array element assignment
+- ✅ Added MemIndirect operand for register-indirect addressing
+- ✅ Fixed IMUL instruction encoding
 
 ### 2.7 Tuple Operations
 
@@ -455,7 +450,8 @@ This document outlines features that need to be implemented to make Mooner a com
 | P1 | Division/Modulo | Low | ✅ COMPLETED |
 | P1 | Break/Continue | Medium | ✅ COMPLETED |
 | P2 | Match expression | High | ✅ COMPLETED |
-| P2 | Array operations | High | ⚠️ NOT STARTED |
+| P2 | Array operations | High | ✅ COMPLETED |
+| P2 | Variable assignment | Low | ✅ COMPLETED |
 | P2 | Tuple operations | Medium | ⚠️ NOT STARTED |
 | P2 | Float support | Medium | ⚠️ NOT STARTED |
 | P2 | Complete stdlib functions | Medium | ⚠️ PARTIAL |
@@ -497,6 +493,7 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Bitwise operators (`&`, `|`, `^`, `<<`, `>>`)
 - ✅ Unary operators (`-`, `!`)
 - ✅ Variables via `let x = value` - properly stores on stack with rbp-relative addressing
+- ✅ Variable assignment (`x = value`) - reassign existing variables
 - ✅ `print("string")` / `print(int)` - prints to stdout
 - ✅ `println("string")` / `println(int)` - prints with newline
 - ✅ If expressions with else
@@ -508,11 +505,12 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ For loops (with break/continue)
 - ✅ Bitwise operators (`&`, `|`, `^`, `<<`, `>>`)
 - ✅ Match expressions with Int/Bool/wildcard patterns
+- ✅ Array literals and indexing
+- ✅ Array element assignment
 
 ### Known Limitations:
 - Return inside while/for loops doesn't clean up stack properly
-- Variable assignment (`x = value`) not implemented (only let bindings work)
-- Arrays/tuples not implemented
+- Tuple operations not implemented
 - Float operations not implemented
 - No user-defined types
 - Limited stdlib functions

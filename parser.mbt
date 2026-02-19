@@ -655,7 +655,15 @@ fn Parser::parse_binary(self : Parser, min_prec : Int) -> (AST, Parser) {
 
 ///|
 fn Parser::parse_expr(self : Parser) -> (AST, Parser) {
-  self.parse_binary(1)
+  let (left, p2) = self.parse_binary(1)
+  // Check for assignment
+  if self_token_eq(p2.current(), Equal) {
+    let p3 = p2.skip(1)
+    let (value, p4) = p3.parse_expr()
+    (Assign(left, value), p4)
+  } else {
+    (left, p2)
+  }
 }
 
 ///|
