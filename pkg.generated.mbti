@@ -51,7 +51,7 @@ pub struct CodeGen {
   next_offset : Int
   current_func : String?
   func_bodies : Map[String, AST]
-  strings : Map[String, Int]
+  strings : Array[String]
   string_counter : Int
 }
 

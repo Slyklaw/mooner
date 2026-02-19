@@ -99,6 +99,7 @@ fn Parser::parse_literal(self : Parser) -> (AST, Parser) {
     Float(f) => (Float(f), self.advance())
     String(s) => (String(s), self.advance())
     Char(c) => (Char(c), self.advance())
+    Ident(name) => (Ident(name), self.advance())
     LParen => self.parse_tuple_or_parens()
     LBracket => self.parse_array()
     _ => (Unit, self)

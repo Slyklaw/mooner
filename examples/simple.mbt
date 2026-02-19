@@ -1,1 +1,3 @@
-fn main { 1 }
+fn main {
+  let x = 1 + 2
+}
