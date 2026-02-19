@@ -23,6 +23,7 @@ pub enum X86Inst {
   Xor(X86Operand, X86Operand)
   Not(X86Operand)
   Neg(X86Operand)
+  Cqo
   Shl(X86Operand, X86Operand)
   Shr(X86Operand, X86Operand)
   Sar(X86Operand, X86Operand)
@@ -509,6 +510,13 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = g.emit_modrm_reg64("rax", Reg64(dest))
       g
     }
+    Cqo => {
+      // cqo - sign-extend rax into rdx:rax
+      // REX.W = 01001000 = 0x48
+      // opcode = 0x99
+      let g = self.emit_byte(0x48)
+      g.emit_byte(0x99)
+    }
     Shl(Reg64(dest), Imm8(1)) => {
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0xD1)
@@ -526,6 +534,13 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = g.emit_byte(0xD1)
       let g = g.emit_modrm_reg64("rcx", Reg64(dest))
       g
+    }
+    Shr(Reg64(dest), Imm32(v)) => {
+      // shr rdest, v
+      let g = self.emit_byte(0x48)
+      let g = g.emit_byte(0xC1)
+      let g = g.emit_modrm_reg64("rcx", Reg64(dest))
+      g.emit_byte(v.to_byte())
     }
     Sar(Reg64(dest), Imm8(1)) => {
       let g = self.emit_byte(0x48)
@@ -757,6 +772,16 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           let g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rax")))
           let g = g.emit_inst(Setge(Reg64("al")))
           let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rax")))
+          g
+        }
+        "/" => {
+          // Division stub - return 0 for now
+          let g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+          g
+        }
+        "%" => {
+          // Modulo stub - return 0 for now  
+          let g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
           g
         }
         _ => self

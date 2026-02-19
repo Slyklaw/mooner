@@ -45,11 +45,11 @@ This document outlines features that need to be implemented to make Mooner a com
 
 ### 1.2 Fix Function Call Argument Handling ✅ PARTIALLY COMPLETE
 
-**Location**: `codegen.mbt:760-810`
+**Location**: `codegen.mbt:805-856`
 
 **Implementation**:
 - ✅ Handle single argument in println/print (via sys_write)
-- ⚠️ Full argument passing for user-defined functions not yet implemented
+- ⚠️ User-defined function calls not implemented (falls through to no-op)
 
 ### 1.3 Implement Proper Function Prologue/Epilogue ✅ COMPLETED
 
@@ -62,7 +62,7 @@ This document outlines features that need to be implemented to make Mooner a com
 
 ### 1.4 Variable Storage (LetBind) ✅ COMPLETED
 
-**Location**: `codegen.mbt:850-878`
+**Location**: `codegen.mbt:882-903`
 
 **Implementation**:
 - ✅ Evaluate value expression
@@ -445,11 +445,12 @@ This document outlines features that need to be implemented to make Mooner a com
 | P0 | Parser bug fixes (Ident, Underscore, etc.) | Medium | ✅ COMPLETED |
 | P0 | Fix RIP-relative addressing | Low | ✅ COMPLETED |
 | P0 | Variable storage (LetBind) | Medium | ✅ COMPLETED |
-| P0 | Fix function call arguments | Medium | ⚠️ PARTIAL |
+| P0 | Function call arguments (builtins) | Medium | ✅ COMPLETED |
+| P0 | User-defined function calls | Medium | ⚠️ NOT STARTED |
 | P0 | Support `fn main` entry point | Medium | ✅ COMPLETED |
 | P1 | While loop codegen | Medium | ⚠️ NOT STARTED |
 | P1 | For loop codegen | Medium | ⚠️ NOT STARTED |
-| P1 | Return statement | Low | ⚠️ PARTIAL |
+| P1 | Return statement | Low | ⚠️ PARTIAL (works in main, not for user-defined functions) |
 | P1 | Division/Modulo | Low | ⚠️ NOT STARTED |
 | P1 | Break/Continue | Medium | ⚠️ NOT STARTED |
 | P2 | Match expression | High | ⚠️ NOT STARTED |
@@ -493,26 +494,21 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Boolean literals (`true`, `false`)
 - ✅ Basic arithmetic (`+`, `-`, `*`, `==`, `!=`, `<`, `>`, `<=`, `>=`)
 - ✅ Unary operators (`-`, `!`)
-- ✅ Variables via `let x = value` - properly stores on stack
-- ✅ `print("string")` - prints to stdout
-- ✅ `println("string")` - prints with newline
-- ✅ `println(number)` - prints number as string
+- ✅ Variables via `let x = value` - properly stores on stack with rbp-relative addressing
+- ✅ `print("string")` / `print(int)` - prints to stdout
+- ✅ `println("string")` / `println(int)` - prints with newline
 - ✅ If expressions with else
 - ✅ Blocks
-- ✅ Basic function definitions
+- ✅ Basic function definitions (prologue/epilogue only, no cross-function calls)
+- ⚠️ Return statements - work in main, not for user-defined functions
 
 ### Known Limitations:
-- Let bindings don't store values (just evaluates body)
-- No local variable stack allocation
-- Division/modulo not implemented
+- User-defined function calls not implemented (only println/print work)
+- Division/modulo not implemented (returns 0)
 - While/for loops not implemented
 - Arrays/tuples not implemented
 - Float operations not implemented
 - No user-defined types
 - Limited stdlib functions
 
-- The compiler currently generates basic but functional code for simple expressions
-- Focus on making the core MoonBit features work correctly (fn main, println, basic operators)
-- Consider adding a `-v`/`--verbose` flag to see generated code for debugging
-- Consider adding an `-O` flag for optimizations in the future
-- The goal is MoonBit language compatibility, not custom extensions
+The compiler currently generates basic but functional code for simple expressions. Focus on making the core MoonBit features work correctly (fn main, println, basic operators). Consider adding a `-v`/`--verbose` flag to see generated code for debugging. Consider adding an `-O` flag for optimizations in the future. The goal is MoonBit language compatibility, not custom extensions.
