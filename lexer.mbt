@@ -310,7 +310,31 @@ fn parse_double(s : String) -> Double {
 
 ///|
 fn Lexer::read_number(self : Lexer) -> (String, Lexer) {
-  read_while(self, is_digit)
+  let (int_part, lexer2) = read_while(self, is_digit)
+  match char_at(lexer2.input, lexer2.pos) {
+    Some('.') => {
+      let lexer3 = lexer2.advance()
+      let (frac_part, lexer4) = read_while(lexer3, is_digit)
+      match char_at(lexer4.input, lexer4.pos) {
+        Some('e') | Some('E') => {
+          let lexer5 = lexer4.advance()
+          let (exp_part, lexer6) = read_while(lexer5, fn(c) {
+            is_digit(c) || c == '-'
+          })
+          (int_part + "." + frac_part + "e" + exp_part, lexer6)
+        }
+        _ => (int_part + "." + frac_part, lexer4)
+      }
+    }
+    Some('e') | Some('E') => {
+      let lexer3 = lexer2.advance()
+      let (exp_part, lexer4) = read_while(lexer3, fn(c) {
+        is_digit(c) || c == '-'
+      })
+      (int_part + "e" + exp_part, lexer4)
+    }
+    _ => (int_part, lexer2)
+  }
 }
 
 ///|

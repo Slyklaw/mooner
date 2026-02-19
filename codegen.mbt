@@ -55,6 +55,14 @@ pub enum X86Inst {
   Nop
   Syscall
   Lea(X86Operand, X86Operand)
+  Movsd(X86Operand, X86Operand)
+  Addsd(X86Operand, X86Operand)
+  Subsd(X86Operand, X86Operand)
+  Mulsd(X86Operand, X86Operand)
+  Divsd(X86Operand, X86Operand)
+  Ucomisd(X86Operand, X86Operand)
+  Cvtsi2sd(X86Operand, X86Operand)
+  Cvtsd2si(X86Operand, X86Operand)
 } derive(Show)
 
 ///|
@@ -65,13 +73,14 @@ pub enum X86Operand {
   Reg8(String)
   Reg32(String)
   Reg64(String)
+  Xmm(String)
   Stack8(Int)
   Stack32(Int)
   Stack64(Int)
-  StackBP64(Int) // rbp-relative addressing
+  StackBP64(Int)
   RipRel32(String)
   Label(String)
-  MemIndirect(String) // [reg] - register indirect addressing
+  MemIndirect(String)
 } derive(Show)
 
 ///|
@@ -86,7 +95,8 @@ pub struct CodeGen {
   func_bodies : Map[String, AST]
   strings : Array[String]
   string_counter : Int
-  // Stack of (break_label, continue_label) for nested loops
+  floats : Array[Double]
+  float_counter : Int
   loop_labels : Array[(String, String)]
 }
 
@@ -103,6 +113,8 @@ fn CodeGen::new() -> CodeGen {
     func_bodies: Map::new(),
     strings: [],
     string_counter: 0,
+    floats: [],
+    float_counter: 0,
     loop_labels: [],
   }
 }
@@ -164,6 +176,52 @@ fn modrm(mod_bit : Int, reg_bit : Int, rm : Int) -> Byte {
 ///|
 fn sib(scale : Int, index : Int, base : Int) -> Byte {
   ((scale << 6) | (index << 3) | base).to_byte()
+}
+
+///|
+fn xmm_reg_code(reg : String) -> Int {
+  match reg {
+    "xmm0" => 0
+    "xmm1" => 1
+    "xmm2" => 2
+    "xmm3" => 3
+    "xmm4" => 4
+    "xmm5" => 5
+    "xmm6" => 6
+    "xmm7" => 7
+    "xmm8" => 0
+    "xmm9" => 1
+    "xmm10" => 2
+    "xmm11" => 3
+    "xmm12" => 4
+    "xmm13" => 5
+    "xmm14" => 6
+    "xmm15" => 7
+    _ => 0
+  }
+}
+
+///|
+fn reg_code(reg : String) -> Int {
+  match reg {
+    "rax" => 0
+    "rcx" => 1
+    "rdx" => 2
+    "rbx" => 3
+    "rsp" => 4
+    "rbp" => 5
+    "rsi" => 6
+    "rdi" => 7
+    "r8" => 0
+    "r9" => 1
+    "r10" => 2
+    "r11" => 3
+    "r12" => 4
+    "r13" => 5
+    "r14" => 6
+    "r15" => 7
+    _ => 0
+  }
 }
 
 ///|
@@ -873,6 +931,72 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
+    Movsd(Xmm(dest), Xmm(src)) => {
+      let g = self.emit_bytes([0xF2, 0x0F, 0x10])
+      let dest_code = xmm_reg_code(dest)
+      let src_code = xmm_reg_code(src)
+      g.emit_byte(modrm(3, src_code, dest_code))
+    }
+    Movsd(Xmm(dest), RipRel32(label)) => {
+      let g = self.emit_bytes([0xF2, 0x0F, 0x10])
+      let dest_code = xmm_reg_code(dest)
+      let g = g.emit_byte(modrm(0, dest_code, 5))
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
+      g.emit32(0)
+    }
+    Movsd(RipRel32(label), Xmm(src)) => {
+      let g = self.emit_bytes([0xF2, 0x0F, 0x11])
+      let src_code = xmm_reg_code(src)
+      let g = g.emit_byte(modrm(0, src_code, 5))
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
+      g.emit32(0)
+    }
+    Addsd(Xmm(dest), Xmm(src)) => {
+      let g = self.emit_bytes([0xF2, 0x0F, 0x58])
+      let dest_code = xmm_reg_code(dest)
+      let src_code = xmm_reg_code(src)
+      g.emit_byte(modrm(3, src_code, dest_code))
+    }
+    Subsd(Xmm(dest), Xmm(src)) => {
+      let g = self.emit_bytes([0xF2, 0x0F, 0x5C])
+      let dest_code = xmm_reg_code(dest)
+      let src_code = xmm_reg_code(src)
+      g.emit_byte(modrm(3, src_code, dest_code))
+    }
+    Mulsd(Xmm(dest), Xmm(src)) => {
+      let g = self.emit_bytes([0xF2, 0x0F, 0x59])
+      let dest_code = xmm_reg_code(dest)
+      let src_code = xmm_reg_code(src)
+      g.emit_byte(modrm(3, src_code, dest_code))
+    }
+    Divsd(Xmm(dest), Xmm(src)) => {
+      let g = self.emit_bytes([0xF2, 0x0F, 0x5E])
+      let dest_code = xmm_reg_code(dest)
+      let src_code = xmm_reg_code(src)
+      g.emit_byte(modrm(3, src_code, dest_code))
+    }
+    Ucomisd(Xmm(dest), Xmm(src)) => {
+      let g = self.emit_bytes([0x66, 0x0F, 0x2E])
+      let dest_code = xmm_reg_code(dest)
+      let src_code = xmm_reg_code(src)
+      g.emit_byte(modrm(3, dest_code, src_code))
+    }
+    Cvtsi2sd(Xmm(dest), Reg64(src)) => {
+      let g = self.emit_bytes([0xF2, 0x48, 0x0F, 0x2A])
+      let dest_code = xmm_reg_code(dest)
+      let src_code = reg_code(src)
+      g.emit_byte(modrm(3, dest_code, src_code))
+    }
+    Cvtsd2si(Reg64(dest), Xmm(src)) => {
+      let g = self.emit_bytes([0xF2, 0x48, 0x0F, 0x2D])
+      let dest_code = reg_code(dest)
+      let src_code = xmm_reg_code(src)
+      g.emit_byte(modrm(3, dest_code, src_code))
+    }
     _ => self
   }
 }
@@ -889,6 +1013,17 @@ fn CodeGen::add_string(self : CodeGen, s : String) -> (CodeGen, String) {
 }
 
 ///|
+fn CodeGen::add_float(self : CodeGen, f : Double) -> (CodeGen, String) {
+  let label = ".Lflt\{self.float_counter}"
+  let g = {
+    ..self,
+    float_counter: self.float_counter + 1,
+    floats: self.floats + [f],
+  }
+  (g, label)
+}
+
+///|
 fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
   match expr {
     Int(n) => {
@@ -900,9 +1035,13 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g
     }
     String(s) => {
-      // Debug: just return length for now
-      // TheLea instruction causes performance issues
       let g = self.emit_inst(Mov(Reg64("rax"), Imm32(s.length())))
+      g
+    }
+    Float(f) => {
+      let (g, label) = self.add_float(f)
+      let g = g.emit_inst(Movsd(Xmm("xmm0"), RipRel32(label)))
+      let g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
       g
     }
     Ident(name) =>
@@ -1077,6 +1216,13 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               }
               Int(n) => {
                 let s = n.to_string()
+                let (g2, label) = g.add_string(s)
+                g = g2
+                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+              }
+              Float(f) => {
+                let s = f.to_string()
                 let (g2, label) = g.add_string(s)
                 g = g2
                 g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
@@ -1644,6 +1790,30 @@ pub fn codegen(ast : AST) -> Bytes {
     }
     g = g.emit_byte(0)
     str_idx = str_idx + 1
+  }
+  let mut flt_idx = 0
+  while flt_idx < g.floats.length() {
+    let f = g.floats[flt_idx]
+    let label = ".Lflt\{flt_idx}"
+    g = g.define_label(label)
+    let bits = f.reinterpret_as_uint64()
+    let b0 = (bits & 0xFF).to_byte()
+    let b1 = ((bits >> 8) & 0xFF).to_byte()
+    let b2 = ((bits >> 16) & 0xFF).to_byte()
+    let b3 = ((bits >> 24) & 0xFF).to_byte()
+    let b4 = ((bits >> 32) & 0xFF).to_byte()
+    let b5 = ((bits >> 40) & 0xFF).to_byte()
+    let b6 = ((bits >> 48) & 0xFF).to_byte()
+    let b7 = ((bits >> 56) & 0xFF).to_byte()
+    g = g.emit_byte(b0)
+    g = g.emit_byte(b1)
+    g = g.emit_byte(b2)
+    g = g.emit_byte(b3)
+    g = g.emit_byte(b4)
+    g = g.emit_byte(b5)
+    g = g.emit_byte(b6)
+    g = g.emit_byte(b7)
+    flt_idx = flt_idx + 1
   }
   let code = g.code
   let mut i = 0

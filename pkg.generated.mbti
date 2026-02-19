@@ -53,6 +53,8 @@ pub struct CodeGen {
   func_bodies : Map[String, AST]
   strings : Array[String]
   string_counter : Int
+  floats : Array[Double]
+  float_counter : Int
   loop_labels : Array[(String, String)]
 }
 
@@ -245,6 +247,14 @@ pub enum X86Inst {
   Nop
   Syscall
   Lea(X86Operand, X86Operand)
+  Movsd(X86Operand, X86Operand)
+  Addsd(X86Operand, X86Operand)
+  Subsd(X86Operand, X86Operand)
+  Mulsd(X86Operand, X86Operand)
+  Divsd(X86Operand, X86Operand)
+  Ucomisd(X86Operand, X86Operand)
+  Cvtsi2sd(X86Operand, X86Operand)
+  Cvtsd2si(X86Operand, X86Operand)
 }
 pub impl Show for X86Inst
 
@@ -255,6 +265,7 @@ pub enum X86Operand {
   Reg8(String)
   Reg32(String)
   Reg64(String)
+  Xmm(String)
   Stack8(Int)
   Stack32(Int)
   Stack64(Int)
