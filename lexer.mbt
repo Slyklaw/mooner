@@ -581,12 +581,17 @@ pub fn Lexer::next_token(self : Lexer) -> (Token, Lexer) {
       } else {
         let lexer2 = lexer.advance()
         match c {
-          '+' => (Plus, lexer2)
-          '-' =>
-            if char_at(lexer2.input, lexer2.pos) == Some('>') {
-              (Arrow, lexer2.advance())
+          '+' =>
+            if char_at(lexer2.input, lexer2.pos) == Some('=') {
+              (PlusEqual, lexer2.advance())
             } else {
-              (Minus, lexer2)
+              (Plus, lexer2)
+            }
+          '-' =>
+            match char_at(lexer2.input, lexer2.pos) {
+              Some('>') => (Arrow, lexer2.advance())
+              Some('=') => (MinusEqual, lexer2.advance())
+              _ => (Minus, lexer2)
             }
           '*' =>
             if char_at(lexer2.input, lexer2.pos) == Some('=') {

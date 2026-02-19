@@ -468,6 +468,11 @@ fn TypeChecker::check_expr(
       let (c3, rhs_ty) = c2.check_expr(rhs)
       (c3, rhs_ty)
     }
+    AssignOp(_op, lhs, rhs) => {
+      let (c2, _lhs_ty) = self.check_expr(lhs)
+      let (c3, rhs_ty) = c2.check_expr(rhs)
+      (c3, rhs_ty)
+    }
   }
 }
 

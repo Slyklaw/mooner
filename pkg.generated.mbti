@@ -39,6 +39,7 @@ pub enum AST {
   Tuple(Array[AST])
   ArrayLit(Array[AST])
   Assign(AST, AST)
+  AssignOp(String, AST, AST)
 }
 pub impl Show for AST
 

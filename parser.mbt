@@ -25,6 +25,7 @@ pub enum AST {
   Tuple(Array[AST])
   ArrayLit(Array[AST])
   Assign(AST, AST)
+  AssignOp(String, AST, AST)
 } derive(Show)
 
 ///|
@@ -671,7 +672,28 @@ fn Parser::parse_expr(self : Parser) -> (AST, Parser) {
     let (value, p4) = p3.parse_expr()
     (Assign(left, value), p4)
   } else {
-    (left, p2)
+    // Check for compound assignment operators
+    let op = match p2.current() {
+      PlusEqual => Some("+")
+      MinusEqual => Some("-")
+      StarEqual => Some("*")
+      SlashEqual => Some("/")
+      PercentEqual => Some("%")
+      AmpersandEqual => Some("&")
+      PipeEqual => Some("|")
+      CaretEqual => Some("^")
+      LtLt => Some("<<")
+      GtGt => Some(">>")
+      _ => None
+    }
+    match op {
+      Some(op_str) => {
+        let p3 = p2.skip(1)
+        let (value, p4) = p3.parse_expr()
+        (AssignOp(op_str, left, value), p4)
+      }
+      None => (left, p2)
+    }
   }
 }
 

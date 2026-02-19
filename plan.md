@@ -200,15 +200,16 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Right shift uses arithmetic shift (sar) for signed semantics
 - ✅ Added variable shift encodings (D3 /4, /5, /7 with cl register)
 
-### 3.3 Compound Assignment Operators
+### 3.3 Compound Assignment Operators ✅ COMPLETED
 
-**Location**: `codegen.mbt:632-688`, `parser.mbt`
-
-**Issue**: Operators like `+=`, `-=`, `*=`, etc. are lexed but not fully parsed or generated.
+**Location**: `codegen.mbt:1893-2010`, `parser.mbt:28`, `parser.mbt:678-696`, `lexer.mbt:584-590`
 
 **Implementation**:
-- Parse compound assignment in parser (AST node: `AssignOp`)
-- Generate code: load, operate, store
+- ✅ Added AssignOp AST variant in parser
+- ✅ Parse compound assignment tokens (+=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>=)
+- ✅ Fixed lexer to recognize += and -= (was missing)
+- ✅ Generate code for compound operations (load, operate, store)
+- ✅ Support for variable and array element compound assignment
 
 ### 3.4 Float/Double Support ✅ COMPLETED
 
@@ -454,6 +455,7 @@ This document outlines features that need to be implemented to make Mooner a com
 | P2 | Complete stdlib functions | Medium | ⚠️ PARTIAL (input, char_to_int, int_to_char) |
 | P3 | User-defined types | High | ⚠️ NOT STARTED |
 | P3 | Bitwise operators | Low | ✅ COMPLETED |
+| P3 | Compound assignment operators | Low | ✅ COMPLETED |
 | P3 | String operations | Medium | ⚠️ PARTIAL |
 | P3 | Char type support | Low | ✅ COMPLETED |
 | P4 | Parser error recovery | Medium | ⚠️ NOT STARTED |
@@ -497,6 +499,7 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Unary operators (`-`, `!`)
 - ✅ Variables via `let x = value` - properly stores on stack with rbp-relative addressing
 - ✅ Variable assignment (`x = value`) - reassign existing variables
+- ✅ Compound assignment (`+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=`)
 - ✅ `print("string")` / `print(int)` / `print(float)` - prints to stdout
 - ✅ `println("string")` / `println(int)` / `println(float)` - prints with newline
 - ✅ If expressions with else

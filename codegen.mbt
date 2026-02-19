@@ -1890,6 +1890,130 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           // Unknown assignment target
           self.codegen_expr(value)
       }
+    AssignOp(op, target, value) =>
+      match target {
+        Ident(name) =>
+          match self.var_offsets.get(name) {
+            Some(offset) => {
+              // Load current value
+              let g = self.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
+              // Push current value
+              let g = g.emit_inst(Push(Reg64("rax")))
+              // Evaluate the new value
+              let g = g.codegen_expr(value)
+              // Pop old value into rcx
+              let g = g.emit_inst(Pop(Reg64("rcx")))
+              // Perform operation: rcx op= rax
+              // rcx = old value, rax = new value
+              let g = match op {
+                "+" => g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+                "-" => g.emit_inst(Sub(Reg64("rcx"), Reg64("rax")))
+                "*" => g.emit_inst(Imul(Reg64("rcx"), Reg64("rax")))
+                "/" => {
+                  // Save divisor in rbx
+                  let g = g.emit_inst(Push(Reg64("rbx")))
+                  let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                  // Dividend in rax
+                  let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+                  let g = g.emit_inst(Cqo)
+                  let g = g.emit_inst(Idiv(Reg64("rbx")))
+                  // Quotient in rax, move to rcx for storage
+                  let g = g.emit_inst(Mov(Reg64("rcx"), Reg64("rax")))
+                  g.emit_inst(Pop(Reg64("rbx")))
+                }
+                "%" => {
+                  // Save divisor in rbx
+                  let g = g.emit_inst(Push(Reg64("rbx")))
+                  let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                  // Dividend in rax
+                  let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+                  let g = g.emit_inst(Cqo)
+                  let g = g.emit_inst(Idiv(Reg64("rbx")))
+                  // Remainder in rdx, move to rcx
+                  let g = g.emit_inst(Mov(Reg64("rcx"), Reg64("rdx")))
+                  g.emit_inst(Pop(Reg64("rbx")))
+                }
+                "&" => g.emit_inst(And(Reg64("rcx"), Reg64("rax")))
+                "|" => g.emit_inst(Or(Reg64("rcx"), Reg64("rax")))
+                "^" => g.emit_inst(Xor(Reg64("rcx"), Reg64("rax")))
+                "<<" => {
+                  let g = g.emit_inst(Mov(Reg64("cl"), Reg64("al")))
+                  g.emit_inst(Shl(Reg64("rcx"), Reg8("cl")))
+                }
+                ">>" => {
+                  let g = g.emit_inst(Mov(Reg64("cl"), Reg64("al")))
+                  g.emit_inst(Sar(Reg64("rcx"), Reg8("cl")))
+                }
+                _ => g
+              }
+              // Store result back
+              g.emit_inst(Mov(StackBP64(offset), Reg64("rcx")))
+            }
+            None => self.codegen_expr(value)
+          }
+        IndexExpr(arr, idx) => {
+          // Array element compound assignment: arr[idx] += value
+          let g = self.codegen_expr(arr)
+          let g = g.emit_inst(Push(Reg64("rax")))
+          let g = g.codegen_expr(idx)
+          let g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
+          let g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
+          let g = g.emit_inst(Pop(Reg64("rcx")))
+          let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+          // rcx = base_offset + index*8
+          // Load current value at [rbp + rcx]
+          let g = g.emit_inst(Push(Reg64("rbx")))
+          let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rbp")))
+          let g = g.emit_inst(Add(Reg64("rbx"), Reg64("rcx")))
+          let g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rbx")))
+          let g = g.emit_inst(Push(Reg64("rax")))
+          // Evaluate value
+          let g = g.codegen_expr(value)
+          // Pop old value
+          let g = g.emit_inst(Pop(Reg64("rcx")))
+          // Perform operation
+          // rcx = old value, rax = new value
+          let g = match op {
+            "+" => g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+            "-" => g.emit_inst(Sub(Reg64("rcx"), Reg64("rax")))
+            "*" => g.emit_inst(Imul(Reg64("rcx"), Reg64("rax")))
+            "/" => {
+              // Save divisor in r8, save rbx on stack temporarily
+              let g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
+              let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+              let g = g.emit_inst(Cqo)
+              let g = g.emit_inst(Idiv(Reg64("r8")))
+              // Quotient in rax, move to rcx
+              g.emit_inst(Mov(Reg64("rcx"), Reg64("rax")))
+            }
+            "%" => {
+              // Save divisor in r8
+              let g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
+              let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+              let g = g.emit_inst(Cqo)
+              let g = g.emit_inst(Idiv(Reg64("r8")))
+              // Remainder in rdx, move to rcx
+              g.emit_inst(Mov(Reg64("rcx"), Reg64("rdx")))
+            }
+            "&" => g.emit_inst(And(Reg64("rcx"), Reg64("rax")))
+            "|" => g.emit_inst(Or(Reg64("rcx"), Reg64("rax")))
+            "^" => g.emit_inst(Xor(Reg64("rcx"), Reg64("rax")))
+            "<<" => {
+              let g = g.emit_inst(Mov(Reg64("cl"), Reg64("al")))
+              g.emit_inst(Shl(Reg64("rcx"), Reg8("cl")))
+            }
+            ">>" => {
+              let g = g.emit_inst(Mov(Reg64("cl"), Reg64("al")))
+              g.emit_inst(Sar(Reg64("rcx"), Reg8("cl")))
+            }
+            _ => g
+          }
+          // Store result
+          let g = g.emit_inst(Mov(MemIndirect("rbx"), Reg64("rcx")))
+          g.emit_inst(Pop(Reg64("rbx")))
+        }
+        _ => self.codegen_expr(value)
+      }
     _ => self
   }
 }
