@@ -67,6 +67,7 @@ pub enum X86Operand {
   Stack8(Int)
   Stack32(Int)
   Stack64(Int)
+  StackBP64(Int) // rbp-relative addressing
   RipRel32(String)
   Label(String)
 } derive(Show)
@@ -241,6 +242,11 @@ fn CodeGen::emit_modrm_reg64(
       let g = g.emit_byte(sib(0, 4, 4))
       g.emit32(offset)
     }
+    StackBP64(offset) => {
+      // rbp-relative: mod=10, reg=reg, rm=101 (no SIB needed)
+      let g = self.emit_byte(modrm(2, reg_code, 5))
+      g.emit32(offset)
+    }
     _ => self
   }
 }
@@ -323,10 +329,24 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = g.emit_modrm_reg64(dest, Stack64(offset))
       g
     }
+    Mov(Reg64(dest), StackBP64(offset)) => {
+      // mov reg64, [rbp+offset]
+      let g = self.emit_byte(0x48) // REX.w
+      let g = g.emit_byte(0x8B) // ModR/M for mov reg64, r/m64
+      let g = g.emit_modrm_reg64(dest, StackBP64(offset))
+      g
+    }
     Mov(Stack64(offset), Reg64(src)) => {
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x89)
       let g = g.emit_modrm_reg64(src, Stack64(offset))
+      g
+    }
+    Mov(StackBP64(offset), Reg64(src)) => {
+      // mov [rbp+offset], reg64
+      let g = self.emit_byte(0x48) // REX.w
+      let g = g.emit_byte(0x89) // ModR/M for mov r/m64, reg64
+      let g = g.emit_modrm_reg64(src, StackBP64(offset))
       g
     }
     Lea(Reg64(dest), RipRel32(label)) => {
@@ -676,7 +696,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     Ident(name) =>
       match self.var_offsets.get(name) {
         Some(offset) => {
-          let g = self.emit_inst(Mov(Reg64("rax"), Stack64(offset)))
+          let g = self.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
           g
         }
         None => {
@@ -834,10 +854,27 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       }
       g
     }
-    LetBind(_name, _annot, _value, body) => {
-      // Evaluate value and body
-      let g = self.codegen_expr(body)
-      g
+    LetBind(name, _annot, value, body) => {
+      // Evaluate value
+      let g = self.codegen_expr(value)
+      // Allocate stack slot using rbp-relative addressing
+      // Save rbx first since we're using it as temp
+      let g2 = g.emit_inst(Push(Reg64("rbx")))
+      // Move value to rbx, then store using rbp-relative
+      let g3 = g2.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+      // Use fixed offset based on number of variables (-16, -24, -32, ...)
+      let offset = -16 - g3.var_offsets.length() * 8
+      let g4 = g3.emit_inst(Mov(StackBP64(offset), Reg64("rbx")))
+      // Update var_offsets
+      let g5 = {
+        let new_offsets = g4.var_offsets
+        new_offsets[name] = offset
+        { ..g4, var_offsets: new_offsets }
+      }
+      // Generate body with the new variable in scope
+      let g6 = g5.codegen_expr(body)
+      // Restore rbx
+      g6.emit_inst(Pop(Reg64("rbx")))
     }
     Func(name, _params, _ret, body) =>
       if name == "main" {
@@ -869,8 +906,6 @@ pub fn codegen(ast : AST) -> Bytes {
   g = g.define_label("main")
   g = g.emit_inst(Push(Reg64("rbp")))
   g = g.emit_inst(Mov(Reg64("rbp"), Reg64("rsp")))
-  // Use mov rsp, rbp - 8 as a workaround
-  // Actually let's just not adjust the stack for now
   g = g.codegen_expr(ast)
   g = g.define_label(".main_end")
   g = g.emit_inst(Mov(Reg64("rax"), Imm32(60)))

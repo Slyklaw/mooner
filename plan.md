@@ -51,14 +51,28 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Handle single argument in println/print (via sys_write)
 - ⚠️ Full argument passing for user-defined functions not yet implemented
 
-### 1.3 Implement Proper Function Prologue/Epilogue ⚠️ PARTIAL
+### 1.3 Implement Proper Function Prologue/Epilogue ✅ COMPLETED
 
-**Location**: `codegen.mbt:868-880`
+**Location**: `codegen.mbt:902-912`
 
-**Current Status**:
+**Implementation**:
 - ✅ Basic prologue (push rbp, mov rbp, rsp)
 - ✅ Basic epilogue (mov rsp, rbp, pop rbp, syscall)
-- ⚠️ Stack space for local variables not allocated
+- ✅ Stack allocation for local variables via LetBind
+
+### 1.4 Variable Storage (LetBind) ✅ COMPLETED
+
+**Location**: `codegen.mbt:850-878`
+
+**Implementation**:
+- ✅ Evaluate value expression
+- ✅ Allocate stack slot using rbp-relative addressing (StackBP64)
+- ✅ Store value to stack with proper push/pop of rbx as temp
+- ✅ Track variable offsets in var_offsets map
+- ✅ Load variable values when referenced via Ident
+
+**New x86 Operand Added**:
+- `StackBP64(Int)` - rbp-relative addressing for local variables
 
 ---
 
@@ -284,7 +298,7 @@ This document outlines features that need to be implemented to make Mooner a com
 
 ### 5.1 Implement Missing Built-in Functions
 
-**Location**: `type_checker.mbt:113-125`, `codegen.mbt:760-810`
+**Location**: `type_checker.mbt:113-125`, `codegen.mbt:760-830`
 
 **Current Status**:
 - ✅ `println` - IMPLEMENTED (string and int)
@@ -430,6 +444,7 @@ This document outlines features that need to be implemented to make Mooner a com
 | P0 | Fix println/print | Medium | ✅ COMPLETED |
 | P0 | Parser bug fixes (Ident, Underscore, etc.) | Medium | ✅ COMPLETED |
 | P0 | Fix RIP-relative addressing | Low | ✅ COMPLETED |
+| P0 | Variable storage (LetBind) | Medium | ✅ COMPLETED |
 | P0 | Fix function call arguments | Medium | ⚠️ PARTIAL |
 | P0 | Support `fn main` entry point | Medium | ✅ COMPLETED |
 | P1 | While loop codegen | Medium | ⚠️ NOT STARTED |
@@ -478,7 +493,7 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Boolean literals (`true`, `false`)
 - ✅ Basic arithmetic (`+`, `-`, `*`, `==`, `!=`, `<`, `>`, `<=`, `>=`)
 - ✅ Unary operators (`-`, `!`)
-- ✅ Variables via `let x = value` (stack allocation not yet implemented)
+- ✅ Variables via `let x = value` - properly stores on stack
 - ✅ `print("string")` - prints to stdout
 - ✅ `println("string")` - prints with newline
 - ✅ `println(number)` - prints number as string
