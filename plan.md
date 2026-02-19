@@ -237,15 +237,15 @@ This document outlines features that need to be implemented to make Mooner a com
 - Implement string comparison
 - Implement string concatenation (optional)
 
-### 3.6 Char Type Support
+### 3.6 Char Type Support ✅ COMPLETED
 
-**Location**: `codegen.mbt`
-
-**Issue**: Char literals are parsed but not compiled.
+**Location**: `codegen.mbt:1088-1091`, `codegen.mbt:1348-1354`
 
 **Implementation**:
-- Handle char as 8-bit integer
-- Implement char-to-int and int-to-char conversions
+- ✅ Char literals compiled as 8-bit integer ASCII codes
+- ✅ Char printing in println/print
+- ✅ char_to_int builtin (identity operation)
+- ✅ int_to_char builtin (identity operation)
 
 ---
 
@@ -294,15 +294,15 @@ This document outlines features that need to be implemented to make Mooner a com
 **Location**: `type_checker.mbt:113-125`, `codegen.mbt:760-830`
 
 **Current Status**:
-- ✅ `println` - IMPLEMENTED (string and int)
-- ✅ `print` - IMPLEMENTED (string and int)
-- ⚠️ `input` - not implemented
-- ⚠️ `int_to_string` - not implemented
-- ⚠️ `float_to_string` - not implemented
+- ✅ `println` - IMPLEMENTED (string, int, float, char)
+- ✅ `print` - IMPLEMENTED (string, int, float, char)
+- ✅ `input` - IMPLEMENTED (reads line from stdin, returns pointer)
+- ⚠️ `char_to_int` - IMPLEMENTED (identity operation)
+- ⚠️ `int_to_char` - IMPLEMENTED (identity operation)
+- ⚠️ `int_to_string` - not implemented (runtime conversion needed)
+- ⚠️ `float_to_string` - not implemented (runtime conversion needed)
 - ⚠️ `string_to_int` - not implemented
 - ⚠️ `string_to_float` - not implemented
-- ⚠️ `char_to_int` - not implemented
-- ⚠️ `int_to_char` - not implemented
 
 **Implementation**:
 - Implement each function with proper syscalls or library calls
@@ -451,10 +451,11 @@ This document outlines features that need to be implemented to make Mooner a com
 | P2 | Variable assignment | Low | ✅ COMPLETED |
 | P2 | Tuple operations | Medium | ✅ COMPLETED |
 | P2 | Float support | Medium | ✅ COMPLETED (arithmetic, comparison) |
-| P2 | Complete stdlib functions | Medium | ⚠️ PARTIAL |
+| P2 | Complete stdlib functions | Medium | ⚠️ PARTIAL (input, char_to_int, int_to_char) |
 | P3 | User-defined types | High | ⚠️ NOT STARTED |
 | P3 | Bitwise operators | Low | ✅ COMPLETED |
 | P3 | String operations | Medium | ⚠️ PARTIAL |
+| P3 | Char type support | Low | ✅ COMPLETED |
 | P4 | Parser error recovery | Medium | ⚠️ NOT STARTED |
 | P4 | Optimizations | High | ⚠️ NOT STARTED |
 | P5 | Lambda functions | High | ⚠️ NOT STARTED |
@@ -486,7 +487,10 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ `fn main { expr }` - basic entry point
 - ✅ Integer literals (`42`, `-5`, etc.)
 - ✅ Boolean literals (`true`, `false`)
+- ✅ Char literals (`'A'`, `'Z'`, etc.) - ASCII code support
 - ✅ Float literals (`3.14`, `2.718`, etc.) - parsing, printing, and arithmetic
+- ✅ Char functions (`char_to_int`, `int_to_char`)
+- ✅ `input()` - read line from stdin
 - ✅ Float arithmetic (`+`, `-`, `*`, `/`) and comparison (`==`, `!=`, `<`, `>`, `<=`, `>=`)
 - ✅ Basic arithmetic (`+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`)
 - ✅ Bitwise operators (`&`, `|`, `^`, `<<`, `>>`)

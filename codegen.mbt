@@ -1085,6 +1085,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       let g = self.emit_inst(Mov(Reg64("rax"), Imm32(if b { 1 } else { 0 })))
       g
     }
+    Char(c) => {
+      let code = c.to_int()
+      let g = self.emit_inst(Mov(Reg64("rax"), Imm32(code)))
+      g
+    }
     String(s) => {
       let g = self.emit_inst(Mov(Reg64("rax"), Imm32(s.length())))
       g
@@ -1339,6 +1344,13 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
                 g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
               }
+              Char(c) => {
+                let s = c.to_string()
+                let (g2, label) = g.add_string(s)
+                g = g2
+                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+              }
               _ => {
                 let is_float = is_float_expr(arg, g.var_is_float)
                 if is_float {
@@ -1347,9 +1359,10 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
                   g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
                 } else {
-                  g = g.codegen_expr(arg)
-                  g = g.emit_inst(Mov(Reg64("rsi"), Imm32(0)))
-                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                  let (g2, label) = g.add_string("<value>")
+                  g = g2
+                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
                 }
               }
             }
@@ -1368,6 +1381,29 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             g = g.emit_inst(Syscall)
           }
           g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+          g
+        }
+        "char_to_int" =>
+          if args.length() == 1 {
+            self.codegen_expr(args[0])
+          } else {
+            self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+          }
+        "int_to_char" =>
+          if args.length() == 1 {
+            self.codegen_expr(args[0])
+          } else {
+            self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+          }
+        "input" => {
+          let mut g = self
+          let label = ".Linput_buf"
+          g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+          g = g.emit_inst(Mov(Reg64("rdi"), Imm32(0)))
+          g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(255)))
+          g = g.emit_inst(Syscall)
+          g = g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
           g
         }
         _ => {
@@ -1941,6 +1977,12 @@ pub fn codegen(ast : AST) -> Bytes {
     g = g.emit_byte(b6)
     g = g.emit_byte(b7)
     flt_idx = flt_idx + 1
+  }
+  g = g.define_label(".Linput_buf")
+  let mut buf_idx = 0
+  while buf_idx < 256 {
+    g = g.emit_byte(0x00)
+    buf_idx = buf_idx + 1
   }
   let code = g.code
   let mut i = 0
