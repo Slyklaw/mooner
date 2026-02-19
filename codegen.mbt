@@ -1017,10 +1017,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g.emit_inst(Ret)
     }
     WhileLoop(cond, body) => {
-      let (g_start, start_label) = self.new_label()
-      let (g_end, end_label) = g_start.new_label()
+      let start_label = ".Lwhile_start\{self.label_counter}"
+      let end_label = ".Lwhile_end\{self.label_counter + 1}"
+      let mut g = { ..self, label_counter: self.label_counter + 2 }
       // Define start label
-      let mut g = g_start.define_label(start_label)
+      g = g.define_label(start_label)
       // Evaluate condition
       g = g.codegen_expr(cond)
       // If condition is 0 (false), jump to end
@@ -1030,6 +1031,38 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g = g.codegen_expr(body)
       // Jump back to start
       g = g.emit_inst(Jmp(start_label))
+      // Define end label
+      g.define_label(end_label)
+    }
+    ForLoop(init, cond, step, body) => {
+      let cond_label = ".Lfor_cond\{self.label_counter}"
+      let end_label = ".Lfor_end\{self.label_counter + 1}"
+      let mut g = { ..self, label_counter: self.label_counter + 2 }
+      // Execute init
+      match init {
+        Some(i) => g = g.codegen_expr(i)
+        None => ()
+      }
+      // Define condition label
+      g = g.define_label(cond_label)
+      // Evaluate condition (default to true if none)
+      match cond {
+        Some(c) => {
+          g = g.codegen_expr(c)
+          g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
+          g = g.emit_inst(Je(end_label))
+        }
+        None => ()
+      }
+      // Evaluate body
+      g = g.codegen_expr(body)
+      // Execute step
+      match step {
+        Some(s) => g = g.codegen_expr(s)
+        None => ()
+      }
+      // Jump back to condition
+      g = g.emit_inst(Jmp(cond_label))
       // Define end label
       g.define_label(end_label)
     }
@@ -1125,6 +1158,26 @@ fn collect_funcs(
       f
     }
     ReturnExpr(e) => collect_funcs(e, funcs)
+    WhileLoop(cond, body) => {
+      let f = collect_funcs(cond, funcs)
+      collect_funcs(body, f)
+    }
+    ForLoop(init, cond, step, body) => {
+      let mut f = funcs
+      match init {
+        Some(i) => f = collect_funcs(i, f)
+        None => ()
+      }
+      match cond {
+        Some(c) => f = collect_funcs(c, f)
+        None => ()
+      }
+      match step {
+        Some(s) => f = collect_funcs(s, f)
+        None => ()
+      }
+      collect_funcs(body, f)
+    }
     _ => funcs
   }
 }

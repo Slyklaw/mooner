@@ -320,7 +320,12 @@ fn Parser::parse_for(self : Parser) -> (AST, Parser) {
     (None, p3.advance())
   } else {
     let (expr, p5) = p3.parse_expr()
-    (Some(expr), p5)
+    // Skip the ')' after step expression
+    if self_token_eq(p5.current(), RParen) {
+      (Some(expr), p5.advance())
+    } else {
+      (Some(expr), p5)
+    }
   }
   let (body, p5) = p4.parse_block_or_expr()
   (ForLoop(init, cond, step, body), p5)

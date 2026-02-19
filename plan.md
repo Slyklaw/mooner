@@ -94,17 +94,20 @@ This document outlines features that need to be implemented to make Mooner a com
 - Break/continue not implemented
 - Return inside while loops doesn't clean up stack properly
 
-### 2.2 For Loop Code Generation
+### 2.2 For Loop Code Generation ✅ COMPLETED (basic)
 
-**Location**: `codegen.mbt` (missing implementation)
-
-**Issue**: For loops are parsed but not compiled.
+**Location**: `codegen.mbt:1037-1069`, `parser.mbt:319-327`
 
 **Implementation**:
-- Handle init expression (variable initialization)
-- Generate condition check
-- Handle step expression
-- Generate loop body with proper control flow
+- ✅ Handle init expression (variable initialization)
+- ✅ Generate condition check
+- ✅ Handle step expression
+- ✅ Generate loop body with proper control flow
+- ✅ Fixed parser bug - skip `)` after step before parsing body
+
+**Known Limitations**:
+- Break/continue not implemented
+- Return inside for loops doesn't clean up stack properly
 
 ### 2.3 Match Expression Code Generation
 
@@ -450,7 +453,7 @@ This document outlines features that need to be implemented to make Mooner a com
 | P0 | User-defined function calls | Medium | ✅ COMPLETED |
 | P0 | Support `fn main` entry point | Medium | ✅ COMPLETED |
 | P1 | While loop codegen | Medium | ✅ COMPLETED (basic) |
-| P1 | For loop codegen | Medium | ⚠️ NOT STARTED |
+| P1 | For loop codegen | Medium | ✅ COMPLETED (basic) |
 | P1 | Return statement | Low | ✅ COMPLETED |
 | P1 | Division/Modulo | Low | ✅ COMPLETED |
 | P1 | Break/Continue | Medium | ⚠️ NOT STARTED |
@@ -504,10 +507,10 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ User-defined function calls with up to 6 parameters
 - ✅ Return statements
 - ✅ While loops (basic - no break/continue yet)
+- ✅ For loops (basic - init/cond/step, no break/continue yet)
 
 ### Known Limitations:
-- Return inside while loops doesn't clean up stack properly
-- For loops not implemented
+- Return inside while/for loops doesn't clean up stack properly
 - Break/continue not implemented
 - Arrays/tuples not implemented
 - Float operations not implemented
