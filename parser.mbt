@@ -102,7 +102,9 @@ fn Parser::parse_literal(self : Parser) -> (AST, Parser) {
     Ident(name) => (Ident(name), self.advance())
     LParen => self.parse_tuple_or_parens()
     LBracket => self.parse_array()
-    _ => (Unit, self)
+    Eof => (Unit, self.advance())
+    RBrace => (Unit, self)
+    _ => (Unit, self.advance())
   }
 }
 
@@ -194,7 +196,14 @@ fn Parser::parse_primary(self : Parser) -> (AST, Parser) {
     }
     Break => (Break, self.advance())
     Continue => (Continue, self.advance())
-    _ => (Unit, self)
+    Underscore => (Ident("_".to_string()), self.advance())
+    Equal => (Unit, self.advance())
+    Eof => (Unit, self.advance())
+    RBrace => (Unit, self)
+    RParen => (Unit, self)
+    Comma => (Unit, self.advance())
+    Semicolon => (Unit, self.advance())
+    _ => (Unit, self.advance())
   }
 }
 

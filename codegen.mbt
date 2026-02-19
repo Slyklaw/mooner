@@ -646,7 +646,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
 }
 
 ///|
-fn CodeGen::_add_string(self : CodeGen, s : String) -> (CodeGen, String) {
+fn CodeGen::add_string(self : CodeGen, s : String) -> (CodeGen, String) {
   let label = ".Lstr\{self.string_counter}"
   let g = {
     ..self,
@@ -758,17 +758,52 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       }
     }
     CallExpr(func, args) => {
-      // Debug
-      let _ = func
-      let _ = args.length()
       let func_name = match func {
         Ident(name) => name
         _ => ""
       }
       match func_name {
         "println" | "print" => {
-          // Just return 0 for now
-          let g = self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+          let is_println = func_name == "println"
+          let mut g = self
+          let mut arg_idx = 0
+          while arg_idx < args.length() {
+            let arg = args[arg_idx]
+            match arg {
+              String(s) => {
+                let (g2, label) = g.add_string(s)
+                g = g2
+                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+              }
+              Int(n) => {
+                let s = n.to_string()
+                let (g2, label) = g.add_string(s)
+                g = g2
+                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+              }
+              _ => {
+                g = g.codegen_expr(arg)
+                g = g.emit_inst(Mov(Reg64("rsi"), Imm32(0)))
+                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+              }
+            }
+            g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+            g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+            g = g.emit_inst(Syscall)
+            arg_idx = arg_idx + 1
+          }
+          if is_println {
+            let (g2, label) = g.add_string("\n")
+            g = g2
+            g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+            g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+            g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+            g = g.emit_inst(Syscall)
+          }
+          g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
           g
         }
         _ => self
@@ -844,14 +879,10 @@ pub fn codegen(ast : AST) -> Bytes {
   g = g.emit_inst(Pop(Reg64("rbp")))
   g = g.emit_inst(Syscall)
   let mut str_idx = 0
-  while str_idx < g.string_counter {
-    let label = ".Lstr\{str_idx}"
-    g = g.define_label(label)
-    str_idx = str_idx + 1
-  }
-  str_idx = 0
   while str_idx < g.strings.length() {
     let s = g.strings[str_idx]
+    let label = ".Lstr\{str_idx}"
+    g = g.define_label(label)
     let mut i = 0
     while i < s.length() {
       let ch = s[i]
@@ -867,7 +898,8 @@ pub fn codegen(ast : AST) -> Bytes {
     let (label_name, ref_pos) = g.pending_labels[i]
     match g.labels.get(label_name) {
       Some(target_pos) => {
-        let offset = target_pos - (ref_pos + 7)
+        // RIP-relative: offset from end of instruction (ref_pos + 4 bytes for displacement)
+        let offset = target_pos - (ref_pos + 4)
         let b0 = (offset.reinterpret_as_uint() & 0xFF).to_byte()
         let b1 = ((offset.reinterpret_as_uint() >> 8) & 0xFF).to_byte()
         let b2 = ((offset.reinterpret_as_uint() >> 16) & 0xFF).to_byte()
