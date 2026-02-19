@@ -48,6 +48,7 @@ pub struct CodeGen {
   pending_labels : Array[(String, Int)]
   label_counter : Int
   var_offsets : Map[String, Int]
+  var_is_float : Map[String, Bool]
   next_offset : Int
   current_func : String?
   func_bodies : Map[String, AST]
@@ -232,6 +233,7 @@ pub enum X86Inst {
   Jbe(String)
   Jz(String)
   Jnz(String)
+  Jp(String)
   Setz(X86Operand)
   Setnz(X86Operand)
   Setg(X86Operand)
@@ -242,6 +244,8 @@ pub enum X86Inst {
   Setae(X86Operand)
   Setb(X86Operand)
   Setbe(X86Operand)
+  PushXmm(String)
+  PopXmm(String)
   Call(String)
   Ret
   Nop

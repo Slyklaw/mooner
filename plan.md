@@ -210,7 +210,7 @@ This document outlines features that need to be implemented to make Mooner a com
 - Parse compound assignment in parser (AST node: `AssignOp`)
 - Generate code: load, operate, store
 
-### 3.4 Float/Double Support ✅ PARTIALLY COMPLETED
+### 3.4 Float/Double Support ✅ COMPLETED
 
 **Location**: `codegen.mbt`, `lexer.mbt`, `type_checker.mbt`
 
@@ -218,10 +218,12 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Added XMM register support in X86Operand
 - ✅ Added float instructions (Movsd, Addsd, Subsd, Mulsd, Divsd, Ucomisd, Cvtsi2sd, Cvtsd2si)
 - ✅ Float literal storage in .rodata section (8-byte IEEE 754 doubles)
-- ✅ Float printing in println/print (compile-time conversion to string)
+- ✅ Float printing in println/print (compile-time conversion for literals, placeholder for expressions)
 - ✅ Fixed lexer to parse float literals with decimal point
-- ⚠️ Float arithmetic not yet implemented (runtime operations)
-- ⚠️ Float comparison not yet implemented (runtime operations)
+- ✅ Float arithmetic operations (+, -, *, /)
+- ✅ Float comparison operators (==, !=, <, >, <=, >=)
+- ✅ Float variables with proper stack storage and loading
+- ⚠️ Runtime float-to-string conversion not implemented (prints `<float>` for expressions)
 
 ### 3.5 String Operations
 
@@ -448,7 +450,7 @@ This document outlines features that need to be implemented to make Mooner a com
 | P2 | Array operations | High | ✅ COMPLETED |
 | P2 | Variable assignment | Low | ✅ COMPLETED |
 | P2 | Tuple operations | Medium | ✅ COMPLETED |
-| P2 | Float support | Medium | ✅ PARTIAL (literals, printing) |
+| P2 | Float support | Medium | ✅ COMPLETED (arithmetic, comparison) |
 | P2 | Complete stdlib functions | Medium | ⚠️ PARTIAL |
 | P3 | User-defined types | High | ⚠️ NOT STARTED |
 | P3 | Bitwise operators | Low | ✅ COMPLETED |
@@ -484,7 +486,8 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ `fn main { expr }` - basic entry point
 - ✅ Integer literals (`42`, `-5`, etc.)
 - ✅ Boolean literals (`true`, `false`)
-- ✅ Float literals (`3.14`, `2.718`, etc.) - parsing and printing via println
+- ✅ Float literals (`3.14`, `2.718`, etc.) - parsing, printing, and arithmetic
+- ✅ Float arithmetic (`+`, `-`, `*`, `/`) and comparison (`==`, `!=`, `<`, `>`, `<=`, `>=`)
 - ✅ Basic arithmetic (`+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`)
 - ✅ Bitwise operators (`&`, `|`, `^`, `<<`, `>>`)
 - ✅ Unary operators (`-`, `!`)
@@ -506,7 +509,7 @@ This document outlines features that need to be implemented to make Mooner a com
 
 ### Known Limitations:
 - Return inside while/for loops doesn't clean up stack properly
-- Float arithmetic/comparison not implemented (only literal printing)
+- Float runtime printing shows `<float>` (no float-to-string conversion at runtime)
 - No user-defined types
 - Limited stdlib functions
 - Parser only supports one top-level function (use nested functions for multiple functions)

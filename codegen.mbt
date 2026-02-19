@@ -40,6 +40,7 @@ pub enum X86Inst {
   Jbe(String)
   Jz(String)
   Jnz(String)
+  Jp(String)
   Setz(X86Operand)
   Setnz(X86Operand)
   Setg(X86Operand)
@@ -50,6 +51,8 @@ pub enum X86Inst {
   Setae(X86Operand)
   Setb(X86Operand)
   Setbe(X86Operand)
+  PushXmm(String)
+  PopXmm(String)
   Call(String)
   Ret
   Nop
@@ -90,6 +93,7 @@ pub struct CodeGen {
   pending_labels : Array[(String, Int)]
   label_counter : Int
   var_offsets : Map[String, Int]
+  var_is_float : Map[String, Bool]
   next_offset : Int
   current_func : String?
   func_bodies : Map[String, AST]
@@ -108,6 +112,7 @@ fn CodeGen::new() -> CodeGen {
     pending_labels: [],
     label_counter: 0,
     var_offsets: Map::new(),
+    var_is_float: Map::new(),
     next_offset: -8,
     current_func: None,
     func_bodies: Map::new(),
@@ -864,6 +869,14 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
+    Jp(label) => {
+      let g = self.emit_byte(0x0F)
+      let g = g.emit_byte(0x8A)
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
+      g.emit32(0)
+    }
     Setz(_dest) => {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x94)
@@ -924,6 +937,20 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = g.emit_byte(modrm(3, 0, 0))
       g
     }
+    PushXmm(reg) => {
+      let reg_code = xmm_reg_code(reg)
+      let g = self.emit_bytes([0x48, 0x83, 0xEC, 0x08])
+      let g = g.emit_bytes([0xF2, 0x0F, 0x11])
+      let g = g.emit_byte(modrm(0, reg_code, 4))
+      g.emit_byte(sib(0, 4, 4))
+    }
+    PopXmm(reg) => {
+      let reg_code = xmm_reg_code(reg)
+      let g = self.emit_bytes([0xF2, 0x0F, 0x10])
+      let g = g.emit_byte(modrm(0, reg_code, 4))
+      let g = g.emit_byte(sib(0, 4, 4))
+      g.emit_bytes([0x48, 0x83, 0xC4, 0x08])
+    }
     Call(label) => {
       let g = self.emit_byte(0xE8)
       let pos = g.code.length()
@@ -954,6 +981,18 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let new_pending = g.pending_labels + [(label, pos)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
+    }
+    Movsd(Xmm(dest), StackBP64(offset)) => {
+      let dest_code = xmm_reg_code(dest)
+      let g = self.emit_bytes([0xF2, 0x0F, 0x10])
+      let g = g.emit_byte(modrm(2, dest_code, 5))
+      g.emit32(offset)
+    }
+    Movsd(StackBP64(offset), Xmm(src)) => {
+      let src_code = xmm_reg_code(src)
+      let g = self.emit_bytes([0xF2, 0x0F, 0x11])
+      let g = g.emit_byte(modrm(2, src_code, 5))
+      g.emit32(offset)
     }
     Addsd(Xmm(dest), Xmm(src)) => {
       let g = self.emit_bytes([0xF2, 0x0F, 0x58])
@@ -1024,6 +1063,18 @@ fn CodeGen::add_float(self : CodeGen, f : Double) -> (CodeGen, String) {
 }
 
 ///|
+fn is_float_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
+  match expr {
+    Float(_) => true
+    Ident(name) => var_is_float.get(name) == Some(true)
+    Binary(_, left, right) =>
+      is_float_expr(left, var_is_float) || is_float_expr(right, var_is_float)
+    Unary(_, e) => is_float_expr(e, var_is_float)
+    _ => false
+  }
+}
+
+///|
 fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
   match expr {
     Int(n) => {
@@ -1041,143 +1092,203 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     Float(f) => {
       let (g, label) = self.add_float(f)
       let g = g.emit_inst(Movsd(Xmm("xmm0"), RipRel32(label)))
-      let g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+      let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
       g
     }
     Ident(name) =>
       match self.var_offsets.get(name) {
-        Some(offset) => {
-          let g = self.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
-          g
-        }
+        Some(offset) =>
+          if self.var_is_float.get(name) == Some(true) {
+            let g = self.emit_inst(Movsd(Xmm("xmm0"), StackBP64(offset)))
+            let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+            g
+          } else {
+            let g = self.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
+            g
+          }
         None => {
           let g = self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
           g
         }
       }
     Binary(op, left, right) => {
-      let g = self.codegen_expr(left)
-      let g = g.emit_inst(Push(Reg64("rax")))
-      let g = g.codegen_expr(right)
-      let g = g.emit_inst(Pop(Reg64("rcx")))
-      match op {
-        "+" => {
-          let g = g.emit_inst(Add(Reg64("rax"), Reg64("rcx")))
-          g
+      let is_float = is_float_expr(left, self.var_is_float) ||
+        is_float_expr(right, self.var_is_float)
+      if is_float {
+        let g = self.codegen_expr(left)
+        let g = g.emit_inst(PushXmm("xmm0"))
+        let g = g.codegen_expr(right)
+        let g = g.emit_inst(PopXmm("xmm1"))
+        match op {
+          "+" => {
+            let g = g.emit_inst(Addsd(Xmm("xmm0"), Xmm("xmm1")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+            g
+          }
+          "-" => {
+            let g = g.emit_inst(Subsd(Xmm("xmm1"), Xmm("xmm0")))
+            let g = g.emit_inst(Movsd(Xmm("xmm0"), Xmm("xmm1")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+            g
+          }
+          "*" => {
+            let g = g.emit_inst(Mulsd(Xmm("xmm0"), Xmm("xmm1")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+            g
+          }
+          "/" => {
+            let g = g.emit_inst(Divsd(Xmm("xmm1"), Xmm("xmm0")))
+            let g = g.emit_inst(Movsd(Xmm("xmm0"), Xmm("xmm1")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+            g
+          }
+          "==" | "!=" | "<" | ">" | "<=" | ">=" => {
+            let g = g.emit_inst(Ucomisd(Xmm("xmm1"), Xmm("xmm0")))
+            let end_label = ".Lcmp_end\{self.label_counter}"
+            let g = { ..g, label_counter: g.label_counter + 1 }
+            let g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+            match op {
+              "==" => {
+                let g = g.emit_inst(Jne(end_label))
+                let g = g.emit_inst(Jp(end_label))
+                let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                g.define_label(end_label)
+              }
+              "!=" => {
+                let g = g.emit_inst(Jne(end_label))
+                let g = g.emit_inst(Jp(end_label))
+                let g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+                let g = g.define_label(end_label)
+                let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                g
+              }
+              "<" => {
+                let g = g.emit_inst(Ja(end_label))
+                let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                g.define_label(end_label)
+              }
+              ">" => {
+                let g = g.emit_inst(Jb(end_label))
+                let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                g.define_label(end_label)
+              }
+              "<=" => {
+                let g = g.emit_inst(Ja(end_label))
+                let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                g.define_label(end_label)
+              }
+              ">=" => {
+                let g = g.emit_inst(Jb(end_label))
+                let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                g.define_label(end_label)
+              }
+              _ => g
+            }
+          }
+          _ => {
+            let g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+            g
+          }
         }
-        "-" => {
-          let g = g.emit_inst(Sub(Reg64("rcx"), Reg64("rax")))
-          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
-          g
+      } else {
+        let g = self.codegen_expr(left)
+        let g = g.emit_inst(Push(Reg64("rax")))
+        let g = g.codegen_expr(right)
+        let g = g.emit_inst(Pop(Reg64("rcx")))
+        match op {
+          "+" => {
+            let g = g.emit_inst(Add(Reg64("rax"), Reg64("rcx")))
+            g
+          }
+          "-" => {
+            let g = g.emit_inst(Sub(Reg64("rcx"), Reg64("rax")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+            g
+          }
+          "*" => {
+            let g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
+            g
+          }
+          "==" => {
+            let g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rax")))
+            let g = g.emit_inst(Setz(Reg64("al")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rax")))
+            g
+          }
+          "!=" => {
+            let g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rax")))
+            let g = g.emit_inst(Setnz(Reg64("al")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rax")))
+            g
+          }
+          "<" => {
+            let g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rax")))
+            let g = g.emit_inst(Setl(Reg64("al")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rax")))
+            g
+          }
+          ">" => {
+            let g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rax")))
+            let g = g.emit_inst(Setg(Reg64("al")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rax")))
+            g
+          }
+          "<=" => {
+            let g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rax")))
+            let g = g.emit_inst(Setle(Reg64("al")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rax")))
+            g
+          }
+          ">=" => {
+            let g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rax")))
+            let g = g.emit_inst(Setge(Reg64("al")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rax")))
+            g
+          }
+          "/" => {
+            let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+            let g = g.emit_inst(Cqo)
+            let g = g.emit_inst(Idiv(Reg64("rbx")))
+            g
+          }
+          "%" => {
+            let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+            let g = g.emit_inst(Cqo)
+            let g = g.emit_inst(Idiv(Reg64("rbx")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rdx")))
+            g
+          }
+          "&" => {
+            let g = g.emit_inst(And(Reg64("rcx"), Reg64("rax")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+            g
+          }
+          "|" => {
+            let g = g.emit_inst(Or(Reg64("rcx"), Reg64("rax")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+            g
+          }
+          "^" => {
+            let g = g.emit_inst(Xor(Reg64("rcx"), Reg64("rax")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+            g
+          }
+          "<<" => {
+            let g = g.emit_inst(Push(Reg64("rax")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+            let g = g.emit_inst(Pop(Reg64("rcx")))
+            g.emit_inst(Shl(Reg64("rax"), Reg64("cl")))
+          }
+          ">>" => {
+            let g = g.emit_inst(Push(Reg64("rax")))
+            let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+            let g = g.emit_inst(Pop(Reg64("rcx")))
+            g.emit_inst(Sar(Reg64("rax"), Reg64("cl")))
+          }
+          _ => g
         }
-        "*" => {
-          let g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
-          g
-        }
-        "==" => {
-          let g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rax")))
-          let g = g.emit_inst(Setz(Reg64("al")))
-          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rax")))
-          g
-        }
-        "!=" => {
-          let g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rax")))
-          let g = g.emit_inst(Setnz(Reg64("al")))
-          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rax")))
-          g
-        }
-        "<" => {
-          let g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rax")))
-          let g = g.emit_inst(Setl(Reg64("al")))
-          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rax")))
-          g
-        }
-        ">" => {
-          let g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rax")))
-          let g = g.emit_inst(Setg(Reg64("al")))
-          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rax")))
-          g
-        }
-        "<=" => {
-          let g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rax")))
-          let g = g.emit_inst(Setle(Reg64("al")))
-          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rax")))
-          g
-        }
-        ">=" => {
-          let g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rax")))
-          let g = g.emit_inst(Setge(Reg64("al")))
-          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rax")))
-          g
-        }
-        "/" => {
-          // idiv divides rdx:rax by operand, quotient in rax, remainder in rdx
-          // rcx = dividend, rax = divisor
-          // Save divisor to rbx
-          let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
-          // Move dividend to rax
-          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
-          // Sign-extend rax to rdx:rax
-          let g = g.emit_inst(Cqo)
-          // Divide: rax = rdx:rax / rbx
-          let g = g.emit_inst(Idiv(Reg64("rbx")))
-          g
-        }
-        "%" => {
-          // idiv divides rdx:rax by operand, quotient in rax, remainder in rdx
-          // rcx = dividend, rax = divisor
-          // Save divisor to rbx
-          let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
-          // Move dividend to rax
-          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
-          // Sign-extend rax to rdx:rax
-          let g = g.emit_inst(Cqo)
-          // Divide: rdx = rdx:rax % rbx
-          let g = g.emit_inst(Idiv(Reg64("rbx")))
-          // Move remainder to rax
-          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rdx")))
-          g
-        }
-        "&" => {
-          // Bitwise AND: rcx & rax
-          let g = g.emit_inst(And(Reg64("rcx"), Reg64("rax")))
-          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
-          g
-        }
-        "|" => {
-          // Bitwise OR: rcx | rax
-          let g = g.emit_inst(Or(Reg64("rcx"), Reg64("rax")))
-          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
-          g
-        }
-        "^" => {
-          // Bitwise XOR: rcx ^ rax
-          let g = g.emit_inst(Xor(Reg64("rcx"), Reg64("rax")))
-          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
-          g
-        }
-        "<<" => {
-          // Left shift: rcx << rax (left << right)
-          // rcx = value, rax = shift count
-          // Need shift count in cl, value in the register to shift
-          // Save shift count
-          let g = g.emit_inst(Push(Reg64("rax")))
-          // Move value to rax
-          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
-          // Pop shift count to rcx (lower 8 bits = cl)
-          let g = g.emit_inst(Pop(Reg64("rcx")))
-          // Shift rax by cl
-          g.emit_inst(Shl(Reg64("rax"), Reg64("cl")))
-        }
-        ">>" => {
-          // Arithmetic right shift: rcx >> rax (signed)
-          // rcx = value, rax = shift count
-          let g = g.emit_inst(Push(Reg64("rax")))
-          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
-          let g = g.emit_inst(Pop(Reg64("rcx")))
-          g.emit_inst(Sar(Reg64("rax"), Reg64("cl")))
-        }
-        _ => self
       }
     }
     Unary(op, e) => {
@@ -1229,9 +1340,17 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
               }
               _ => {
-                g = g.codegen_expr(arg)
-                g = g.emit_inst(Mov(Reg64("rsi"), Imm32(0)))
-                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                let is_float = is_float_expr(arg, g.var_is_float)
+                if is_float {
+                  let (g2, label) = g.add_string("<float>")
+                  g = g2
+                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                } else {
+                  g = g.codegen_expr(arg)
+                  g = g.emit_inst(Mov(Reg64("rsi"), Imm32(0)))
+                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                }
               }
             }
             g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
@@ -1420,19 +1539,27 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g.emit_inst(Pop(Reg64("rbx")))
     }
     LetBind(name, _annot, value, body) => {
-      // Evaluate value
+      let is_float = is_float_expr(value, self.var_is_float)
       let g = self.codegen_expr(value)
-      // Push value onto stack
-      let g2 = g.emit_inst(Push(Reg64("rax")))
-      // After push, value is at rbp + next_offset
+      let g2 = if is_float {
+        let g = g.emit_inst(PushXmm("xmm0"))
+        g
+      } else {
+        g.emit_inst(Push(Reg64("rax")))
+      }
       let offset = g2.next_offset
-      // Update var_offsets and decrement next_offset for next variable
       let g3 = {
         let new_offsets = g2.var_offsets
         new_offsets[name] = offset
-        { ..g2, var_offsets: new_offsets, next_offset: offset - 8 }
+        let new_floats = g2.var_is_float
+        new_floats[name] = is_float
+        {
+          ..g2,
+          var_offsets: new_offsets,
+          var_is_float: new_floats,
+          next_offset: offset - 8,
+        }
       }
-      // Generate body with the new variable in scope
       g3.codegen_expr(body)
     }
     Func(name, _params, _ret, body) =>
