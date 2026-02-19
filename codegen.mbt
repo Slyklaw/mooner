@@ -495,6 +495,56 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
         g.emit_byte(modrm(0, src_code, rm_code))
       }
     }
+    Mov(MemIndirect(addr_reg), Reg8(src)) => {
+      let reg_code = match src {
+        "al" => 0
+        "cl" => 1
+        "dl" => 2
+        "bl" => 3
+        "r8b" => 0
+        "r9b" => 1
+        "r10b" => 2
+        "r11b" => 3
+        "r12b" => 4
+        "r13b" => 5
+        "r14b" => 6
+        "r15b" => 7
+        _ => 0
+      }
+      let rm_code = match addr_reg {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      let needs_rex = src == "r8b" ||
+        src == "r9b" ||
+        src == "r10b" ||
+        src == "r11b" ||
+        src == "r12b" ||
+        src == "r13b" ||
+        src == "r14b" ||
+        src == "r15b"
+      let mut g = self
+      if needs_rex {
+        g = g.emit_byte(0x41)
+      }
+      g = g.emit_byte(0x88)
+      if addr_reg == "rsp" {
+        g = g.emit_byte(modrm(0, reg_code, 4))
+        g.emit_byte(sib(0, 4, 4))
+      } else if addr_reg == "rbp" {
+        g = g.emit_byte(modrm(1, reg_code, 5))
+        g.emit_byte(0x00)
+      } else {
+        g.emit_byte(modrm(0, reg_code, rm_code))
+      }
+    }
     Lea(Reg64(dest), RipRel32(label)) => {
       let reg_code = match dest {
         "rax" => 0
@@ -1075,6 +1125,41 @@ fn is_float_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
 }
 
 ///|
+fn is_int_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
+  match expr {
+    Int(_) => true
+    Bool(_) => true
+    Char(_) => true
+    Unary("-", e) => is_int_expr(e, var_is_float)
+    Unary("!", e) => is_int_expr(e, var_is_float)
+    Binary(op, left, right) => {
+      let is_cmp = op == "==" ||
+        op == "!=" ||
+        op == "<" ||
+        op == ">" ||
+        op == "<=" ||
+        op == ">="
+      let is_arith = op == "+" ||
+        op == "-" ||
+        op == "*" ||
+        op == "/" ||
+        op == "%"
+      let is_bit = op == "&" ||
+        op == "|" ||
+        op == "^" ||
+        op == "<<" ||
+        op == ">>"
+      (is_cmp || is_arith || is_bit) &&
+      !is_float_expr(left, var_is_float) &&
+      !is_float_expr(right, var_is_float)
+    }
+    Ident(name) =>
+      var_is_float.get(name) == Some(false) || var_is_float.get(name) == None
+    _ => false
+  }
+}
+
+///|
 fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
   match expr {
     Int(n) => {
@@ -1353,11 +1438,17 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               }
               _ => {
                 let is_float = is_float_expr(arg, g.var_is_float)
+                let is_int = is_int_expr(arg, g.var_is_float)
                 if is_float {
                   let (g2, label) = g.add_string("<float>")
                   g = g2
                   g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
                   g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                } else if is_int {
+                  let (g2, label) = g.add_string("<int>")
+                  g = g2
+                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
                 } else {
                   let (g2, label) = g.add_string("<value>")
                   g = g2

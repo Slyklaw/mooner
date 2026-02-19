@@ -294,13 +294,13 @@ This document outlines features that need to be implemented to make Mooner a com
 **Location**: `type_checker.mbt:113-125`, `codegen.mbt:760-830`
 
 **Current Status**:
-- ✅ `println` - IMPLEMENTED (string, int, float, char)
-- ✅ `print` - IMPLEMENTED (string, int, float, char)
+- ✅ `println` - IMPLEMENTED (string, int literal, float literal, char literal)
+- ✅ `print` - IMPLEMENTED (string, int literal, float literal, char literal)
 - ✅ `input` - IMPLEMENTED (reads line from stdin, returns pointer)
-- ⚠️ `char_to_int` - IMPLEMENTED (identity operation)
-- ⚠️ `int_to_char` - IMPLEMENTED (identity operation)
-- ⚠️ `int_to_string` - not implemented (runtime conversion needed)
-- ⚠️ `float_to_string` - not implemented (runtime conversion needed)
+- ✅ `char_to_int` - IMPLEMENTED (identity operation)
+- ✅ `int_to_char` - IMPLEMENTED (identity operation)
+- ⚠️ `int_to_string` - NOT IMPLEMENTED (runtime variables print as `<int>`)
+- ⚠️ `float_to_string` - NOT IMPLEMENTED (runtime variables print as `<float>`)
 - ⚠️ `string_to_int` - not implemented
 - ⚠️ `string_to_float` - not implemented
 
@@ -513,7 +513,7 @@ This document outlines features that need to be implemented to make Mooner a com
 
 ### Known Limitations:
 - Return inside while/for loops doesn't clean up stack properly
-- Float runtime printing shows `<float>` (no float-to-string conversion at runtime)
+- Runtime integer/float values print as `<int>`/`<float>` (no runtime int-to-string conversion)
 - No user-defined types
 - Limited stdlib functions
 - Parser only supports one top-level function (use nested functions for multiple functions)
