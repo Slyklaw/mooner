@@ -78,19 +78,21 @@ This document outlines features that need to be implemented to make Mooner a com
 
 ## Phase 2: Language Features
 
-### 2.1 While Loop Code Generation
+### 2.1 While Loop Code Generation ✅ COMPLETED (basic)
 
-**Location**: `codegen.mbt` (missing implementation)
-
-**Issue**: While loops are parsed but not compiled to code.
+**Location**: `codegen.mbt:1019-1035`
 
 **Implementation**:
-- Generate loop header label
-- Evaluate condition
-- Emit conditional jump to loop exit
-- Generate loop body code
-- Emit unconditional jump back to loop header
-- Define exit label
+- ✅ Generate loop header label
+- ✅ Evaluate condition
+- ✅ Emit conditional jump to loop exit
+- ✅ Generate loop body code
+- ✅ Emit unconditional jump back to loop header
+- ✅ Define exit label
+
+**Known Limitations**:
+- Break/continue not implemented
+- Return inside while loops doesn't clean up stack properly
 
 ### 2.2 For Loop Code Generation
 
@@ -187,16 +189,15 @@ This document outlines features that need to be implemented to make Mooner a com
 
 ## Phase 3: Operators & Expressions
 
-### 3.1 Division and Modulo Operators
+### 3.1 Division and Modulo Operators ✅ COMPLETED
 
-**Location**: `codegen.mbt:632-688`
-
-**Issue**: Division and modulo (`/`, `%`) operators are not implemented in code generation.
+**Location**: `codegen.mbt:819-845`
 
 **Implementation**:
-- Implement `idiv` instruction for signed division
-- Save/restore rdx before division (idiv uses rdx:rax)
-- Handle remainder for modulo operation
+- ✅ Implement `idiv` instruction for signed division
+- ✅ Sign-extend rax to rdx:rax using `cqo`
+- ✅ Handle remainder for modulo operation (stored in rdx)
+- ✅ Fixed Idiv instruction encoding (modrm reg=7 for idiv extension)
 
 ### 3.2 Bitwise Operators
 
@@ -446,12 +447,12 @@ This document outlines features that need to be implemented to make Mooner a com
 | P0 | Fix RIP-relative addressing | Low | ✅ COMPLETED |
 | P0 | Variable storage (LetBind) | Medium | ✅ COMPLETED |
 | P0 | Function call arguments (builtins) | Medium | ✅ COMPLETED |
-| P0 | User-defined function calls | Medium | ⚠️ NOT STARTED |
+| P0 | User-defined function calls | Medium | ✅ COMPLETED |
 | P0 | Support `fn main` entry point | Medium | ✅ COMPLETED |
-| P1 | While loop codegen | Medium | ⚠️ NOT STARTED |
+| P1 | While loop codegen | Medium | ✅ COMPLETED (basic) |
 | P1 | For loop codegen | Medium | ⚠️ NOT STARTED |
-| P1 | Return statement | Low | ⚠️ PARTIAL (works in main, not for user-defined functions) |
-| P1 | Division/Modulo | Low | ⚠️ NOT STARTED |
+| P1 | Return statement | Low | ✅ COMPLETED |
+| P1 | Division/Modulo | Low | ✅ COMPLETED |
 | P1 | Break/Continue | Medium | ⚠️ NOT STARTED |
 | P2 | Match expression | High | ⚠️ NOT STARTED |
 | P2 | Array operations | High | ⚠️ NOT STARTED |
@@ -492,23 +493,26 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ `fn main { expr }` - basic entry point
 - ✅ Integer literals (`42`, `-5`, etc.)
 - ✅ Boolean literals (`true`, `false`)
-- ✅ Basic arithmetic (`+`, `-`, `*`, `==`, `!=`, `<`, `>`, `<=`, `>=`)
+- ✅ Basic arithmetic (`+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`)
 - ✅ Unary operators (`-`, `!`)
 - ✅ Variables via `let x = value` - properly stores on stack with rbp-relative addressing
 - ✅ `print("string")` / `print(int)` - prints to stdout
 - ✅ `println("string")` / `println(int)` - prints with newline
 - ✅ If expressions with else
 - ✅ Blocks
-- ✅ Basic function definitions (prologue/epilogue only, no cross-function calls)
-- ⚠️ Return statements - work in main, not for user-defined functions
+- ✅ Nested function definitions with parameters
+- ✅ User-defined function calls with up to 6 parameters
+- ✅ Return statements
+- ✅ While loops (basic - no break/continue yet)
 
 ### Known Limitations:
-- User-defined function calls not implemented (only println/print work)
-- Division/modulo not implemented (returns 0)
-- While/for loops not implemented
+- Return inside while loops doesn't clean up stack properly
+- For loops not implemented
+- Break/continue not implemented
 - Arrays/tuples not implemented
 - Float operations not implemented
 - No user-defined types
 - Limited stdlib functions
+- Parser only supports one top-level function (use nested functions for multiple functions)
 
 The compiler currently generates basic but functional code for simple expressions. Focus on making the core MoonBit features work correctly (fn main, println, basic operators). Consider adding a `-v`/`--verbose` flag to see generated code for debugging. Consider adding an `-O` flag for optimizations in the future. The goal is MoonBit language compatibility, not custom extensions.

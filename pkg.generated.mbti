@@ -212,6 +212,7 @@ pub enum X86Inst {
   Xor(X86Operand, X86Operand)
   Not(X86Operand)
   Neg(X86Operand)
+  Cqo
   Shl(X86Operand, X86Operand)
   Shr(X86Operand, X86Operand)
   Sar(X86Operand, X86Operand)
@@ -256,6 +257,7 @@ pub enum X86Operand {
   Stack8(Int)
   Stack32(Int)
   Stack64(Int)
+  StackBP64(Int)
   RipRel32(String)
   Label(String)
 }

@@ -439,9 +439,29 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Idiv(Reg64(src)) => {
+      let src_code = match src {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        "r8" => 0
+        "r9" => 1
+        "r10" => 2
+        "r11" => 3
+        "r12" => 4
+        "r13" => 5
+        "r14" => 6
+        "r15" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0xF7)
-      let g = g.emit_modrm_reg64("rax", Reg64(src))
+      // mod=11, reg=7 (idiv extension), rm=src_code
+      let g = g.emit_byte(modrm(3, 7, src_code))
       g
     }
     Cmp(Reg64(dest), Reg64(src)) => {
@@ -548,68 +568,107 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = g.emit_modrm_reg64("rcx", Reg64(dest))
       g
     }
-    Jmp(_label) => {
+    Jmp(label) => {
       let g = self.emit_byte(0xE9)
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
-    Je(_label) => {
+    Je(label) => {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x84)
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
-    Jne(_label) => {
+    Jne(label) => {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x85)
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
-    Jg(_label) => {
+    Jg(label) => {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x8F)
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
-    Jge(_label) => {
+    Jge(label) => {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x8D)
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
-    Jl(_label) => {
+    Jl(label) => {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x8C)
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
-    Jle(_label) => {
+    Jle(label) => {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x8E)
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
-    Ja(_label) => {
+    Ja(label) => {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x87)
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
-    Jae(_label) => {
+    Jae(label) => {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x83)
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
-    Jb(_label) => {
+    Jb(label) => {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x82)
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
-    Jbe(_label) => {
+    Jbe(label) => {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x86)
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
-    Jz(_label) => {
+    Jz(label) => {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x84)
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
-    Jnz(_label) => {
+    Jnz(label) => {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x85)
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     Setz(_dest) => {
@@ -672,8 +731,11 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = g.emit_byte(modrm(3, 0, 0))
       g
     }
-    Call(_label) => {
+    Call(label) => {
       let g = self.emit_byte(0xE8)
+      let pos = g.code.length()
+      let new_pending = g.pending_labels + [(label, pos)]
+      let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     _ => self
@@ -775,13 +837,31 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           g
         }
         "/" => {
-          // Division stub - return 0 for now
-          let g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+          // idiv divides rdx:rax by operand, quotient in rax, remainder in rdx
+          // rcx = dividend, rax = divisor
+          // Save divisor to rbx
+          let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+          // Move dividend to rax
+          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+          // Sign-extend rax to rdx:rax
+          let g = g.emit_inst(Cqo)
+          // Divide: rax = rdx:rax / rbx
+          let g = g.emit_inst(Idiv(Reg64("rbx")))
           g
         }
         "%" => {
-          // Modulo stub - return 0 for now  
-          let g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+          // idiv divides rdx:rax by operand, quotient in rax, remainder in rdx
+          // rcx = dividend, rax = divisor
+          // Save divisor to rbx
+          let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+          // Move dividend to rax
+          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+          // Sign-extend rax to rdx:rax
+          let g = g.emit_inst(Cqo)
+          // Divide: rdx = rdx:rax % rbx
+          let g = g.emit_inst(Idiv(Reg64("rbx")))
+          // Move remainder to rax
+          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rdx")))
           g
         }
         _ => self
@@ -851,7 +931,37 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
           g
         }
-        _ => self
+        _ => {
+          // User-defined function call
+          // System V AMD64 ABI: rdi, rsi, rdx, rcx, r8, r9 for first 6 args
+          let arg_regs = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
+          let mut g = self
+          // Evaluate args and push to stack (in reverse for stack args)
+          // First pass: evaluate all args, store results on stack
+          let num_args = args.length()
+          let mut i = num_args - 1
+          while i >= 0 {
+            g = g.codegen_expr(args[i])
+            g = g.emit_inst(Push(Reg64("rax")))
+            i = i - 1
+          }
+          // Pop args into registers (first 6) and leave rest on stack
+          let mut j = 0
+          while j < num_args {
+            if j < 6 {
+              g = g.emit_inst(Pop(Reg64(arg_regs[j])))
+            }
+            j = j + 1
+          }
+          // Call the function
+          g = g.emit_inst(Call(func_name))
+          // Clean up stack args if any (args beyond 6)
+          if num_args > 6 {
+            let cleanup = (num_args - 6) * 8
+            g = g.emit_inst(Add(Reg64("rsp"), Imm32(cleanup)))
+          }
+          g
+        }
       }
     }
     IfExpr(cond, then, else_opt) => {
@@ -882,50 +992,148 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     LetBind(name, _annot, value, body) => {
       // Evaluate value
       let g = self.codegen_expr(value)
-      // Allocate stack slot using rbp-relative addressing
-      // Save rbx first since we're using it as temp
-      let g2 = g.emit_inst(Push(Reg64("rbx")))
-      // Move value to rbx, then store using rbp-relative
-      let g3 = g2.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
-      // Use fixed offset based on number of variables (-16, -24, -32, ...)
-      let offset = -16 - g3.var_offsets.length() * 8
-      let g4 = g3.emit_inst(Mov(StackBP64(offset), Reg64("rbx")))
-      // Update var_offsets
-      let g5 = {
-        let new_offsets = g4.var_offsets
+      // Push value onto stack
+      let g2 = g.emit_inst(Push(Reg64("rax")))
+      // After push, value is at rbp + next_offset
+      let offset = g2.next_offset
+      // Update var_offsets and decrement next_offset for next variable
+      let g3 = {
+        let new_offsets = g2.var_offsets
         new_offsets[name] = offset
-        { ..g4, var_offsets: new_offsets }
+        { ..g2, var_offsets: new_offsets, next_offset: offset - 8 }
       }
       // Generate body with the new variable in scope
-      let g6 = g5.codegen_expr(body)
-      // Restore rbx
-      g6.emit_inst(Pop(Reg64("rbx")))
+      g3.codegen_expr(body)
     }
     Func(name, _params, _ret, body) =>
       if name == "main" {
-        let g = self.codegen_expr(body)
-        g
+        self.codegen_expr(body)
       } else {
-        let mut g = self
-        g = g.emit_inst(Jmp(".main_end"))
-        g = g.define_label("\{name}")
-        g = g.emit_inst(Push(Reg64("rbp")))
-        g = g.emit_inst(Mov(Reg64("rbp"), Reg64("rsp")))
-        g = g.codegen_expr(body)
-        g = g.emit_inst(Pop(Reg64("rbp")))
-        g = g.emit_inst(Ret)
-        g
+        // Non-main functions are emitted later by codegen(), skip here
+        self
       }
     ReturnExpr(e) => {
       let g = self.codegen_expr(e)
       g.emit_inst(Ret)
+    }
+    WhileLoop(cond, body) => {
+      let (g_start, start_label) = self.new_label()
+      let (g_end, end_label) = g_start.new_label()
+      // Define start label
+      let mut g = g_start.define_label(start_label)
+      // Evaluate condition
+      g = g.codegen_expr(cond)
+      // If condition is 0 (false), jump to end
+      g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
+      g = g.emit_inst(Je(end_label))
+      // Evaluate body
+      g = g.codegen_expr(body)
+      // Jump back to start
+      g = g.emit_inst(Jmp(start_label))
+      // Define end label
+      g.define_label(end_label)
     }
     _ => self
   }
 }
 
 ///|
+fn CodeGen::codegen_func(
+  self : CodeGen,
+  name : String,
+  params : Array[(String, AST?)],
+  body : AST,
+) -> CodeGen {
+  let arg_regs = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
+  let mut g = self
+  g = g.define_label("\{name}")
+  g = g.emit_inst(Push(Reg64("rbp")))
+  g = g.emit_inst(Mov(Reg64("rbp"), Reg64("rsp")))
+  // Reset var_offsets for this function
+  g = { ..g, var_offsets: Map::new(), next_offset: -8 }
+  // Save parameters to stack and add to var_offsets
+  // Push in forward order so first param is at rbp-8
+  let mut i = 0
+  while i < params.length() {
+    if i < 6 {
+      g = g.emit_inst(Push(Reg64(arg_regs[i])))
+    }
+    i = i + 1
+  }
+  // Record offsets: first param at rbp-8, second at rbp-16, etc.
+  let mut j = 0
+  while j < params.length() {
+    let (param_name, _) = params[j]
+    if j < 6 {
+      let offset = -8 - j * 8
+      let new_offsets = g.var_offsets
+      new_offsets[param_name] = offset
+      g = { ..g, var_offsets: new_offsets }
+    }
+    j = j + 1
+  }
+  g = { ..g, next_offset: -8 - params.length() * 8 }
+  g = g.codegen_expr(body)
+  // Restore stack frame: mov rsp, rbp; pop rbp; ret
+  g = g.emit_inst(Mov(Reg64("rsp"), Reg64("rbp")))
+  g = g.emit_inst(Pop(Reg64("rbp")))
+  g = g.emit_inst(Ret)
+  g
+}
+
+///|
+fn collect_funcs(
+  ast : AST,
+  funcs : Map[String, (Array[(String, AST?)], AST)],
+) -> Map[String, (Array[(String, AST?)], AST)] {
+  match ast {
+    Func(name, params, _ret, body) => {
+      if name != "main" {
+        funcs[name] = (params, body)
+      }
+      collect_funcs(body, funcs)
+    }
+    Block(stmts) => {
+      let mut f = funcs
+      for stmt in stmts {
+        f = collect_funcs(stmt, f)
+      }
+      f
+    }
+    LetBind(_, _, value, body) => {
+      let f = collect_funcs(value, funcs)
+      collect_funcs(body, f)
+    }
+    IfExpr(cond, then, else_opt) => {
+      let f = collect_funcs(cond, funcs)
+      let f = collect_funcs(then, f)
+      match else_opt {
+        Some(e) => collect_funcs(e, f)
+        None => f
+      }
+    }
+    Binary(_, left, right) => {
+      let f = collect_funcs(left, funcs)
+      collect_funcs(right, f)
+    }
+    Unary(_, e) => collect_funcs(e, funcs)
+    CallExpr(func, args) => {
+      let mut f = collect_funcs(func, funcs)
+      for arg in args {
+        f = collect_funcs(arg, f)
+      }
+      f
+    }
+    ReturnExpr(e) => collect_funcs(e, funcs)
+    _ => funcs
+  }
+}
+
+///|
 pub fn codegen(ast : AST) -> Bytes {
+  // Collect all functions
+  let all_funcs = collect_funcs(ast, Map::new())
+
   let mut g = CodeGen::new()
   g = { ..g, code: g.code + [0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90] }
   g = g.define_label("main")
@@ -933,11 +1141,19 @@ pub fn codegen(ast : AST) -> Bytes {
   g = g.emit_inst(Mov(Reg64("rbp"), Reg64("rsp")))
   g = g.codegen_expr(ast)
   g = g.define_label(".main_end")
+  // Use return value as exit code (move rax to rdi)
+  g = g.emit_inst(Mov(Reg64("rdi"), Reg64("rax")))
   g = g.emit_inst(Mov(Reg64("rax"), Imm32(60)))
-  g = g.emit_inst(Mov(Reg64("rdi"), Imm32(0)))
   g = g.emit_inst(Mov(Reg64("rsp"), Reg64("rbp")))
   g = g.emit_inst(Pop(Reg64("rbp")))
   g = g.emit_inst(Syscall)
+
+  // Emit all collected functions
+  for name in all_funcs.keys() {
+    let (params, body) = all_funcs[name]
+    g = g.codegen_func(name, params, body)
+  }
+
   let mut str_idx = 0
   while str_idx < g.strings.length() {
     let s = g.strings[str_idx]
