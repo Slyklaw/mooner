@@ -490,9 +490,18 @@ fn Parser::parse_postfix(self : Parser) -> (AST, Parser) {
       parser = p3
     } else if self_token_eq(parser.current(), Dot) {
       let p3 = parser.skip(1)
-      let (field, p4) = p3.parse_ident()
-      expr = FieldExpr(expr, field)
-      parser = p4
+      // Check for numeric field (tuple index) or identifier
+      match p3.current() {
+        Int(i) => {
+          expr = FieldExpr(expr, i.to_string())
+          parser = p3.advance()
+        }
+        _ => {
+          let (field, p4) = p3.parse_ident()
+          expr = FieldExpr(expr, field)
+          parser = p4
+        }
+      }
     } else if self_token_eq(parser.current(), LBracket) {
       let p3 = parser.skip(1)
       let (index, p4) = p3.parse_expr()

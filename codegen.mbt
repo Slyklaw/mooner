@@ -1217,6 +1217,62 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       let g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rbx")))
       g.emit_inst(Pop(Reg64("rbx")))
     }
+    Tuple(elems) => {
+      // Allocate tuple on stack by pushing elements
+      // Elements are pushed in reverse order so index 0 is at lowest address
+      // Result: rax = rbp-relative offset of first element
+      let num_elems = elems.length()
+      if num_elems == 0 {
+        // Empty tuple: return 0 offset
+        self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+      } else {
+        let tuple_size = num_elems * 8
+        let first_elem_offset = self.next_offset - tuple_size
+        let mut g = { ..self, next_offset: first_elem_offset }
+        // Push elements in reverse order (so index 0 ends up at lowest address)
+        let mut i = num_elems - 1
+        while i >= 0 {
+          g = g.codegen_expr(elems[i])
+          g = g.emit_inst(Push(Reg64("rax")))
+          i = i - 1
+        }
+        // After all pushes, rsp points to first element
+        // Return the rbp-relative offset of the first element
+        let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rsp")))
+        let g = g.emit_inst(Sub(Reg64("rax"), Reg64("rbp")))
+        g
+      }
+    }
+    FieldExpr(obj, field) => {
+      // Tuple field access: obj.field where field is a numeric string
+      // Elements are at increasing addresses from base: elem 0 at base, elem 1 at base+8, etc.
+      let idx = if field.length() > 0 {
+        let c = field[0]
+        if c >= '0' && c <= '9' {
+          c.to_int() - 48
+        } else {
+          0
+        }
+      } else {
+        0
+      }
+      // Evaluate the tuple expression (gives rbp-relative offset of element 0)
+      let g = self.codegen_expr(obj)
+      // Save the offset
+      let g = g.emit_inst(Push(Reg64("rax")))
+      // Compute index * 8
+      let g = g.emit_inst(Mov(Reg64("rax"), Imm32(idx * 8)))
+      // Pop tuple offset into rcx
+      let g = g.emit_inst(Pop(Reg64("rcx")))
+      // Add: rcx = base_offset + index*8
+      let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+      // Compute absolute address and load
+      let g = g.emit_inst(Push(Reg64("rbx")))
+      let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rbp")))
+      let g = g.emit_inst(Add(Reg64("rbx"), Reg64("rcx")))
+      let g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rbx")))
+      g.emit_inst(Pop(Reg64("rbx")))
+    }
     LetBind(name, _annot, value, body) => {
       // Evaluate value
       let g = self.codegen_expr(value)

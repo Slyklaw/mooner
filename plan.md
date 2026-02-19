@@ -156,19 +156,14 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Added MemIndirect operand for register-indirect addressing
 - ✅ Fixed IMUL instruction encoding
 
-### 2.7 Tuple Operations
+### 2.7 Tuple Operations ✅ COMPLETED
 
-**Location**: `codegen.mbt` (missing implementation)
-
-**Issue**: Tuples are parsed but not compiled.
+**Location**: `codegen.mbt:1220-1245`, `codegen.mbt:1246-1276`, `parser.mbt:491-504`
 
 **Implementation**:
-- Tuple literal code generation:
-  - Allocate space for tuple
-  - Store each element at correct offset
-- Tuple field access:
-  - Calculate field offset
-  - Load from tuple pointer + offset
+- ✅ Tuple literal code generation using stack allocation
+- ✅ Tuple field access (e.g., `t.0`, `t.1`)
+- ✅ Updated parser to accept numeric field names after `.`
 
 ### 2.8 Field Expression (Struct/Record Access)
 
@@ -452,7 +447,7 @@ This document outlines features that need to be implemented to make Mooner a com
 | P2 | Match expression | High | ✅ COMPLETED |
 | P2 | Array operations | High | ✅ COMPLETED |
 | P2 | Variable assignment | Low | ✅ COMPLETED |
-| P2 | Tuple operations | Medium | ⚠️ NOT STARTED |
+| P2 | Tuple operations | Medium | ✅ COMPLETED |
 | P2 | Float support | Medium | ⚠️ NOT STARTED |
 | P2 | Complete stdlib functions | Medium | ⚠️ PARTIAL |
 | P3 | User-defined types | High | ⚠️ NOT STARTED |
@@ -505,16 +500,16 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ For loops (with break/continue)
 - ✅ Bitwise operators (`&`, `|`, `^`, `<<`, `>>`)
 - ✅ Match expressions with Int/Bool/wildcard patterns
-- ✅ Array literals and indexing
-- ✅ Array element assignment
+- ✅ Array literals, indexing, and element assignment
+- ✅ Tuple literals and field access (`t.0`, `t.1`)
 
 ### Known Limitations:
 - Return inside while/for loops doesn't clean up stack properly
-- Tuple operations not implemented
 - Float operations not implemented
 - No user-defined types
 - Limited stdlib functions
 - Parser only supports one top-level function (use nested functions for multiple functions)
 - Match patterns limited to Int, Bool, and wildcard (no tuples or guards)
+- Exit codes limited to 8-bit (0-255) due to Linux syscall convention
 
 The compiler currently generates basic but functional code for simple expressions. Focus on making the core MoonBit features work correctly (fn main, println, basic operators). Consider adding a `-v`/`--verbose` flag to see generated code for debugging. Consider adding an `-O` flag for optimizations in the future. The goal is MoonBit language compatibility, not custom extensions.
