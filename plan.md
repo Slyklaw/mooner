@@ -125,16 +125,15 @@ This document outlines features that need to be implemented to make Mooner a com
   - Boolean values
   - Tuple patterns
 
-### 2.4 Break/Continue Statement Support
+### 2.4 Break/Continue Statement Support ✅ COMPLETED
 
-**Location**: `codegen.mbt` (missing implementation)
-
-**Issue**: Break and continue statements in loops are not implemented.
+**Location**: `codegen.mbt:1159-1177`, `codegen.mbt:77-88`
 
 **Implementation**:
-- Track loop labels (start and end)
-- Emit proper jump instructions
-- Handle nested loops correctly (use a label stack)
+- ✅ Track loop labels (start and end) using loop_labels stack
+- ✅ Emit proper jump instructions
+- ✅ Handle nested loops correctly (use a label stack)
+- ✅ Break jumps to loop end, Continue jumps to condition/step check
 
 ### 2.5 Return Statement Implementation
 
@@ -202,16 +201,15 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Handle remainder for modulo operation (stored in rdx)
 - ✅ Fixed Idiv instruction encoding (modrm reg=7 for idiv extension)
 
-### 3.2 Bitwise Operators
+### 3.2 Bitwise Operators ✅ COMPLETED
 
-**Location**: `codegen.mbt:632-688`
-
-**Issue**: Bitwise operators (`|`, `&`, `^`, `<<`, `>>`) are not implemented.
+**Location**: `codegen.mbt:867-905`, `codegen.mbt:570-610`
 
 **Implementation**:
-- Implement `and`, `or`, `xor` instructions
-- Implement shift operations (shl, shr, sar)
-- Handle right shift as arithmetic vs logical
+- ✅ Implement `and`, `or`, `xor` instructions
+- ✅ Implement shift operations (shl, sar for variable count in cl)
+- ✅ Right shift uses arithmetic shift (sar) for signed semantics
+- ✅ Added variable shift encodings (D3 /4, /5, /7 with cl register)
 
 ### 3.3 Compound Assignment Operators
 
@@ -456,14 +454,14 @@ This document outlines features that need to be implemented to make Mooner a com
 | P1 | For loop codegen | Medium | ✅ COMPLETED (basic) |
 | P1 | Return statement | Low | ✅ COMPLETED |
 | P1 | Division/Modulo | Low | ✅ COMPLETED |
-| P1 | Break/Continue | Medium | ⚠️ NOT STARTED |
+| P1 | Break/Continue | Medium | ✅ COMPLETED |
 | P2 | Match expression | High | ⚠️ NOT STARTED |
 | P2 | Array operations | High | ⚠️ NOT STARTED |
 | P2 | Tuple operations | Medium | ⚠️ NOT STARTED |
 | P2 | Float support | Medium | ⚠️ NOT STARTED |
 | P2 | Complete stdlib functions | Medium | ⚠️ PARTIAL |
 | P3 | User-defined types | High | ⚠️ NOT STARTED |
-| P3 | Bitwise operators | Low | ⚠️ NOT STARTED |
+| P3 | Bitwise operators | Low | ✅ COMPLETED |
 | P3 | String operations | Medium | ⚠️ PARTIAL |
 | P4 | Parser error recovery | Medium | ⚠️ NOT STARTED |
 | P4 | Optimizations | High | ⚠️ NOT STARTED |
@@ -497,6 +495,7 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Integer literals (`42`, `-5`, etc.)
 - ✅ Boolean literals (`true`, `false`)
 - ✅ Basic arithmetic (`+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`)
+- ✅ Bitwise operators (`&`, `|`, `^`, `<<`, `>>`)
 - ✅ Unary operators (`-`, `!`)
 - ✅ Variables via `let x = value` - properly stores on stack with rbp-relative addressing
 - ✅ `print("string")` / `print(int)` - prints to stdout
@@ -506,11 +505,13 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Nested function definitions with parameters
 - ✅ User-defined function calls with up to 6 parameters
 - ✅ Return statements
-- ✅ While loops (basic - no break/continue yet)
-- ✅ For loops (basic - init/cond/step, no break/continue yet)
+- ✅ While loops (with break/continue)
+- ✅ For loops (with break/continue)
+- ✅ Bitwise operators (`&`, `|`, `^`, `<<`, `>>`)
 
 ### Known Limitations:
 - Return inside while/for loops doesn't clean up stack properly
+- Variable assignment (`x = value`) not implemented (only let bindings work)
 - Break/continue not implemented
 - Arrays/tuples not implemented
 - Float operations not implemented

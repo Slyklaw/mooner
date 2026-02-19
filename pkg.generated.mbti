@@ -53,6 +53,7 @@ pub struct CodeGen {
   func_bodies : Map[String, AST]
   strings : Array[String]
   string_counter : Int
+  loop_labels : Array[(String, String)]
 }
 
 pub struct Lexer {

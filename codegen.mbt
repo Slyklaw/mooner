@@ -85,6 +85,8 @@ pub struct CodeGen {
   func_bodies : Map[String, AST]
   strings : Array[String]
   string_counter : Int
+  // Stack of (break_label, continue_label) for nested loops
+  loop_labels : Array[(String, String)]
 }
 
 ///|
@@ -100,6 +102,7 @@ fn CodeGen::new() -> CodeGen {
     func_bodies: Map::new(),
     strings: [],
     string_counter: 0,
+    loop_labels: [],
   }
 }
 
@@ -568,6 +571,58 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = g.emit_modrm_reg64("rcx", Reg64(dest))
       g
     }
+    // Variable shift by cl register
+    Shl(Reg64(dest), Reg64("cl")) => {
+      // shl r64, cl = REX.W + D3 /4
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      let g = self.emit_byte(0x48)
+      let g = g.emit_byte(0xD3)
+      g.emit_byte(modrm(3, 4, rm_code))
+    }
+    Shr(Reg64(dest), Reg64("cl")) => {
+      // shr r64, cl = REX.W + D3 /5
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      let g = self.emit_byte(0x48)
+      let g = g.emit_byte(0xD3)
+      g.emit_byte(modrm(3, 5, rm_code))
+    }
+    Sar(Reg64(dest), Reg64("cl")) => {
+      // sar r64, cl = REX.W + D3 /7
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      let g = self.emit_byte(0x48)
+      let g = g.emit_byte(0xD3)
+      g.emit_byte(modrm(3, 7, rm_code))
+    }
     Jmp(label) => {
       let g = self.emit_byte(0xE9)
       let pos = g.code.length()
@@ -864,6 +919,45 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rdx")))
           g
         }
+        "&" => {
+          // Bitwise AND: rcx & rax
+          let g = g.emit_inst(And(Reg64("rcx"), Reg64("rax")))
+          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+          g
+        }
+        "|" => {
+          // Bitwise OR: rcx | rax
+          let g = g.emit_inst(Or(Reg64("rcx"), Reg64("rax")))
+          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+          g
+        }
+        "^" => {
+          // Bitwise XOR: rcx ^ rax
+          let g = g.emit_inst(Xor(Reg64("rcx"), Reg64("rax")))
+          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+          g
+        }
+        "<<" => {
+          // Left shift: rcx << rax (left << right)
+          // rcx = value, rax = shift count
+          // Need shift count in cl, value in the register to shift
+          // Save shift count
+          let g = g.emit_inst(Push(Reg64("rax")))
+          // Move value to rax
+          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+          // Pop shift count to rcx (lower 8 bits = cl)
+          let g = g.emit_inst(Pop(Reg64("rcx")))
+          // Shift rax by cl
+          g.emit_inst(Shl(Reg64("rax"), Reg64("cl")))
+        }
+        ">>" => {
+          // Arithmetic right shift: rcx >> rax (signed)
+          // rcx = value, rax = shift count
+          let g = g.emit_inst(Push(Reg64("rax")))
+          let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+          let g = g.emit_inst(Pop(Reg64("rcx")))
+          g.emit_inst(Sar(Reg64("rax"), Reg64("cl")))
+        }
         _ => self
       }
     }
@@ -1020,6 +1114,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       let start_label = ".Lwhile_start\{self.label_counter}"
       let end_label = ".Lwhile_end\{self.label_counter + 1}"
       let mut g = { ..self, label_counter: self.label_counter + 2 }
+      // Push loop labels for break/continue
+      // For while: continue goes to start (re-check condition)
+      g = { ..g, loop_labels: g.loop_labels + [(end_label, start_label)] }
       // Define start label
       g = g.define_label(start_label)
       // Evaluate condition
@@ -1032,12 +1129,20 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       // Jump back to start
       g = g.emit_inst(Jmp(start_label))
       // Define end label
-      g.define_label(end_label)
+      g = g.define_label(end_label)
+      // Pop loop labels
+      let new_labels = g.loop_labels
+      ignore(new_labels.pop())
+      { ..g, loop_labels: new_labels }
     }
     ForLoop(init, cond, step, body) => {
-      let cond_label = ".Lfor_cond\{self.label_counter}"
-      let end_label = ".Lfor_end\{self.label_counter + 1}"
-      let mut g = { ..self, label_counter: self.label_counter + 2 }
+      let step_label = ".Lfor_step\{self.label_counter}"
+      let cond_label = ".Lfor_cond\{self.label_counter + 1}"
+      let end_label = ".Lfor_end\{self.label_counter + 2}"
+      let mut g = { ..self, label_counter: self.label_counter + 3 }
+      // Push loop labels for break/continue
+      // For for: continue goes to step label
+      g = { ..g, loop_labels: g.loop_labels + [(end_label, step_label)] }
       // Execute init
       match init {
         Some(i) => g = g.codegen_expr(i)
@@ -1056,6 +1161,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       }
       // Evaluate body
       g = g.codegen_expr(body)
+      // Define step label
+      g = g.define_label(step_label)
       // Execute step
       match step {
         Some(s) => g = g.codegen_expr(s)
@@ -1064,8 +1171,28 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       // Jump back to condition
       g = g.emit_inst(Jmp(cond_label))
       // Define end label
-      g.define_label(end_label)
+      g = g.define_label(end_label)
+      // Pop loop labels
+      let new_labels = g.loop_labels
+      ignore(new_labels.pop())
+      { ..g, loop_labels: new_labels }
     }
+    Break =>
+      // Jump to break label of innermost loop
+      if self.loop_labels.length() > 0 {
+        let (break_label, _) = self.loop_labels[self.loop_labels.length() - 1]
+        self.emit_inst(Jmp(break_label))
+      } else {
+        self
+      }
+    Continue =>
+      // Jump to continue label of innermost loop
+      if self.loop_labels.length() > 0 {
+        let (_, continue_label) = self.loop_labels[self.loop_labels.length() - 1]
+        self.emit_inst(Jmp(continue_label))
+      } else {
+        self
+      }
     _ => self
   }
 }
