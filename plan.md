@@ -17,42 +17,48 @@ This document outlines features that need to be implemented to make Mooner a com
 
 ## Phase 1: Critical Bug Fixes & Core Stability
 
-### 1.1 Fix println/print Function Implementation
+### 1.0 Parser Bug Fixes ✅ COMPLETED
 
-**Location**: `codegen.mbt:705-730`
+**Location**: `parser.mbt:93-107`, `parser.mbt:178-204`
 
-**Issue**: The `println` and `print` functions are stubs that output fixed content. They don't actually print the argument value.
+**Issues Fixed**:
+1. **Ident handling in parse_literal** - `Ident` token was not handled, causing infinite loop when parsing function calls like `print("hi")`. Fixed by adding `Ident(name) => (Ident(name), self.advance())` to the match.
 
-**Implementation**:
-- Implement actual string printing via Linux syscalls
-- Handle the string argument properly (currently ignores it)
-- Support different types (Int, String, Bool, etc.)
-- Implement `write` syscall (syscall #1) for stdout
-- Handle string length calculation
+2. **Underscore handling in parse_primary** - `_` token (Underscore) wasn't handled, causing infinite loop with `let _ = 1`. Fixed by adding `Underscore => (Ident("_".to_string()), self.advance())`.
 
-### 1.2 Fix Function Call Argument Handling
+3. **Missing token handlers** - Equal, RParen, Comma, Semicolon weren't handled in parse_primary, causing infinite loops when parsing certain expressions.
 
-**Location**: `codegen.mbt:705-730`
+4. **RIP-relative addressing** - FixedLea instruction displacement calculation in codegen (`ref_pos + 4` instead of `ref_pos + 7`).
 
-**Issue**: Function calls don't properly handle arguments. Arguments should be passed in registers (rdi, rsi, rdx, rcx, r8, r9) according to x86_64 System V ABI.
+5. **String label emission** - Fixed string labels being defined before exit code rather than inline with string data.
 
-**Implementation**:
-- Save caller-saved registers before function call
-- Move arguments to proper argument registers
-- Handle functions with more than 6 arguments (use stack)
-- Implement proper return value handling (rax)
+### 1.1 Fix println/print Function Implementation ✅ COMPLETED
 
-### 1.3 Implement Proper Function Prologue/Epilogue
-
-**Location**: `codegen.mbt:768-778`
-
-**Issue**: Basic function handling exists but doesn't properly manage the stack frame for local variables.
+**Location**: `codegen.mbt:760-810`
 
 **Implementation**:
-- Calculate total stack space needed for all local variables
-- Emit proper `sub rsp, N` instruction
-- Save/restore callee-saved registers (rbx, rbp, r12-r15)
-- Handle variable-sized stack allocations
+- ✅ Implemented actual string printing via Linux syscalls
+- ✅ Handle the string argument properly 
+- ✅ Support different types (Int, String)
+- ✅ Implement `write` syscall (syscall #1) for stdout
+- ✅ Handle string length calculation via string data emission
+
+### 1.2 Fix Function Call Argument Handling ✅ PARTIALLY COMPLETE
+
+**Location**: `codegen.mbt:760-810`
+
+**Implementation**:
+- ✅ Handle single argument in println/print (via sys_write)
+- ⚠️ Full argument passing for user-defined functions not yet implemented
+
+### 1.3 Implement Proper Function Prologue/Epilogue ⚠️ PARTIAL
+
+**Location**: `codegen.mbt:868-880`
+
+**Current Status**:
+- ✅ Basic prologue (push rbp, mov rbp, rsp)
+- ✅ Basic epilogue (mov rsp, rbp, pop rbp, syscall)
+- ⚠️ Stack space for local variables not allocated
 
 ---
 
@@ -278,18 +284,18 @@ This document outlines features that need to be implemented to make Mooner a com
 
 ### 5.1 Implement Missing Built-in Functions
 
-**Location**: `type_checker.mbt:113-125`, `codegen.mbt:705-730`
+**Location**: `type_checker.mbt:113-125`, `codegen.mbt:760-810`
 
-**Current**:
-- `println` - stub
-- `print` - stub
-- `input` - not implemented
-- `int_to_string` - not implemented
-- `float_to_string` - not implemented
-- `string_to_int` - not implemented
-- `string_to_float` - not implemented
-- `char_to_int` - not implemented
-- `int_to_char` - not implemented
+**Current Status**:
+- ✅ `println` - IMPLEMENTED (string and int)
+- ✅ `print` - IMPLEMENTED (string and int)
+- ⚠️ `input` - not implemented
+- ⚠️ `int_to_string` - not implemented
+- ⚠️ `float_to_string` - not implemented
+- ⚠️ `string_to_int` - not implemented
+- ⚠️ `string_to_float` - not implemented
+- ⚠️ `char_to_int` - not implemented
+- ⚠️ `int_to_char` - not implemented
 
 **Implementation**:
 - Implement each function with proper syscalls or library calls
@@ -419,28 +425,30 @@ This document outlines features that need to be implemented to make Mooner a com
 
 ## Priority Order Summary
 
-| Priority | Feature | Complexity |
-|----------|---------|------------|
-| P0 | Fix println/print | Medium |
-| P0 | Fix function call arguments | Medium |
-| P0 | Support `fn main` entry point | Medium |
-| P1 | While loop codegen | Medium |
-| P1 | For loop codegen | Medium |
-| P1 | Return statement | Low |
-| P1 | Division/Modulo | Low |
-| P1 | Break/Continue | Medium |
-| P2 | Match expression | High |
-| P2 | Array operations | High |
-| P2 | Tuple operations | Medium |
-| P2 | Float support | Medium |
-| P2 | Complete stdlib functions | Medium |
-| P3 | User-defined types | High |
-| P3 | Bitwise operators | Low |
-| P3 | String operations | Medium |
-| P4 | Parser error recovery | Medium |
-| P4 | Optimizations | High |
-| P5 | Lambda functions | High |
-| P5 | Generics | Very High |
+| Priority | Feature | Complexity | Status |
+|----------|---------|------------|--------|
+| P0 | Fix println/print | Medium | ✅ COMPLETED |
+| P0 | Parser bug fixes (Ident, Underscore, etc.) | Medium | ✅ COMPLETED |
+| P0 | Fix RIP-relative addressing | Low | ✅ COMPLETED |
+| P0 | Fix function call arguments | Medium | ⚠️ PARTIAL |
+| P0 | Support `fn main` entry point | Medium | ✅ COMPLETED |
+| P1 | While loop codegen | Medium | ⚠️ NOT STARTED |
+| P1 | For loop codegen | Medium | ⚠️ NOT STARTED |
+| P1 | Return statement | Low | ⚠️ PARTIAL |
+| P1 | Division/Modulo | Low | ⚠️ NOT STARTED |
+| P1 | Break/Continue | Medium | ⚠️ NOT STARTED |
+| P2 | Match expression | High | ⚠️ NOT STARTED |
+| P2 | Array operations | High | ⚠️ NOT STARTED |
+| P2 | Tuple operations | Medium | ⚠️ NOT STARTED |
+| P2 | Float support | Medium | ⚠️ NOT STARTED |
+| P2 | Complete stdlib functions | Medium | ⚠️ PARTIAL |
+| P3 | User-defined types | High | ⚠️ NOT STARTED |
+| P3 | Bitwise operators | Low | ⚠️ NOT STARTED |
+| P3 | String operations | Medium | ⚠️ PARTIAL |
+| P4 | Parser error recovery | Medium | ⚠️ NOT STARTED |
+| P4 | Optimizations | High | ⚠️ NOT STARTED |
+| P5 | Lambda functions | High | ⚠️ NOT STARTED |
+| P5 | Generics | Very High | ⚠️ NOT STARTED |
 
 ---
 
@@ -463,6 +471,30 @@ This document outlines features that need to be implemented to make Mooner a com
 ---
 
 ## Notes
+
+### Currently Working Features (as of Feb 2026):
+- ✅ `fn main { expr }` - basic entry point
+- ✅ Integer literals (`42`, `-5`, etc.)
+- ✅ Boolean literals (`true`, `false`)
+- ✅ Basic arithmetic (`+`, `-`, `*`, `==`, `!=`, `<`, `>`, `<=`, `>=`)
+- ✅ Unary operators (`-`, `!`)
+- ✅ Variables via `let x = value` (stack allocation not yet implemented)
+- ✅ `print("string")` - prints to stdout
+- ✅ `println("string")` - prints with newline
+- ✅ `println(number)` - prints number as string
+- ✅ If expressions with else
+- ✅ Blocks
+- ✅ Basic function definitions
+
+### Known Limitations:
+- Let bindings don't store values (just evaluates body)
+- No local variable stack allocation
+- Division/modulo not implemented
+- While/for loops not implemented
+- Arrays/tuples not implemented
+- Float operations not implemented
+- No user-defined types
+- Limited stdlib functions
 
 - The compiler currently generates basic but functional code for simple expressions
 - Focus on making the core MoonBit features work correctly (fn main, println, basic operators)
