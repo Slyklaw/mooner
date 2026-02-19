@@ -62,7 +62,8 @@ pub fn compile_file(
   let mut phdr_filesz_arr : Array[Byte] = []
   let mut i = 0
   while i < 8 {
-    phdr_filesz_arr = phdr_filesz_arr + [((padded_code_len >> (i * 8)) & 0xFF).to_byte()]
+    phdr_filesz_arr = phdr_filesz_arr +
+      [((padded_code_len >> (i * 8)) & 0xFF).to_byte()]
     i = i + 1
   }
 
@@ -70,21 +71,22 @@ pub fn compile_file(
   let mut phdr_memsz_arr : Array[Byte] = []
   i = 0
   while i < 8 {
-    phdr_memsz_arr = phdr_memsz_arr + [((padded_code_len >> (i * 8)) & 0xFF).to_byte()]
+    phdr_memsz_arr = phdr_memsz_arr +
+      [((padded_code_len >> (i * 8)) & 0xFF).to_byte()]
     i = i + 1
   }
 
   // Create phdr_bytes - simpler approach: directly create the bytes
   let mut phdr_all : Array[Byte] = []
-  
+
   // p_filesz (8 bytes) - at offset 0x60 in file
   // Value will be padded_code_len
   // For now, create placeholder 0x1000 bytes
   phdr_all = phdr_all + [0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-  
+
   // p_memsz (8 bytes) - same as filesz
   phdr_all = phdr_all + [0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-  
+
   // p_align (8 bytes) = 0x1000
   phdr_all = phdr_all + [0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 

@@ -646,7 +646,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
 }
 
 ///|
-fn CodeGen::add_string(self : CodeGen, s : String) -> (CodeGen, String) {
+fn CodeGen::_add_string(self : CodeGen, s : String) -> (CodeGen, String) {
   let label = ".Lstr\{self.string_counter}"
   let g = {
     ..self,
@@ -799,12 +799,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       }
       g
     }
-    LetBind(name, _annot, value, body) => {
+    LetBind(_name, _annot, _value, body) => {
       // Evaluate value and body
       let g = self.codegen_expr(body)
       g
     }
-    Func(name, _params, _ret, body) => {
+    Func(name, _params, _ret, body) =>
       if name == "main" {
         let g = self.codegen_expr(body)
         g
@@ -819,7 +819,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         g = g.emit_inst(Ret)
         g
       }
-    }
     ReturnExpr(e) => {
       let g = self.codegen_expr(e)
       g.emit_inst(Ret)
