@@ -463,9 +463,58 @@ fn TypeChecker::check_expr(
           )
       }
     }
-    FieldExpr(expr, _field) => {
-      let (c2, _ty) = self.check_expr(expr)
-      (c2, TUnknown)
+    FieldExpr(expr, field) => {
+      let (c2, ty) = self.check_expr(expr)
+      match ty {
+        TTuple(elem_types) => {
+          let idx = if field.length() > 0 {
+            let c = field[0]
+            if c >= '0' && c <= '9' {
+              c.to_int() - 48
+            } else {
+              0
+            }
+          } else {
+            0
+          }
+          if idx >= 0 && idx < elem_types.length() {
+            (c2, elem_types[idx])
+          } else {
+            (
+              c2.add_error(
+                TypeError::new("Tuple index out of bounds: \{field}"),
+              ),
+              TUnknown,
+            )
+          }
+        }
+        TStruct(_name, field_types) => {
+          let mut found_ty : Type? = None
+          let mut i = 0
+          while i < field_types.length() {
+            let (fname, fty) = field_types[i]
+            if fname == field {
+              found_ty = Some(fty)
+            }
+            i = i + 1
+          }
+          match found_ty {
+            Some(fty) => (c2, fty)
+            None =>
+              (
+                c2.add_error(TypeError::new("Unknown field: \{field}")),
+                TUnknown,
+              )
+          }
+        }
+        _ =>
+          (
+            c2.add_error(
+              TypeError::new("Cannot access field on non-struct/tuple type"),
+            ),
+            TUnknown,
+          )
+      }
     }
     Tuple(elems) => {
       let mut checker = self

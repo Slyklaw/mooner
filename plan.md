@@ -165,16 +165,17 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Tuple field access (e.g., `t.0`, `t.1`)
 - ✅ Updated parser to accept numeric field names after `.`
 
-### 2.8 Field Expression (Struct/Record Access)
+### 2.8 Field Expression (Struct/Record Access) ✅ COMPLETED
 
-**Location**: `codegen.mbt` (missing implementation)
-
-**Issue**: Field expressions like `obj.field` are not implemented.
+**Location**: `codegen.mbt:2346-2401`, `type_checker.mbt:466-502`
 
 **Implementation**:
-- Generate code to evaluate the object expression
-- Calculate field offset based on field name and struct layout
-- Load/store the field value
+- ✅ Generate code to evaluate the object expression
+- ✅ Calculate field offset based on field name and struct layout
+- ✅ Load/store the field value
+- ✅ Type checker properly types FieldExpr for tuples and structs
+
+**Syntax Note**: Struct literals require `::` before the brace, e.g., `Point::{ x: 10, y: 20 }`
 
 ---
 
