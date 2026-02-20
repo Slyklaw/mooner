@@ -733,6 +733,42 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g = g.emit_byte(0xB6)
       g.emit_byte(modrm(3, dest_code, src_code))
     }
+    Movzx(Reg64(dest), MemIndirect(addr_reg)) => {
+      let dest_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      let rm_code = match addr_reg {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      let g = self.emit_byte(0x48)
+      let g = g.emit_byte(0x0F)
+      let g = g.emit_byte(0xB6)
+      if addr_reg == "rsp" {
+        let g = g.emit_byte(modrm(0, dest_code, 4))
+        g.emit_byte(sib(0, 4, 4))
+      } else if addr_reg == "rbp" {
+        let g = g.emit_byte(modrm(1, dest_code, 5))
+        g.emit_byte(0x00)
+      } else {
+        g.emit_byte(modrm(0, dest_code, rm_code))
+      }
+    }
     Lea(Reg64(dest), RipRel32(label)) => {
       let reg_code = match dest {
         "rax" => 0
@@ -768,29 +804,26 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Add(Reg64(dest), Imm32(v)) => {
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
       if dest == "rsp" {
         let g = g.emit_byte(modrm(3, 0, 4))
         let g = g.emit_byte(sib(0, 4, 4))
-        let b0 = (v.reinterpret_as_uint() & 0xFF).to_byte()
-        let b1 = ((v.reinterpret_as_uint() >> 8) & 0xFF).to_byte()
-        let b2 = ((v.reinterpret_as_uint() >> 16) & 0xFF).to_byte()
-        let b3 = ((v.reinterpret_as_uint() >> 24) & 0xFF).to_byte()
-        let g = g.emit_byte(b0)
-        let g = g.emit_byte(b1)
-        let g = g.emit_byte(b2)
-        g.emit_byte(b3)
+        g.emit32(v)
       } else {
-        let g = g.emit_modrm_reg64(dest, Reg64(dest))
-        let b0 = (v.reinterpret_as_uint() & 0xFF).to_byte()
-        let b1 = ((v.reinterpret_as_uint() >> 8) & 0xFF).to_byte()
-        let b2 = ((v.reinterpret_as_uint() >> 16) & 0xFF).to_byte()
-        let b3 = ((v.reinterpret_as_uint() >> 24) & 0xFF).to_byte()
-        let g = g.emit_byte(b0)
-        let g = g.emit_byte(b1)
-        let g = g.emit_byte(b2)
-        g.emit_byte(b3)
+        let g = g.emit_byte(modrm(3, 0, rm_code))
+        g.emit32(v)
       }
     }
     Sub(Reg64(dest), Reg64(src)) => {
@@ -800,40 +833,26 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Sub(Reg64(dest), Imm32(v)) => {
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
       if dest == "rsp" {
         let g = g.emit_byte(modrm(3, 5, 4))
         let g = g.emit_byte(sib(0, 4, 4))
-        let b0 = (v.reinterpret_as_uint() & 0xFF).to_byte()
-        let b1 = ((v.reinterpret_as_uint() >> 8) & 0xFF).to_byte()
-        let b2 = ((v.reinterpret_as_uint() >> 16) & 0xFF).to_byte()
-        let b3 = ((v.reinterpret_as_uint() >> 24) & 0xFF).to_byte()
-        let g = g.emit_byte(b0)
-        let g = g.emit_byte(b1)
-        let g = g.emit_byte(b2)
-        g.emit_byte(b3)
+        g.emit32(v)
       } else {
-        let rm_code = match dest {
-          "rax" => 0
-          "rcx" => 1
-          "rdx" => 2
-          "rbx" => 3
-          "rsp" => 4
-          "rbp" => 5
-          "rsi" => 6
-          "rdi" => 7
-          _ => 0
-        }
         let g = g.emit_byte(modrm(3, 5, rm_code))
-        let b0 = (v.reinterpret_as_uint() & 0xFF).to_byte()
-        let b1 = ((v.reinterpret_as_uint() >> 8) & 0xFF).to_byte()
-        let b2 = ((v.reinterpret_as_uint() >> 16) & 0xFF).to_byte()
-        let b3 = ((v.reinterpret_as_uint() >> 24) & 0xFF).to_byte()
-        let g = g.emit_byte(b0)
-        let g = g.emit_byte(b1)
-        let g = g.emit_byte(b2)
-        g.emit_byte(b3)
+        g.emit32(v)
       }
     }
     Imul(Reg64(dest), Reg64(src)) => {
@@ -877,9 +896,20 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Cmp(Reg64(dest), Imm32(v)) => {
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
-      let g = g.emit_modrm_reg64(dest, Reg64(dest))
+      let g = g.emit_byte(modrm(3, 7, rm_code))
       g.emit32(v)
     }
     Test(Reg64(dest), Reg64(src)) => {
@@ -895,9 +925,20 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     And(Reg64(dest), Imm32(v)) => {
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
-      let g = g.emit_modrm_reg64(dest, Reg64(dest))
+      let g = g.emit_byte(modrm(3, 4, rm_code))
       g.emit32(v)
     }
     Or(Reg64(dest), Reg64(src)) => {
@@ -907,9 +948,20 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Or(Reg64(dest), Imm32(v)) => {
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
-      let g = g.emit_modrm_reg64(dest, Reg64(dest))
+      let g = g.emit_byte(modrm(3, 1, rm_code))
       g.emit32(v)
     }
     Xor(Reg64(dest), Reg64(src)) => {
@@ -919,9 +971,20 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Xor(Reg64(dest), Imm32(v)) => {
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
-      let g = g.emit_modrm_reg64(dest, Reg64(dest))
+      let g = g.emit_byte(modrm(3, 6, rm_code))
       g.emit32(v)
     }
     Not(Reg64(dest)) => {
@@ -1870,6 +1933,36 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             g = g.define_label(skip_zero_end)
             g = g.emit_inst(Mov(Reg64("rax"), Reg64("rdi")))
             g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+            g = g.emit_inst(Pop(Reg64("rcx")))
+            g = g.emit_inst(Pop(Reg64("rbx")))
+            g
+          } else {
+            self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+          }
+        "string_to_int" =>
+          if args.length() == 1 {
+            let mut g = self
+            g = g.codegen_expr(args[0])
+            let (g2, loop_label) = g.new_label()
+            let (g3, done_label) = g2.new_label()
+            g = g3
+            g = g.emit_inst(Push(Reg64("rbx")))
+            g = g.emit_inst(Push(Reg64("rcx")))
+            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+            g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+            g = g.emit_inst(Mov(Reg64("rcx"), Imm32(10)))
+            g = g.define_label(loop_label)
+            g = g.emit_inst(Movzx(Reg64("rdx"), MemIndirect("rbx")))
+            g = g.emit_inst(Cmp(Reg64("rdx"), Imm32(48)))
+            g = g.emit_inst(Jb(done_label))
+            g = g.emit_inst(Cmp(Reg64("rdx"), Imm32(57)))
+            g = g.emit_inst(Ja(done_label))
+            g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
+            g = g.emit_inst(Sub(Reg64("rdx"), Imm32(48)))
+            g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
+            g = g.emit_inst(Inc(Reg64("rbx")))
+            g = g.emit_inst(Jmp(loop_label))
+            g = g.define_label(done_label)
             g = g.emit_inst(Pop(Reg64("rcx")))
             g = g.emit_inst(Pop(Reg64("rbx")))
             g

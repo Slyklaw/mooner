@@ -307,8 +307,8 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ `char_to_int` - IMPLEMENTED (identity operation)
 - ✅ `int_to_char` - IMPLEMENTED (identity operation)
 - ✅ `int_to_string` - IMPLEMENTED (runtime integer to string conversion)
+- ✅ `string_to_int` - IMPLEMENTED (runtime string to integer conversion)
 - ⚠️ `float_to_string` - NOT IMPLEMENTED (runtime variables print as `<float>`)
-- ⚠️ `string_to_int` - not implemented
 - ⚠️ `string_to_float` - not implemented
 
 **Implementation**:
@@ -458,7 +458,7 @@ This document outlines features that need to be implemented to make Mooner a com
 | P2 | Variable assignment | Low | ✅ COMPLETED |
 | P2 | Tuple operations | Medium | ✅ COMPLETED |
 | P2 | Float support | Medium | ✅ COMPLETED (arithmetic, comparison) |
-| P2 | Complete stdlib functions | Medium | ⚠️ PARTIAL (input, char_to_int, int_to_char, int_to_string) |
+| P2 | Complete stdlib functions | Medium | ⚠️ PARTIAL (input, char_to_int, int_to_char, int_to_string, string_to_int) |
 | P3 | User-defined types | High | ✅ COMPLETED |
 | P3 | Bitwise operators | Low | ✅ COMPLETED |
 | P3 | Compound assignment operators | Low | ✅ COMPLETED |
@@ -509,6 +509,7 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ `print("string")` / `print(int)` / `print(float)` - prints to stdout
 - ✅ `println("string")` / `println(int)` / `println(float)` - prints with newline
 - ✅ `int_to_string(n)` - converts integer to string at runtime
+- ✅ `string_to_int(s)` - converts string to integer at runtime
 - ✅ If expressions with else
 - ✅ Blocks
 - ✅ Nested function definitions with parameters
