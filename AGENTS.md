@@ -49,3 +49,47 @@ You can browse and install extra skills here:
   behavior. For solid, well-defined results (e.g. scientific computations),
   prefer assertion tests. You can use `moon coverage analyze > uncovered.log` to
   see which parts of your code are not covered by tests.
+
+## Building and Running
+
+This project is a compiler that compiles a simple language to x86_64 ELF
+executables.
+
+### Build the project
+
+```bash
+moon build
+```
+
+### Run the compiler
+
+```bash
+moon run cmd/main <input_file> [output_file]
+```
+
+- `input_file`: Source file to compile
+- `output_file`: Output executable path (optional, default: `<input_name>.exe`)
+
+Example:
+```bash
+moon run cmd/main examples/simple.mbt
+chmod +x examples/simple.exe
+./examples/simple.exe
+```
+
+The output file is created in the same directory as the source file with `.exe` extension. Execute permission must be set manually with `chmod +x`.
+
+### Run tests
+
+```bash
+moon test
+```
+
+## Project Components
+
+- `lexer.mbt` - Tokenizer
+- `parser.mbt` - Parser
+- `type_checker.mbt` - Type checking
+- `codegen.mbt` - x86_64 code generation
+- `compiler.mbt` - Main compilation pipeline
+- `cmd/main/main.mbt` - CLI entry point

@@ -1,8 +1,0 @@
-Create a self-hosted Moonbit Compiler.
- - The compiler will be written in Moonbit.
- - You may import the 'moonbitlang/x' experimental package.
- - The new compiler will compile programs written in Moonbit.
- - The new compiler will directly output runnable ELF binaries for x86_64 Linux.
- - Do not rely on external dependences such as gcc, asm, ld, etc, to create the ELF binary.
- - The name of the program to be compiled should be passed on the commandline and not hard-coded.
- - The programs to be compiled will be limited to a single .mbt file. The entry point will be the 'main' function.
