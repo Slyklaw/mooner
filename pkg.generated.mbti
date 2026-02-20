@@ -222,6 +222,8 @@ pub enum X86Inst {
   Xor(X86Operand, X86Operand)
   Not(X86Operand)
   Neg(X86Operand)
+  Inc(X86Operand)
+  Dec(X86Operand)
   Cqo
   Shl(X86Operand, X86Operand)
   Shr(X86Operand, X86Operand)

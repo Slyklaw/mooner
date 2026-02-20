@@ -23,6 +23,8 @@ pub enum X86Inst {
   Xor(X86Operand, X86Operand)
   Not(X86Operand)
   Neg(X86Operand)
+  Inc(X86Operand)
+  Dec(X86Operand)
   Cqo
   Shl(X86Operand, X86Operand)
   Shr(X86Operand, X86Operand)
@@ -299,14 +301,14 @@ fn CodeGen::emit_modrm_reg64(
     Reg64("rbp") => self.emit_byte(modrm(3, reg_code, 5))
     Reg64("rsi") => self.emit_byte(modrm(3, reg_code, 6))
     Reg64("rdi") => self.emit_byte(modrm(3, reg_code, 7))
-    Reg64("r8") => self.emit_bytes([0x44, modrm(3, reg_code, 0)])
-    Reg64("r9") => self.emit_bytes([0x44, modrm(3, reg_code, 1)])
-    Reg64("r10") => self.emit_bytes([0x44, modrm(3, reg_code, 2)])
-    Reg64("r11") => self.emit_bytes([0x44, modrm(3, reg_code, 3)])
-    Reg64("r12") => self.emit_bytes([0x44, modrm(3, reg_code, 4)])
-    Reg64("r13") => self.emit_bytes([0x44, modrm(3, reg_code, 5)])
-    Reg64("r14") => self.emit_bytes([0x44, modrm(3, reg_code, 6)])
-    Reg64("r15") => self.emit_bytes([0x44, modrm(3, reg_code, 7)])
+    Reg64("r8") => self.emit_byte(modrm(3, reg_code, 0))
+    Reg64("r9") => self.emit_byte(modrm(3, reg_code, 1))
+    Reg64("r10") => self.emit_byte(modrm(3, reg_code, 2))
+    Reg64("r11") => self.emit_byte(modrm(3, reg_code, 3))
+    Reg64("r12") => self.emit_byte(modrm(3, reg_code, 4))
+    Reg64("r13") => self.emit_byte(modrm(3, reg_code, 5))
+    Reg64("r14") => self.emit_byte(modrm(3, reg_code, 6))
+    Reg64("r15") => self.emit_byte(modrm(3, reg_code, 7))
     Stack64(offset) => {
       let g = self.emit_byte(modrm(2, reg_code, 4))
       let g = g.emit_byte(sib(0, 4, 4))
@@ -379,19 +381,92 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     Pop(Reg64("r13")) => self.emit_bytes([0x41, 0x5D])
     Pop(Reg64("r14")) => self.emit_bytes([0x41, 0x5E])
     Pop(Reg64("r15")) => self.emit_bytes([0x41, 0x5F])
-    Mov(Reg64(dest), Imm32(v)) => {
-      let g = self.emit_operand64(Reg64(dest))
-      g.emit32(v)
-    }
+    Mov(Reg64(dest), Imm32(v)) =>
+      match dest {
+        "r8" | "r9" | "r10" | "r11" | "r12" | "r13" | "r14" | "r15" => {
+          let reg_code = match dest {
+            "r8" => 0
+            "r9" => 1
+            "r10" => 2
+            "r11" => 3
+            "r12" => 4
+            "r13" => 5
+            "r14" => 6
+            "r15" => 7
+            _ => 0
+          }
+          let g = self.emit_byte(0x49)
+          let g = g.emit_byte(0xC7)
+          let g = g.emit_byte(modrm(3, 0, reg_code))
+          g.emit32(v)
+        }
+        _ => {
+          let g = self.emit_operand64(Reg64(dest))
+          g.emit32(v)
+        }
+      }
     Mov(Reg64(dest), Imm64(v)) => {
       let g = self.emit_operand64(Reg64(dest))
       g.emit64(v)
     }
     Mov(Reg64(dest), Reg64(src)) => {
-      let g = self.emit_byte(0x48)
+      let src_code = match src {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        "r8" => 0
+        "r9" => 1
+        "r10" => 2
+        "r11" => 3
+        "r12" => 4
+        "r13" => 5
+        "r14" => 6
+        "r15" => 7
+        _ => 0
+      }
+      let dest_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        "r8" => 0
+        "r9" => 1
+        "r10" => 2
+        "r11" => 3
+        "r12" => 4
+        "r13" => 5
+        "r14" => 6
+        "r15" => 7
+        _ => 0
+      }
+      let src_ext = src == "r8" ||
+        src == "r9" ||
+        src == "r10" ||
+        src == "r11" ||
+        src == "r12" ||
+        src == "r13" ||
+        src == "r14" ||
+        src == "r15"
+      let dest_ext = dest == "r8" ||
+        dest == "r9" ||
+        dest == "r10" ||
+        dest == "r11" ||
+        dest == "r12" ||
+        dest == "r13" ||
+        dest == "r14" ||
+        dest == "r15"
+      let g = self._emit_rex(true, src_ext, false, dest_ext)
       let g = g.emit_byte(0x89)
-      let g = g.emit_modrm_reg64(src, Reg64(dest))
-      g
+      g.emit_byte(modrm(3, src_code, dest_code))
     }
     Mov(Reg64(dest), Stack64(offset)) => {
       let g = self.emit_byte(0x48)
@@ -503,6 +578,8 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
         "cl" => 1
         "dl" => 2
         "bl" => 3
+        "sil" => 6
+        "dil" => 7
         "r8b" => 0
         "r9b" => 1
         "r10b" => 2
@@ -531,10 +608,12 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
         src == "r12b" ||
         src == "r13b" ||
         src == "r14b" ||
-        src == "r15b"
+        src == "r15b" ||
+        src == "sil" ||
+        src == "dil"
       let mut g = self
       if needs_rex {
-        g = g.emit_byte(0x41)
+        g = g.emit_byte(0x40)
       }
       g = g.emit_byte(0x88)
       if addr_reg == "rsp" {
@@ -546,6 +625,78 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       } else {
         g.emit_byte(modrm(0, reg_code, rm_code))
       }
+    }
+    Mov(MemIndirect(addr_reg), Imm8(v)) => {
+      let rm_code = match addr_reg {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      let mut g = self.emit_byte(0xC6)
+      if addr_reg == "rsp" {
+        g = g.emit_byte(modrm(0, 0, 4))
+        g = g.emit_byte(sib(0, 4, 4))
+      } else if addr_reg == "rbp" {
+        g = g.emit_byte(modrm(1, 0, 5))
+        g = g.emit_byte(0x00)
+      } else {
+        g = g.emit_byte(modrm(0, 0, rm_code))
+      }
+      g.emit_byte(v.to_byte())
+    }
+    Mov(Reg8(dest), Reg8(src)) => {
+      let src_code = match src {
+        "al" => 0
+        "cl" => 1
+        "dl" => 2
+        "bl" => 3
+        "sil" => 6
+        "dil" => 7
+        _ => 0
+      }
+      let dest_code = match dest {
+        "al" => 0
+        "cl" => 1
+        "dl" => 2
+        "bl" => 3
+        "sil" => 6
+        "dil" => 7
+        _ => 0
+      }
+      let needs_rex = src == "sil" ||
+        src == "dil" ||
+        dest == "sil" ||
+        dest == "dil"
+      let mut g = self
+      if needs_rex {
+        g = g.emit_byte(0x40)
+      }
+      g = g.emit_byte(0x88)
+      g.emit_byte(modrm(3, src_code, dest_code))
+    }
+    Mov(Reg8(dest), Imm8(v)) => {
+      let dest_code = match dest {
+        "al" => 0
+        "cl" => 1
+        "dl" => 2
+        "bl" => 3
+        "sil" => 6
+        "dil" => 7
+        _ => 0
+      }
+      let needs_rex = dest == "sil" || dest == "dil"
+      let mut g = self
+      if needs_rex {
+        g = g.emit_byte(0x40)
+      }
+      g = g.emit_byte((0xB0 + dest_code).to_byte())
+      g.emit_byte(v.to_byte())
     }
     Lea(Reg64(dest), RipRel32(label)) => {
       let reg_code = match dest {
@@ -728,6 +879,56 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = g.emit_modrm_reg64("rax", Reg64(dest))
       g
     }
+    Inc(Reg64(dest)) =>
+      match dest {
+        "r8" | "r9" | "r10" | "r11" | "r12" | "r13" | "r14" | "r15" => {
+          let rm_code = match dest {
+            "r8" => 0
+            "r9" => 1
+            "r10" => 2
+            "r11" => 3
+            "r12" => 4
+            "r13" => 5
+            "r14" => 6
+            "r15" => 7
+            _ => 0
+          }
+          let g = self.emit_byte(0x49)
+          let g = g.emit_byte(0xFF)
+          g.emit_byte(modrm(3, 0, rm_code))
+        }
+        _ => {
+          let g = self.emit_byte(0x48)
+          let g = g.emit_byte(0xFF)
+          let g = g.emit_modrm_reg64("rax", Reg64(dest))
+          g
+        }
+      }
+    Dec(Reg64(dest)) =>
+      match dest {
+        "r8" | "r9" | "r10" | "r11" | "r12" | "r13" | "r14" | "r15" => {
+          let rm_code = match dest {
+            "r8" => 0
+            "r9" => 1
+            "r10" => 2
+            "r11" => 3
+            "r12" => 4
+            "r13" => 5
+            "r14" => 6
+            "r15" => 7
+            _ => 0
+          }
+          let g = self.emit_byte(0x49)
+          let g = g.emit_byte(0xFF)
+          g.emit_byte(modrm(3, 1, rm_code))
+        }
+        _ => {
+          let g = self.emit_byte(0x48)
+          let g = g.emit_byte(0xFF)
+          let g = g.emit_modrm_reg64("rcx", Reg64(dest))
+          g
+        }
+      }
     Cqo => {
       // cqo - sign-extend rax into rdx:rax
       // REX.W = 01001000 = 0x48
@@ -1438,6 +1639,30 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
                 g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
               }
+              CallExpr(Ident(fname), inner_args) =>
+                if fname == "int_to_string" {
+                  g = g.codegen_expr(arg)
+                  g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                } else {
+                  let is_float = is_float_expr(arg, g.var_is_float)
+                  let is_int = is_int_expr(arg, g.var_is_float)
+                  if is_float {
+                    let (g2, label) = g.add_string("<float>")
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                  } else if is_int {
+                    let (g2, label) = g.add_string("<int>")
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
+                  } else {
+                    let (g2, label) = g.add_string("<value>")
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                  }
+                }
               _ => {
                 let is_float = is_float_expr(arg, g.var_is_float)
                 let is_int = is_int_expr(arg, g.var_is_float)
@@ -1499,6 +1724,55 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           g = g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
           g
         }
+        "int_to_string" =>
+          if args.length() == 1 {
+            let mut g = self
+            g = g.codegen_expr(args[0])
+            let buf_label = ".Lint_buf"
+            let (g2, digit_loop) = g.new_label()
+            let (g3, done_label) = g2.new_label()
+            let (g4, skip_zero) = g3.new_label()
+            let (g5, skip_zero_end) = g4.new_label()
+            g = g5
+            g = g.emit_inst(Push(Reg64("rbx")))
+            g = g.emit_inst(Push(Reg64("rcx")))
+            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+            g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+            g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+            g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+            g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+            g = g.emit_inst(Je(done_label))
+            g = g.define_label(digit_loop)
+            g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+            g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+            g = g.emit_inst(Idiv(Reg64("rsi")))
+            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+            g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+            g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+            g = g.emit_inst(Dec(Reg64("rdi")))
+            g = g.emit_inst(Inc(Reg64("rcx")))
+            g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+            g = g.emit_inst(Jne(digit_loop))
+            g = g.define_label(done_label)
+            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+            g = g.emit_inst(Jne(skip_zero))
+            g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
+            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+            g = g.emit_inst(Inc(Reg64("rcx")))
+            g = g.emit_inst(Jmp(skip_zero_end))
+            g = g.define_label(skip_zero)
+            g = g.emit_inst(Inc(Reg64("rdi")))
+            g = g.define_label(skip_zero_end)
+            g = g.emit_inst(Mov(Reg64("rax"), Reg64("rdi")))
+            g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+            g = g.emit_inst(Pop(Reg64("rcx")))
+            g = g.emit_inst(Pop(Reg64("rbx")))
+            g
+          } else {
+            self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+          }
         _ => {
           // User-defined function call
           // System V AMD64 ABI: rdi, rsi, rdx, rcx, r8, r9 for first 6 args
@@ -2226,6 +2500,12 @@ pub fn codegen(ast : AST) -> Bytes {
   g = g.define_label(".Linput_buf")
   let mut buf_idx = 0
   while buf_idx < 256 {
+    g = g.emit_byte(0x00)
+    buf_idx = buf_idx + 1
+  }
+  g = g.define_label(".Lint_buf")
+  buf_idx = 0
+  while buf_idx < 32 {
     g = g.emit_byte(0x00)
     buf_idx = buf_idx + 1
   }

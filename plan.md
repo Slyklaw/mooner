@@ -303,7 +303,7 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ `input` - IMPLEMENTED (reads line from stdin, returns pointer)
 - ✅ `char_to_int` - IMPLEMENTED (identity operation)
 - ✅ `int_to_char` - IMPLEMENTED (identity operation)
-- ⚠️ `int_to_string` - NOT IMPLEMENTED (runtime variables print as `<int>`)
+- ✅ `int_to_string` - IMPLEMENTED (runtime integer to string conversion)
 - ⚠️ `float_to_string` - NOT IMPLEMENTED (runtime variables print as `<float>`)
 - ⚠️ `string_to_int` - not implemented
 - ⚠️ `string_to_float` - not implemented
@@ -455,7 +455,7 @@ This document outlines features that need to be implemented to make Mooner a com
 | P2 | Variable assignment | Low | ✅ COMPLETED |
 | P2 | Tuple operations | Medium | ✅ COMPLETED |
 | P2 | Float support | Medium | ✅ COMPLETED (arithmetic, comparison) |
-| P2 | Complete stdlib functions | Medium | ⚠️ PARTIAL (input, char_to_int, int_to_char) |
+| P2 | Complete stdlib functions | Medium | ⚠️ PARTIAL (input, char_to_int, int_to_char, int_to_string) |
 | P3 | User-defined types | High | ⚠️ PARTIAL |
 | P3 | Bitwise operators | Low | ✅ COMPLETED |
 | P3 | Compound assignment operators | Low | ✅ COMPLETED |
@@ -505,6 +505,7 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Compound assignment (`+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=`)
 - ✅ `print("string")` / `print(int)` / `print(float)` - prints to stdout
 - ✅ `println("string")` / `println(int)` / `println(float)` - prints with newline
+- ✅ `int_to_string(n)` - converts integer to string at runtime
 - ✅ If expressions with else
 - ✅ Blocks
 - ✅ Nested function definitions with parameters
@@ -519,7 +520,7 @@ This document outlines features that need to be implemented to make Mooner a com
 
 ### Known Limitations:
 - Return inside while/for loops doesn't clean up stack properly
-- Runtime integer/float values print as `<int>`/`<float>` (no runtime int-to-string conversion)
+- Runtime float values print as `<float>` (no runtime float-to-string conversion)
 - No user-defined types
 - Limited stdlib functions
 - Parser only supports one top-level function (use nested functions for multiple functions)
