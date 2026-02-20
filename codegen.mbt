@@ -1451,6 +1451,7 @@ fn is_float_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
     Binary(_, left, right) =>
       is_float_expr(left, var_is_float) || is_float_expr(right, var_is_float)
     Unary(_, e) => is_float_expr(e, var_is_float)
+    CallExpr(Ident(fname), _) => fname == "string_to_float"
     _ => false
   }
 }
@@ -1822,9 +1823,18 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 if fname == "int_to_string" {
                   g = g.codegen_expr(arg)
                   g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
-                } else if fname == "float_to_string" ||
-                  fname == "string_concat" ||
-                  fname == "input" {
+                } else if fname == "float_to_string" || fname == "string_concat" {
+                  g = g.codegen_expr(arg)
+                  g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                  g = g.emit_inst(Mov(Reg64("r10"), Reg64("rdx")))
+                  g = g.emit_inst(Mov(Reg64("rdx"), Reg64("r10")))
+                } else if fname == "string_to_float" {
+                  g = g.codegen_expr(arg)
+                  let (g2, label) = g.add_string("<float>")
+                  g = g2
+                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                } else if fname == "input" {
                   g = g.codegen_expr(arg)
                   g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
                 } else {
@@ -1922,6 +1932,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
           g = g.emit_inst(Mov(Reg64("rdx"), Imm32(255)))
           g = g.emit_inst(Syscall)
+          g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rax")))
           g = g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
           g
         }
@@ -2003,6 +2014,83 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             g
           } else {
             self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+          }
+        "float_to_string" =>
+          if args.length() == 1 {
+            let mut g = self
+            g = g.codegen_expr(args[0])
+            let buf_label = ".Lflt_buf"
+            g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+            g = g.emit_inst(Cvtsd2si(Reg64("rax"), Xmm("xmm0")))
+            g = g.emit_inst(Add(Reg64("rax"), Imm32(48)))
+            g = g.emit_inst(Mov(Reg8("al"), Reg8("al")))
+            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("al")))
+            g = g.emit_inst(Lea(Reg64("rax"), RipRel32(buf_label)))
+            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+            g
+          } else {
+            self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+          }
+        "string_to_float" =>
+          if args.length() == 1 {
+            let mut g = self
+            g = g.codegen_expr(args[0])
+            g = g.emit_inst(Push(Reg64("rbx")))
+            g = g.emit_inst(Push(Reg64("rcx")))
+            g = g.emit_inst(Push(Reg64("rdi")))
+            g = g.emit_inst(Push(Reg64("r8")))
+            g = g.emit_inst(Push(Reg64("r9")))
+            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+            g = g.emit_inst(Mov(Reg64("r8"), Imm32(0)))
+            g = g.emit_inst(Cvtsi2sd(Xmm("xmm0"), Reg64("r8")))
+            let (g2, digit_loop) = g.new_label()
+            let (g3, found_dot) = g2.new_label()
+            let (g4, frac_loop) = g3.new_label()
+            let (g5, done) = g4.new_label()
+            g = g5
+            g = g.define_label(digit_loop)
+            g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("rbx")))
+            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(46)))
+            g = g.emit_inst(Je(found_dot))
+            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(48)))
+            g = g.emit_inst(Jb(done))
+            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(57)))
+            g = g.emit_inst(Ja(done))
+            g = g.emit_inst(Imul(Reg64("r8"), Imm32(10)))
+            g = g.emit_inst(Sub(Reg64("rcx"), Imm32(48)))
+            g = g.emit_inst(Add(Reg64("r8"), Reg64("rcx")))
+            g = g.emit_inst(Inc(Reg64("rbx")))
+            g = g.emit_inst(Jmp(digit_loop))
+            g = g.define_label(found_dot)
+            g = g.emit_inst(Inc(Reg64("rbx")))
+            g = g.emit_inst(Mov(Reg64("r9"), Imm32(0)))
+            g = g.define_label(frac_loop)
+            g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("rbx")))
+            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(48)))
+            g = g.emit_inst(Jb(done))
+            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(57)))
+            g = g.emit_inst(Ja(done))
+            g = g.emit_inst(Cvtsi2sd(Xmm("xmm1"), Reg64("r8")))
+            g = g.emit_inst(Mov(Reg64("r8"), Imm32(10)))
+            g = g.emit_inst(Cvtsi2sd(Xmm("xmm2"), Reg64("r8")))
+            g = g.emit_inst(Divsd(Xmm("xmm1"), Xmm("xmm2")))
+            g = g.emit_inst(Addsd(Xmm("xmm0"), Xmm("xmm1")))
+            g = g.emit_inst(Sub(Reg64("rcx"), Imm32(48)))
+            g = g.emit_inst(Cvtsi2sd(Xmm("xmm1"), Reg64("rcx")))
+            g = g.emit_inst(Divsd(Xmm("xmm1"), Xmm("xmm2")))
+            g = g.emit_inst(Addsd(Xmm("xmm0"), Xmm("xmm1")))
+            g = g.emit_inst(Inc(Reg64("rbx")))
+            g = g.emit_inst(Inc(Reg64("r9")))
+            g = g.emit_inst(Jmp(frac_loop))
+            g = g.define_label(done)
+            g = g.emit_inst(Pop(Reg64("r9")))
+            g = g.emit_inst(Pop(Reg64("r8")))
+            g = g.emit_inst(Pop(Reg64("rdi")))
+            g = g.emit_inst(Pop(Reg64("rcx")))
+            g = g.emit_inst(Pop(Reg64("rbx")))
+            g
+          } else {
+            self.emit_inst(Cvtsi2sd(Xmm("xmm0"), Imm32(0)))
           }
         "string_concat" =>
           if args.length() == 2 {
@@ -2251,28 +2339,21 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       }
     }
     IndexExpr(arr, idx) => {
-      // Array indexing: arr[idx]
-      // arr evaluates to an rbp-relative offset of first element (lowest address)
-      // Elements are at increasing addresses from there
+      let is_str = is_string_expr(arr, self.var_is_string)
       let g = self.codegen_expr(arr)
-      // Save the offset
       let g = g.emit_inst(Push(Reg64("rax")))
-      // Evaluate index
       let g = g.codegen_expr(idx)
-      // Index is in rax, multiply by 8 for byte offset
-      let g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
-      let g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
-      // rax = index * 8
-      // Pop array offset into rcx
+      let g = if is_str {
+        g
+      } else {
+        let g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
+        g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
+      }
       let g = g.emit_inst(Pop(Reg64("rcx")))
-      // Add offset: rcx = base_offset + index*8
       let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
-      // Now rcx contains the rbp-relative offset of the element
-      // Compute absolute address: rbx = rbp + rcx
       let g = g.emit_inst(Push(Reg64("rbx")))
       let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rbp")))
       let g = g.emit_inst(Add(Reg64("rbx"), Reg64("rcx")))
-      // Load from [rbx]
       let g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rbx")))
       g.emit_inst(Pop(Reg64("rbx")))
     }
