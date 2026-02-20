@@ -252,20 +252,19 @@ This document outlines features that need to be implemented to make Mooner a com
 
 ## Phase 4: Type System Enhancements
 
-### 4.1 User-Defined Types ⚠️ PARTIAL
+### 4.1 User-Defined Types ✅ COMPLETED
 
 **Location**: `type_checker.mbt`, `codegen.mbt`, `parser.mbt`
 
-**Implementation** (partial):
+**Implementation**:
 - ✅ Parse `type` declarations with field definitions
 - ✅ Added TypeDecl and StructLit AST nodes  
 - ✅ Added TStruct type in type checker
-- ⚠️ Code generation for struct field access not working correctly
-- ⚠️ Named field access requires type information at codegen time
-
-**Known Limitations**:
-- Struct literal and field access not fully functional
-- Need to pass type information through codegen for named field access
+- ✅ Code generation for struct literal
+- ✅ Code generation for struct field access (both numeric and named)
+- ✅ Added var_types tracking for struct variables
+- ✅ Fixed Sub instruction encoding for all registers
+- ✅ Fixed Tuple/StructLit stack offset calculation
 
 ### 4.2 Type Annotations in Code Generation
 
@@ -456,7 +455,7 @@ This document outlines features that need to be implemented to make Mooner a com
 | P2 | Tuple operations | Medium | ✅ COMPLETED |
 | P2 | Float support | Medium | ✅ COMPLETED (arithmetic, comparison) |
 | P2 | Complete stdlib functions | Medium | ⚠️ PARTIAL (input, char_to_int, int_to_char, int_to_string) |
-| P3 | User-defined types | High | ⚠️ PARTIAL |
+| P3 | User-defined types | High | ✅ COMPLETED |
 | P3 | Bitwise operators | Low | ✅ COMPLETED |
 | P3 | Compound assignment operators | Low | ✅ COMPLETED |
 | P3 | String operations | Medium | ⚠️ PARTIAL |
@@ -517,14 +516,15 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Match expressions with Int/Bool/wildcard patterns
 - ✅ Array literals, indexing, and element assignment
 - ✅ Tuple literals and field access (`t.0`, `t.1`)
+- ✅ User-defined types with named field access (`type Point { x: Int, y: Int }`, `p.x`)
 
 ### Known Limitations:
 - Return inside while/for loops doesn't clean up stack properly
 - Runtime float values print as `<float>` (no runtime float-to-string conversion)
-- No user-defined types
 - Limited stdlib functions
 - Parser only supports one top-level function (use nested functions for multiple functions)
 - Match patterns limited to Int, Bool, and wildcard (no tuples or guards)
 - Exit codes limited to 8-bit (0-255) due to Linux syscall convention
+- User-defined types require all fields to be 64-bit values
 
 The compiler currently generates basic but functional code for simple expressions. Focus on making the core MoonBit features work correctly (fn main, println, basic operators). Consider adding a `-v`/`--verbose` flag to see generated code for debugging. Consider adding an `-O` flag for optimizations in the future. The goal is MoonBit language compatibility, not custom extensions.

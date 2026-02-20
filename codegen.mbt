@@ -96,6 +96,7 @@ pub struct CodeGen {
   label_counter : Int
   var_offsets : Map[String, Int]
   var_is_float : Map[String, Bool]
+  var_types : Map[String, String]
   next_offset : Int
   current_func : String?
   func_bodies : Map[String, AST]
@@ -116,6 +117,7 @@ fn CodeGen::new() -> CodeGen {
     label_counter: 0,
     var_offsets: Map::new(),
     var_is_float: Map::new(),
+    var_types: Map::new(),
     next_offset: -8,
     current_func: None,
     func_bodies: Map::new(),
@@ -764,20 +766,42 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = g.emit_modrm_reg64(src, Reg64(dest))
       g
     }
-    Sub(Reg64(_dest), Imm32(v)) => {
+    Sub(Reg64(dest), Imm32(v)) => {
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
-      let modrm_byte = modrm(3, 5, 4) // reg=101 (sub), rm=100 (rsp with SIB)
-      let g = g.emit_byte(modrm_byte)
-      let g = g.emit_byte(sib(0, 4, 4)) // SIB: scale=0, index=4 (none), base=4 (rsp)
-      let b0 = (v.reinterpret_as_uint() & 0xFF).to_byte()
-      let b1 = ((v.reinterpret_as_uint() >> 8) & 0xFF).to_byte()
-      let b2 = ((v.reinterpret_as_uint() >> 16) & 0xFF).to_byte()
-      let b3 = ((v.reinterpret_as_uint() >> 24) & 0xFF).to_byte()
-      let g = g.emit_byte(b0)
-      let g = g.emit_byte(b1)
-      let g = g.emit_byte(b2)
-      g.emit_byte(b3)
+      if dest == "rsp" {
+        let g = g.emit_byte(modrm(3, 5, 4))
+        let g = g.emit_byte(sib(0, 4, 4))
+        let b0 = (v.reinterpret_as_uint() & 0xFF).to_byte()
+        let b1 = ((v.reinterpret_as_uint() >> 8) & 0xFF).to_byte()
+        let b2 = ((v.reinterpret_as_uint() >> 16) & 0xFF).to_byte()
+        let b3 = ((v.reinterpret_as_uint() >> 24) & 0xFF).to_byte()
+        let g = g.emit_byte(b0)
+        let g = g.emit_byte(b1)
+        let g = g.emit_byte(b2)
+        g.emit_byte(b3)
+      } else {
+        let rm_code = match dest {
+          "rax" => 0
+          "rcx" => 1
+          "rdx" => 2
+          "rbx" => 3
+          "rsp" => 4
+          "rbp" => 5
+          "rsi" => 6
+          "rdi" => 7
+          _ => 0
+        }
+        let g = g.emit_byte(modrm(3, 5, rm_code))
+        let b0 = (v.reinterpret_as_uint() & 0xFF).to_byte()
+        let b1 = ((v.reinterpret_as_uint() >> 8) & 0xFF).to_byte()
+        let b2 = ((v.reinterpret_as_uint() >> 16) & 0xFF).to_byte()
+        let b3 = ((v.reinterpret_as_uint() >> 24) & 0xFF).to_byte()
+        let g = g.emit_byte(b0)
+        let g = g.emit_byte(b1)
+        let g = g.emit_byte(b2)
+        g.emit_byte(b3)
+      }
     }
     Imul(Reg64(dest), Reg64(src)) => {
       let g = self.emit_byte(0x48)
@@ -1358,6 +1382,8 @@ fn is_int_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
     }
     Ident(name) =>
       var_is_float.get(name) == Some(false) || var_is_float.get(name) == None
+    FieldExpr(_, _) => true
+    IndexExpr(_, _) => true
     _ => false
   }
 }
@@ -1886,80 +1912,115 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g.emit_inst(Pop(Reg64("rbx")))
     }
     Tuple(elems) => {
-      // Allocate tuple on stack by pushing elements
-      // Elements are pushed in reverse order so index 0 is at lowest address
-      // Result: rax = rbp-relative offset of first element
       let num_elems = elems.length()
       if num_elems == 0 {
-        // Empty tuple: return 0 offset
         self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
       } else {
-        let tuple_size = num_elems * 8
-        let first_elem_offset = self.next_offset - tuple_size
-        let mut g = { ..self, next_offset: first_elem_offset }
-        // Push elements in reverse order (so index 0 ends up at lowest address)
+        let mut g = self
         let mut i = num_elems - 1
         while i >= 0 {
           g = g.codegen_expr(elems[i])
           g = g.emit_inst(Push(Reg64("rax")))
           i = i - 1
         }
-        // After all pushes, rsp points to first element
-        // Return the rbp-relative offset of the first element
-        let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rsp")))
-        let g = g.emit_inst(Sub(Reg64("rax"), Reg64("rbp")))
-        g
+        let actual_offset = g.next_offset - (num_elems - 1) * 8
+        let g = g.emit_inst(Mov(Reg64("rax"), Imm32(actual_offset)))
+        { ..g, next_offset: actual_offset - 8 }
       }
     }
     FieldExpr(obj, field) => {
-      // Numeric field access (tuples and structs)
-      // Named fields are not yet supported - use numeric indices like p.0, p.1
       let idx = if field.length() > 0 {
         let c = field[0]
         if c >= '0' && c <= '9' {
           c.to_int() - 48
         } else {
-          0
+          match obj {
+            Ident(var_name) =>
+              match self.var_types.get(var_name) {
+                Some(type_name) =>
+                  match self.struct_fields.get(type_name) {
+                    Some(field_names) => {
+                      let mut i = 0
+                      let mut found = 0
+                      while i < field_names.length() {
+                        if field_names[i] == field {
+                          found = i
+                        }
+                        i = i + 1
+                      }
+                      found
+                    }
+                    None => 0
+                  }
+                None => 0
+              }
+            _ => 0
+          }
         }
       } else {
         0
       }
-      // Evaluate the object expression (gives rbp-relative offset of element 0)
-      let g = self.codegen_expr(obj)
-      // Save the offset
-      let g = g.emit_inst(Push(Reg64("rax")))
-      // Compute index * 8
-      let g = g.emit_inst(Mov(Reg64("rax"), Imm32(idx * 8)))
-      // Pop base offset into rcx
-      let g = g.emit_inst(Pop(Reg64("rcx")))
-      // Add: rcx = base_offset + index*8
-      let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
-      // Compute absolute address and load
+      let (g, base_offset) = match obj {
+        Ident(var_name) =>
+          match self.var_offsets.get(var_name) {
+            Some(offset) => (self, offset)
+            None => {
+              let g = self.codegen_expr(obj)
+              (g, 0)
+            }
+          }
+        _ => {
+          let g = self.codegen_expr(obj)
+          (g, 0)
+        }
+      }
+      let total_offset = base_offset + idx * 8
       let g = g.emit_inst(Push(Reg64("rbx")))
       let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rbp")))
-      let g = g.emit_inst(Add(Reg64("rbx"), Reg64("rcx")))
+      let g = if total_offset >= 0 {
+        g.emit_inst(Add(Reg64("rbx"), Imm32(total_offset)))
+      } else {
+        g.emit_inst(Sub(Reg64("rbx"), Imm32(-total_offset)))
+      }
       let g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rbx")))
       g.emit_inst(Pop(Reg64("rbx")))
     }
     LetBind(name, _annot, value, body) => {
       let is_float = is_float_expr(value, self.var_is_float)
-      let g = self.codegen_expr(value)
-      let g2 = if is_float {
-        let g = g.emit_inst(PushXmm("xmm0"))
-        g
-      } else {
-        g.emit_inst(Push(Reg64("rax")))
+      let is_struct_or_tuple = match value {
+        StructLit(_, _) => true
+        Tuple(_) => true
+        _ => false
       }
-      let offset = g2.next_offset
+      let struct_type = match value {
+        StructLit(type_name, _) => Some(type_name)
+        _ => None
+      }
+      let g = self.codegen_expr(value)
+      let (g2, offset) = if is_struct_or_tuple {
+        (g, g.next_offset + 8)
+      } else if is_float {
+        let g = g.emit_inst(PushXmm("xmm0"))
+        (g, g.next_offset)
+      } else {
+        let g = g.emit_inst(Push(Reg64("rax")))
+        (g, g.next_offset)
+      }
       let g3 = {
         let new_offsets = g2.var_offsets
         new_offsets[name] = offset
         let new_floats = g2.var_is_float
         new_floats[name] = is_float
+        let new_types = g2.var_types
+        match struct_type {
+          Some(type_name) => new_types[name] = type_name
+          None => ()
+        }
         {
           ..g2,
           var_offsets: new_offsets,
           var_is_float: new_floats,
+          var_types: new_types,
           next_offset: offset - 8,
         }
       }
@@ -2297,16 +2358,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       { ..self, struct_fields: sf }
     }
     StructLit(_type_name, fields) => {
-      // Allocate struct on stack by pushing fields in reverse order
-      // Field 0 ends up at lowest address, field 1 at lowest+8, etc.
       let num_fields = fields.length()
       if num_fields == 0 {
         self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
       } else {
-        let struct_size = num_fields * 8
-        let first_field_offset = self.next_offset - struct_size
-        let mut g = { ..self, next_offset: first_field_offset }
-        // Push fields in reverse order so field 0 is at lowest address
+        let mut g = self
         let mut i = num_fields - 1
         while i >= 0 {
           let (_fname, fval) = fields[i]
@@ -2314,8 +2370,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           g = g.emit_inst(Push(Reg64("rax")))
           i = i - 1
         }
-        // Return rbp-relative offset of first field
-        g.emit_inst(Mov(Reg64("rax"), Imm32(first_field_offset)))
+        let actual_offset = g.next_offset - (num_fields - 1) * 8
+        let g = g.emit_inst(Mov(Reg64("rax"), Imm32(actual_offset)))
+        { ..g, next_offset: actual_offset - 8 }
       }
     }
     _ => self
