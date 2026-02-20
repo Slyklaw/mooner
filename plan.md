@@ -309,8 +309,8 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ `int_to_char` - IMPLEMENTED (identity operation)
 - ✅ `int_to_string` - IMPLEMENTED (runtime integer to string conversion)
 - ✅ `string_to_int` - IMPLEMENTED (runtime string to integer conversion)
-- ⚠️ `float_to_string` - PARTIAL (x86-64 encoding issues, needs debugging)
-- ⚠️ `string_to_float` - not implemented
+- ⚠️ `float_to_string` - PARTIAL (outputs N.x where N is integer part)
+- ✅ `string_to_float` - IMPLEMENTED (runtime string to float conversion)
 
 **Implementation**:
 - Implement each function with proper syscalls or library calls
