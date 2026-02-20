@@ -10,6 +10,7 @@ pub enum Operand {
 ///|
 pub enum X86Inst {
   Mov(X86Operand, X86Operand)
+  Movzx(X86Operand, X86Operand)
   Push(X86Operand)
   Pop(X86Operand)
   Add(X86Operand, X86Operand)
@@ -96,6 +97,7 @@ pub struct CodeGen {
   label_counter : Int
   var_offsets : Map[String, Int]
   var_is_float : Map[String, Bool]
+  var_is_string : Map[String, Bool]
   var_types : Map[String, String]
   next_offset : Int
   current_func : String?
@@ -117,6 +119,7 @@ fn CodeGen::new() -> CodeGen {
     label_counter: 0,
     var_offsets: Map::new(),
     var_is_float: Map::new(),
+    var_is_string: Map::new(),
     var_types: Map::new(),
     next_offset: -8,
     current_func: None,
@@ -699,6 +702,36 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       }
       g = g.emit_byte((0xB0 + dest_code).to_byte())
       g.emit_byte(v.to_byte())
+    }
+    Movzx(Reg64(dest), Reg8(src)) => {
+      let dest_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      let src_code = match src {
+        "al" => 0
+        "cl" => 1
+        "dl" => 2
+        "bl" => 3
+        "sil" => 6
+        "dil" => 7
+        _ => 0
+      }
+      let needs_rex = src == "sil" || src == "dil"
+      let mut g = self
+      if needs_rex {
+        g = g.emit_byte(0x40)
+      }
+      g = g.emit_byte(0x0F)
+      g = g.emit_byte(0xB6)
+      g.emit_byte(modrm(3, dest_code, src_code))
     }
     Lea(Reg64(dest), RipRel32(label)) => {
       let reg_code = match dest {
@@ -1389,6 +1422,15 @@ fn is_int_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
 }
 
 ///|
+fn is_string_expr(expr : AST, var_is_string : Map[String, Bool]) -> Bool {
+  match expr {
+    String(_) => true
+    Ident(name) => var_is_string.get(name) == Some(true)
+    _ => false
+  }
+}
+
+///|
 fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
   match expr {
     Int(n) => {
@@ -1405,7 +1447,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g
     }
     String(s) => {
-      let g = self.emit_inst(Mov(Reg64("rax"), Imm32(s.length())))
+      let (g, label) = self.add_string(s)
+      let g = g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
       g
     }
     Float(f) => {
@@ -1433,7 +1476,41 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     Binary(op, left, right) => {
       let is_float = is_float_expr(left, self.var_is_float) ||
         is_float_expr(right, self.var_is_float)
-      if is_float {
+      let is_string = is_string_expr(left, self.var_is_string) ||
+        is_string_expr(right, self.var_is_string)
+      if is_string && (op == "==" || op == "!=") {
+        let g = self.codegen_expr(left)
+        let g = g.emit_inst(Push(Reg64("rax")))
+        let g = g.codegen_expr(right)
+        let g = g.emit_inst(Pop(Reg64("rsi")))
+        let g = g.emit_inst(Mov(Reg64("rdi"), Reg64("rax")))
+        let loop_label = ".Lstrcmp_loop\{self.label_counter}"
+        let end_label = ".Lstrcmp_end\{self.label_counter}"
+        let g = { ..g, label_counter: g.label_counter + 1 }
+        let g = g.define_label(loop_label)
+        let g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rsi")))
+        let g = g.emit_inst(Movzx(Reg64("rcx"), Reg8("al")))
+        let g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rdi")))
+        let g = g.emit_inst(Movzx(Reg64("rdx"), Reg8("al")))
+        let g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rdx")))
+        let g = g.emit_inst(Jne(end_label))
+        let g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+        let g = g.emit_inst(Je(end_label))
+        let g = g.emit_inst(Inc(Reg64("rsi")))
+        let g = g.emit_inst(Inc(Reg64("rdi")))
+        let g = g.emit_inst(Jmp(loop_label))
+        let g = g.define_label(end_label)
+        let g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rdx")))
+        if op == "==" {
+          let g = g.emit_inst(Setz(Reg64("al")))
+          let g = g.emit_inst(Movzx(Reg64("rax"), Reg8("al")))
+          g
+        } else {
+          let g = g.emit_inst(Setnz(Reg64("al")))
+          let g = g.emit_inst(Movzx(Reg64("rax"), Reg8("al")))
+          g
+        }
+      } else if is_float {
         let g = self.codegen_expr(left)
         let g = g.emit_inst(PushXmm("xmm0"))
         let g = g.codegen_expr(right)
@@ -1987,6 +2064,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     }
     LetBind(name, _annot, value, body) => {
       let is_float = is_float_expr(value, self.var_is_float)
+      let is_string = is_string_expr(value, self.var_is_string)
       let is_struct_or_tuple = match value {
         StructLit(_, _) => true
         Tuple(_) => true
@@ -2011,6 +2089,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         new_offsets[name] = offset
         let new_floats = g2.var_is_float
         new_floats[name] = is_float
+        let new_strings = g2.var_is_string
+        new_strings[name] = is_string
         let new_types = g2.var_types
         match struct_type {
           Some(type_name) => new_types[name] = type_name
@@ -2020,6 +2100,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           ..g2,
           var_offsets: new_offsets,
           var_is_float: new_floats,
+          var_is_string: new_strings,
           var_types: new_types,
           next_offset: offset - 8,
         }

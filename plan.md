@@ -226,17 +226,21 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Float variables with proper stack storage and loading
 - ⚠️ Runtime float-to-string conversion not implemented (prints `<float>` for expressions)
 
-### 3.5 String Operations
+### 3.5 String Operations ✅ PARTIAL
 
-**Location**: `codegen.mbt:616-619`
-
-**Issue**: String literals are partially supported but not fully functional.
+**Location**: `codegen.mbt:1490-1512`, `codegen.mbt:1354-1362`
 
 **Implementation**:
-- Store string literals in .rodata section with proper null-termination
-- Generate correct pointer to string data
-- Implement string comparison
-- Implement string concatenation (optional)
+- ✅ Store string literals in .rodata section with proper null-termination
+- ✅ Generate correct pointer to string data using RIP-relative LEA
+- ✅ String comparison (==, !=) with runtime character-by-character comparison
+- ⚠️ String concatenation not implemented
+
+**Added**:
+- `var_is_string` field in CodeGen struct to track string variables
+- `is_string_expr()` function to detect string expressions
+- `Movzx` x86 instruction for zero-extending 8-bit to 64-bit values
+- String literal codegen now returns pointer instead of length
 
 ### 3.6 Char Type Support ✅ COMPLETED
 
@@ -517,6 +521,7 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Array literals, indexing, and element assignment
 - ✅ Tuple literals and field access (`t.0`, `t.1`)
 - ✅ User-defined types with named field access (`type Point { x: Int, y: Int }`, `p.x`)
+- ✅ String comparison (`"hello" == "world"`, `"a" != "b"`)
 
 ### Known Limitations:
 - Return inside while/for loops doesn't clean up stack properly
