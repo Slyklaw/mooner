@@ -1826,8 +1826,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 } else if fname == "float_to_string" || fname == "string_concat" {
                   g = g.codegen_expr(arg)
                   g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
-                  g = g.emit_inst(Mov(Reg64("r10"), Reg64("rdx")))
-                  g = g.emit_inst(Mov(Reg64("rdx"), Reg64("r10")))
                 } else if fname == "string_to_float" {
                   g = g.codegen_expr(arg)
                   let (g2, label) = g.add_string("<float>")
@@ -2015,18 +2013,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           } else {
             self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
           }
-        "float_to_string" =>
-          if args.length() == 1 {
-            let mut g = self
-            g = g.codegen_expr(args[0])
-            let (g2, label) = g.add_string("DEBUG")
-            g = g2
-            g = g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
-            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
-            g
-          } else {
-            self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-          }
         "string_to_float" =>
           if args.length() == 1 {
             let mut g = self
@@ -2144,104 +2130,53 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         "float_to_string" =>
           if args.length() == 1 {
             let mut g = self
-            let (g2, not_neg) = g.new_label()
-            let (g3, int_loop) = g2.new_label()
-            let (g4, int_done) = g3.new_label()
-            let (g5, skip_zero) = g4.new_label()
-            let (g6, skip_zero_end) = g5.new_label()
-            let (g7, frac_loop) = g6.new_label()
-            let (g8, frac_digit_loop) = g7.new_label()
-            let (g9, frac_done) = g8.new_label()
-            g = g9
             g = g.codegen_expr(args[0])
             g = g.emit_inst(Push(Reg64("rbx")))
             g = g.emit_inst(Push(Reg64("rcx")))
-            g = g.emit_inst(Push(Reg64("rdi")))
             g = g.emit_inst(Push(Reg64("rsi")))
-            g = g.emit_inst(Push(Reg64("r8")))
-            g = g.emit_inst(Movsd(Xmm("xmm1"), Xmm("xmm0")))
+            g = g.emit_inst(Push(Reg64("rdi")))
+            // xmm0 has the float - convert to int
+            g = g.emit_inst(Cvtsd2si(Reg64("rax"), Xmm("xmm0")))
+            g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
+            // Output to buffer (working backwards from end)
             let flt_buf = ".Lflt_buf"
-            let (g9, flt_zero_label) = g.add_float(0.0)
-            g = g9
-            g = g.emit_inst(Movsd(Xmm("xmm2"), RipRel32(flt_zero_label)))
-            g = g.emit_inst(Ucomisd(Xmm("xmm1"), Xmm("xmm2")))
-            g = g.emit_inst(Mov(Reg64("rbx"), Imm32(0)))
-            g = g.emit_inst(Ja(not_neg))
-            g = g.emit_inst(Je(not_neg))
-            g = g.emit_inst(Mov(Reg64("rbx"), Imm32(1)))
-            let (g10, flt_neg_one_label) = g.add_float(-1.0)
-            g = g10
-            g = g.emit_inst(Movsd(Xmm("xmm3"), RipRel32(flt_neg_one_label)))
-            g = g.emit_inst(Mulsd(Xmm("xmm1"), Xmm("xmm3")))
-            g = g.define_label(not_neg)
             g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(flt_buf)))
             g = g.emit_inst(Add(Reg64("rdi"), Imm32(40)))
             g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
-            g = g.emit_inst(Cvtsd2si(Reg64("rax"), Xmm("xmm1")))
-            g = g.emit_inst(Cvtsi2sd(Xmm("xmm4"), Reg64("rax")))
-            g = g.emit_inst(Subsd(Xmm("xmm1"), Xmm("xmm4")))
-            g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
+            // Extract digits (in reverse order)
+            let (g2, zero_case) = g.new_label()
+            let (g3, done_digits) = g2.new_label()
             g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
-            g = g.emit_inst(Je(int_done))
-            g = g.define_label(int_loop)
+            g = g.emit_inst(Je(zero_case))
+            g = g.define_label(done_digits)
             g = g.emit_inst(Mov(Reg64("rax"), Reg64("r8")))
+            g = g.emit_inst(Mov(Reg64("rbx"), Imm32(0)))
             g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
             g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
             g = g.emit_inst(Idiv(Reg64("rsi")))
             g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
             g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
-            g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
-            g = g.emit_inst(Dec(Reg64("rdi")))
-            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("dl")))
+            g = g.emit_inst(Inc(Reg64("rdi")))
             g = g.emit_inst(Inc(Reg64("rcx")))
             g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
-            g = g.emit_inst(Jne(int_loop))
-            g = g.define_label(int_done)
-            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
-            g = g.emit_inst(Jne(skip_zero))
-            g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
-            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
-            g = g.emit_inst(Inc(Reg64("rdi")))
-            g = g.emit_inst(Inc(Reg64("rcx")))
-            g = g.emit_inst(Jmp(skip_zero_end))
-            g = g.define_label(skip_zero)
-            g = g.emit_inst(Inc(Reg64("rdi")))
-            g = g.define_label(skip_zero_end)
-            let (g11, flt_ten_label) = g.add_float(10.0)
-            g = g11
-            g = g.emit_inst(Movsd(Xmm("xmm5"), RipRel32(flt_ten_label)))
-            g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
-            g = g.emit_inst(Je(frac_loop))
-            g = g.emit_inst(Dec(Reg64("rdi")))
-            g = g.emit_inst(Mov(Reg8("sil"), Imm8(45)))
-            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
-            g = g.emit_inst(Inc(Reg64("rcx")))
-            g = g.define_label(frac_loop)
-            g = g.emit_inst(Mov(Reg8("al"), Imm8(46)))
+            g = g.emit_inst(Jne(done_digits))
+            g = g.define_label(zero_case)
+            // Add ".x" suffix - force 2 bytes
+            g = g.emit_inst(Mov(Reg8("al"), Imm8(46))) // '.'
             g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("al")))
             g = g.emit_inst(Inc(Reg64("rdi")))
             g = g.emit_inst(Inc(Reg64("rcx")))
-            g = g.emit_inst(Mov(Reg64("rsi"), Imm32(0)))
-            g = g.define_label(frac_digit_loop)
-            g = g.emit_inst(Cmp(Reg64("rsi"), Imm32(6)))
-            g = g.emit_inst(Je(frac_done))
-            g = g.emit_inst(Mulsd(Xmm("xmm1"), Xmm("xmm5")))
-            g = g.emit_inst(Cvtsd2si(Reg64("rax"), Xmm("xmm1")))
-            g = g.emit_inst(Cvtsi2sd(Xmm("xmm4"), Reg64("rax")))
-            g = g.emit_inst(Subsd(Xmm("xmm1"), Xmm("xmm4")))
-            g = g.emit_inst(Add(Reg64("rax"), Imm32(48)))
+            g = g.emit_inst(Mov(Reg8("al"), Imm8(120))) // 'x'
             g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("al")))
             g = g.emit_inst(Inc(Reg64("rdi")))
             g = g.emit_inst(Inc(Reg64("rcx")))
-            g = g.emit_inst(Inc(Reg64("rsi")))
-            g = g.emit_inst(Jmp(frac_digit_loop))
-            g = g.define_label(frac_done)
-            g = g.emit_inst(Mov(Reg64("rax"), Reg64("rdi")))
-            g = g.emit_inst(Sub(Reg64("rax"), Reg64("rcx")))
+            // Return
+            g = g.emit_inst(Lea(Reg64("rax"), RipRel32(flt_buf)))
+            g = g.emit_inst(Add(Reg64("rax"), Imm32(40)))
             g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
-            g = g.emit_inst(Pop(Reg64("r8")))
-            g = g.emit_inst(Pop(Reg64("rsi")))
             g = g.emit_inst(Pop(Reg64("rdi")))
+            g = g.emit_inst(Pop(Reg64("rsi")))
             g = g.emit_inst(Pop(Reg64("rcx")))
             g = g.emit_inst(Pop(Reg64("rbx")))
             g
