@@ -1489,6 +1489,7 @@ fn is_string_expr(expr : AST, var_is_string : Map[String, Bool]) -> Bool {
   match expr {
     String(_) => true
     Ident(name) => var_is_string.get(name) == Some(true)
+    CallExpr(Ident(fname), _) => fname == "string_concat" || fname == "input"
     _ => false
   }
 }
@@ -1809,6 +1810,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 if fname == "int_to_string" {
                   g = g.codegen_expr(arg)
                   g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                } else if fname == "string_concat" || fname == "input" {
+                  g = g.codegen_expr(arg)
+                  g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
                 } else {
                   let is_float = is_float_expr(arg, g.var_is_float)
                   let is_int = is_int_expr(arg, g.var_is_float)
@@ -1831,8 +1835,27 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 }
               _ => {
                 let is_float = is_float_expr(arg, g.var_is_float)
+                let is_string = is_string_expr(arg, g.var_is_string)
                 let is_int = is_int_expr(arg, g.var_is_float)
-                if is_float {
+                if is_string {
+                  g = g.codegen_expr(arg)
+                  g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                  let (g2, len_loop) = g.new_label()
+                  let (g3, len_done) = g2.new_label()
+                  g = g3
+                  g = g.emit_inst(Push(Reg64("rax")))
+                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                  g = g.define_label(len_loop)
+                  g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("rax")))
+                  g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                  g = g.emit_inst(Je(len_done))
+                  g = g.emit_inst(Inc(Reg64("rax")))
+                  g = g.emit_inst(Inc(Reg64("rdx")))
+                  g = g.emit_inst(Jmp(len_loop))
+                  g = g.define_label(len_done)
+                  g = g.emit_inst(Pop(Reg64("rax")))
+                  g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                } else if is_float {
                   let (g2, label) = g.add_string("<float>")
                   g = g2
                   g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
@@ -1843,10 +1866,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
                   g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
                 } else {
-                  let (g2, label) = g.add_string("<value>")
-                  g = g2
-                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                  g = g.codegen_expr(arg)
+                  g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
                 }
               }
             }
@@ -1963,6 +1984,59 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             g = g.emit_inst(Inc(Reg64("rbx")))
             g = g.emit_inst(Jmp(loop_label))
             g = g.define_label(done_label)
+            g = g.emit_inst(Pop(Reg64("rcx")))
+            g = g.emit_inst(Pop(Reg64("rbx")))
+            g
+          } else {
+            self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+          }
+        "string_concat" =>
+          if args.length() == 2 {
+            let mut g = self
+            g = g.codegen_expr(args[0])
+            g = g.emit_inst(Push(Reg64("rax")))
+            g = g.codegen_expr(args[1])
+            g = g.emit_inst(Mov(Reg64("rdi"), Reg64("rax")))
+            g = g.emit_inst(Pop(Reg64("rsi")))
+            let (g2, copy1_loop) = g.new_label()
+            let (g3, copy1_done) = g2.new_label()
+            let (g4, copy2_loop) = g3.new_label()
+            let (g5, copy2_done) = g4.new_label()
+            g = g5
+            g = g.emit_inst(Push(Reg64("rbx")))
+            g = g.emit_inst(Push(Reg64("rcx")))
+            g = g.emit_inst(Push(Reg64("r8")))
+            let buf_label = ".Lstrcat_buf"
+            g = g.emit_inst(Lea(Reg64("rax"), RipRel32(buf_label)))
+            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+            g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+            g = g.define_label(copy1_loop)
+            g = g.emit_inst(Movzx(Reg64("r8"), MemIndirect("rsi")))
+            g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
+            g = g.emit_inst(Je(copy1_done))
+            g = g.emit_inst(Mov(Reg8("al"), Reg8("r8b")))
+            g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+            g = g.emit_inst(Inc(Reg64("rbx")))
+            g = g.emit_inst(Inc(Reg64("rsi")))
+            g = g.emit_inst(Inc(Reg64("rcx")))
+            g = g.emit_inst(Jmp(copy1_loop))
+            g = g.define_label(copy1_done)
+            g = g.define_label(copy2_loop)
+            g = g.emit_inst(Movzx(Reg64("r8"), MemIndirect("rdi")))
+            g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
+            g = g.emit_inst(Je(copy2_done))
+            g = g.emit_inst(Mov(Reg8("al"), Reg8("r8b")))
+            g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+            g = g.emit_inst(Inc(Reg64("rbx")))
+            g = g.emit_inst(Inc(Reg64("rdi")))
+            g = g.emit_inst(Inc(Reg64("rcx")))
+            g = g.emit_inst(Jmp(copy2_loop))
+            g = g.define_label(copy2_done)
+            g = g.emit_inst(Mov(Reg8("al"), Imm8(0)))
+            g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+            g = g.emit_inst(Lea(Reg64("rax"), RipRel32(buf_label)))
+            g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+            g = g.emit_inst(Pop(Reg64("r8")))
             g = g.emit_inst(Pop(Reg64("rcx")))
             g = g.emit_inst(Pop(Reg64("rbx")))
             g
@@ -2737,6 +2811,12 @@ pub fn codegen(ast : AST) -> Bytes {
   g = g.define_label(".Lint_buf")
   buf_idx = 0
   while buf_idx < 32 {
+    g = g.emit_byte(0x00)
+    buf_idx = buf_idx + 1
+  }
+  g = g.define_label(".Lstrcat_buf")
+  buf_idx = 0
+  while buf_idx < 512 {
     g = g.emit_byte(0x00)
     buf_idx = buf_idx + 1
   }

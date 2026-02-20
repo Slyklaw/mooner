@@ -226,21 +226,22 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Float variables with proper stack storage and loading
 - ⚠️ Runtime float-to-string conversion not implemented (prints `<float>` for expressions)
 
-### 3.5 String Operations ✅ PARTIAL
+### 3.5 String Operations ✅ COMPLETED
 
-**Location**: `codegen.mbt:1490-1512`, `codegen.mbt:1354-1362`
+**Location**: `codegen.mbt:1490-1512`, `codegen.mbt:1354-1362`, `codegen.mbt:1994-2045`
 
 **Implementation**:
 - ✅ Store string literals in .rodata section with proper null-termination
 - ✅ Generate correct pointer to string data using RIP-relative LEA
 - ✅ String comparison (==, !=) with runtime character-by-character comparison
-- ⚠️ String concatenation not implemented
+- ✅ String concatenation via `string_concat(s1, s2)` builtin
+- ✅ Runtime string length calculation for string variables
 
 **Added**:
 - `var_is_string` field in CodeGen struct to track string variables
-- `is_string_expr()` function to detect string expressions
+- `is_string_expr()` function to detect string expressions (literals, variables, string_concat, input)
 - `Movzx` x86 instruction for zero-extending 8-bit to 64-bit values
-- String literal codegen now returns pointer instead of length
+- `.Lstrcat_buf` 512-byte buffer for string concatenation results
 
 ### 3.6 Char Type Support ✅ COMPLETED
 
@@ -462,7 +463,7 @@ This document outlines features that need to be implemented to make Mooner a com
 | P3 | User-defined types | High | ✅ COMPLETED |
 | P3 | Bitwise operators | Low | ✅ COMPLETED |
 | P3 | Compound assignment operators | Low | ✅ COMPLETED |
-| P3 | String operations | Medium | ⚠️ PARTIAL |
+| P3 | String operations | Medium | ✅ COMPLETED |
 | P3 | Char type support | Low | ✅ COMPLETED |
 | P4 | Parser error recovery | Medium | ⚠️ NOT STARTED |
 | P4 | Optimizations | High | ⚠️ NOT STARTED |
@@ -523,6 +524,7 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ Tuple literals and field access (`t.0`, `t.1`)
 - ✅ User-defined types with named field access (`type Point { x: Int, y: Int }`, `p.x`)
 - ✅ String comparison (`"hello" == "world"`, `"a" != "b"`)
+- ✅ String concatenation (`string_concat("Hello", "World")`)
 
 ### Known Limitations:
 - Return inside while/for loops doesn't clean up stack properly

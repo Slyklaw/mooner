@@ -150,6 +150,7 @@ pub fn TypeChecker::new() -> TypeChecker {
   let env = env.add_func("string_to_float", [TString], TFloat)
   let env = env.add_func("char_to_int", [TChar], TInt)
   let env = env.add_func("int_to_char", [TInt], TChar)
+  let env = env.add_func("string_concat", [TString, TString], TString)
   { env, errors: [] }
 }
 
