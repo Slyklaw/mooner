@@ -2019,14 +2019,10 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           if args.length() == 1 {
             let mut g = self
             g = g.codegen_expr(args[0])
-            let buf_label = ".Lflt_buf"
-            g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
-            g = g.emit_inst(Cvtsd2si(Reg64("rax"), Xmm("xmm0")))
-            g = g.emit_inst(Add(Reg64("rax"), Imm32(48)))
-            g = g.emit_inst(Mov(Reg8("al"), Reg8("al")))
-            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("al")))
-            g = g.emit_inst(Lea(Reg64("rax"), RipRel32(buf_label)))
-            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+            let (g2, label) = g.add_string("DEBUG")
+            g = g2
+            g = g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
+            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
             g
           } else {
             self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
