@@ -5,18 +5,18 @@
 | Example | Compile | Run | Priority Issues |
 |---------|---------|-----|-----------------|
 | 001_hello | ✅ | ✅ | **FIXED** - Multiline strings now work |
-| 002_variable | ✅ | ✅ | **FIXED** - `let mut` parsing and boolean output work |
-| 003_basic_constants | ✅ | ✅ | **FIXED** - Hex/binary/underscore literals work |
-| 004_basic_function | ✅ | ✅ | **FIXED** - Multiple top-level functions and function calls work |
+| 002_variable | ✅ | ✅ | **FIXED** - `let mut` parsing and boolean output work; OUTPUT MATCHES official |
+| 003_basic_constants | ✅ | ✅ | **FIXED** - Hex/binary/underscore literals work; OUTPUT MATCHES official |
+| 004_basic_function | ✅ | ✅ | **FIXED** - Multiple top-level functions and function calls work; OUTPUT MATCHES official |
 | 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr.push()` work; concat returns left array (no crash); spread not impl; print shows `<array>` placeholder |
 | 006_basic_string | ✅ | ⚠️ | get_char(), unwrap(), char equality, concat with +, escape sequences, char printing as char work; unicode shows '?'; interpolation literal |
 | 007_basic_tuple | ✅ | ⚠️ | Tuples parse; field access works for arrays but not for values (mixed types issue) |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
-| 009_basic_control_flows | ✅ | ✅ | All loops work: fib/while/C-for/for-in ✅ |
-| 010_basic_struct | ✅ | ⚠️ | Struct parsing works; field access works; Show derive not implemented (shows addresses/placeholders) |
-| 011_basic_enum | ✅ | ❌ | Enums not working |
-| 012_basic_test | ✅ | ❌ | Test blocks ignored |
-| 013_pattern_matching | ✅ | ❌ | Pattern matching not working |
+| 009_basic_control_flows | ✅ | ✅ | All loops work: fib/while/C-for/for-in ✅; OUTPUT MATCHES official |
+| 010_basic_struct | ✅ | ⚠️ | Struct parsing works; field access works; Show derive not implemented |
+| 011_basic_enum | ✅ | ❌ | Enums parse but constructors not implemented; match expression broken |
+| 012_basic_test | ✅ | ❌ | Test blocks parse but not executed |
+| 013_pattern_matching | ✅ | ❌ | Pattern matching broken (match expression has control flow bugs) |
 
 ## Phase 1: Core Runtime (HIGH PRIORITY)
 

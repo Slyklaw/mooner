@@ -2120,6 +2120,25 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Pop(Reg64("rax")))
                       g = g.emit_inst(Mov(MemIndirect("rsi"), Reg8("al")))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                    } else if g.var_is_bool.get(var_name) == Some(true) {
+                      // Bool variable - print true/false
+                      g = g.codegen_expr(arg)
+                      let (g2, true_label) = g.new_label()
+                      let (g3, end_label) = g2.new_label()
+                      g = g3
+                      g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
+                      g = g.emit_inst(Je(true_label))
+                      let (g4, s_true) = g.add_string("true")
+                      g = g4
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_true)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(4)))
+                      g = g.emit_inst(Jmp(end_label))
+                      g = g.define_label(true_label)
+                      let (g5, s_false) = g.add_string("false")
+                      g = g5
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_false)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
+                      g = g.define_label(end_label)
                     } else if g.var_types.get(var_name) != None ||
                       is_struct_expr(arg, g.var_types) {
                       // Struct variable - evaluate and print as address
@@ -3086,8 +3105,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             g = g.emit_inst(Jmp(end_label))
           }
           _ =>
-            // Unknown pattern: skip this case
-            ()
+            // Unknown pattern: skip this case (fall through to next)
+            ignore(g)
         }
         g = g.define_label(next_label)
         i = i + 1
