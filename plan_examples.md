@@ -8,7 +8,7 @@
 | 002_variable | ✅ | ✅ | **FIXED** - `let mut` parsing and boolean output work |
 | 003_basic_constants | ✅ | ✅ | **FIXED** - Hex/binary/underscore literals work |
 | 004_basic_function | ✅ | ✅ | **FIXED** - Multiple top-level functions and function calls work |
-| 005_basic_array | ✅ | ⚠️ | `arr.length()` works; push/print/concat/spread need work |
+| 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]` work; push/print/concat/spread need work |
 | 006_basic_string | ✅ | ❌ | String ops broken |
 | 007_basic_tuple | ✅ | ❌ | Tuples broken, interpolation fails |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
@@ -52,10 +52,13 @@ These are foundational issues blocking multiple examples.
 ### 2.2 Arrays
 - [x] Implement Array type with literal syntax `[1, 2, 3]`
 - [x] Implement array indexing `arr[0]`
-- [x] Implement `array.length()` method
+- [x] Implement `array.length()` method (reads from array header)
+- [x] Implement array element assignment `arr[i] = value`
+- [x] Array layout: `[length][elem0][elem1]...` (length at offset 0, elements at offset 8)
 - [ ] Implement `array.push()` mutation
 - [ ] Implement array concatenation `arr1 + arr2`
 - [ ] Implement spread operator `[..arr1, 1000, ..arr2]`
+- [ ] Implement array printing in `println` (loop-based printing has register issues)
 
 ### 2.3 Strings
 - [ ] Implement String concatenation `str1 + str2`

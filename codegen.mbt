@@ -484,11 +484,20 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Mov(Reg64(dest), StackBP64(offset)) => {
-      // mov reg64, [rbp+offset]
-      let g = self.emit_byte(0x48) // REX.w
-      let g = g.emit_byte(0x8B) // ModR/M for mov reg64, r/m64
-      let g = g.emit_modrm_reg64(dest, StackBP64(offset))
-      g
+      let dest_ext = dest == "r8" ||
+        dest == "r9" ||
+        dest == "r10" ||
+        dest == "r11" ||
+        dest == "r12" ||
+        dest == "r13" ||
+        dest == "r14" ||
+        dest == "r15"
+      let g = if dest_ext {
+        self.emit_bytes([0x4C, 0x8B])
+      } else {
+        self.emit_bytes([0x48, 0x8B])
+      }
+      g.emit_modrm_reg64(dest, StackBP64(offset))
     }
     Mov(Stack64(offset), Reg64(src)) => {
       let g = self.emit_byte(0x48)
@@ -504,7 +513,14 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Mov(Reg64(dest), MemIndirect(addr_reg)) => {
-      // mov reg64, [addr_reg]
+      let dest_ext = dest == "r8" ||
+        dest == "r9" ||
+        dest == "r10" ||
+        dest == "r11" ||
+        dest == "r12" ||
+        dest == "r13" ||
+        dest == "r14" ||
+        dest == "r15"
       let dest_code = match dest {
         "rax" => 0
         "rcx" => 1
@@ -514,6 +530,14 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
         "rbp" => 5
         "rsi" => 6
         "rdi" => 7
+        "r8" => 0
+        "r9" => 1
+        "r10" => 2
+        "r11" => 3
+        "r12" => 4
+        "r13" => 5
+        "r14" => 6
+        "r15" => 7
         _ => 0
       }
       let rm_code = match addr_reg {
@@ -527,17 +551,12 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
         "rdi" => 7
         _ => 0
       }
-      // REX.W + 8B + ModRM (mod=00, reg=dest, rm=addr_reg)
-      let g = self.emit_byte(0x48)
+      let g = if dest_ext { self.emit_byte(0x4C) } else { self.emit_byte(0x48) }
       let g = g.emit_byte(0x8B)
-      // mod=00 (indirect), reg=dest_code, rm=rm_code
-      // But rsp and rbp need special handling
       if addr_reg == "rsp" {
-        // Need SIB byte for rsp: mod=00, reg=dest, rm=100 (SIB), SIB=00,100,100
         let g = g.emit_byte(modrm(0, dest_code, 4))
         g.emit_byte(sib(0, 4, 4))
       } else if addr_reg == "rbp" {
-        // rbp with mod=00 means disp32, so use mod=01 with disp8=0
         let g = g.emit_byte(modrm(1, dest_code, 5))
         g.emit_byte(0x00)
       } else {
@@ -1075,9 +1094,37 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Shl(Reg64(dest), Imm8(v)) => {
-      let g = self.emit_byte(0x48)
-      let g = g.emit_byte(0xC1)
-      let g = g.emit_modrm_reg64("rcx", Reg64(dest))
+      // SHL r/m64, imm8 = REX.W + C1 /4 ib
+      let dest_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        "r8" => 0
+        "r9" => 1
+        "r10" => 2
+        "r11" => 3
+        "r12" => 4
+        "r13" => 5
+        "r14" => 6
+        "r15" => 7
+        _ => 0
+      }
+      let dest_ext = dest == "r8" ||
+        dest == "r9" ||
+        dest == "r10" ||
+        dest == "r11" ||
+        dest == "r12" ||
+        dest == "r13" ||
+        dest == "r14" ||
+        dest == "r15"
+      let rex = if dest_ext { 0x49 } else { 0x48 }
+      let g = self.emit_bytes([rex.to_byte(), 0xC1])
+      let g = g.emit_byte(modrm(3, 4, dest_code)) // /4 = SHL
       g.emit_byte(v.to_byte())
     }
     Shr(Reg64(dest), Imm8(1)) => {
@@ -1809,11 +1856,43 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           match method_name {
             "length" =>
               match obj {
-                Ident(var_name) =>
-                  match self.var_array_len.get(var_name) {
-                    Some(len) => self.emit_inst(Mov(Reg64("rax"), Imm32(len)))
-                    None => self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-                  }
+                Ident(var_name) => {
+                  let g = self.codegen_expr(obj)
+                  g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+                }
+                _ => self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+              }
+            "push" =>
+              match obj {
+                Ident(var_name) => {
+                  // arr.push(value) - add element to array
+                  // Array layout: [length][elem0][elem1]...
+                  let mut g = self
+                  // 1. Evaluate the value to push first (to avoid register conflicts)
+                  g = g.codegen_expr(args[0])
+                  g = g.emit_inst(Push(Reg64("rax"))) // stack: [value]
+                  // 2. Get array address
+                  g = g.codegen_expr(obj)
+                  g = g.emit_inst(Push(Reg64("rax"))) // stack: [value, array_addr]
+                  // 3. Load current length
+                  g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+                  // rax = length
+                  g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
+                  g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx"))) // rax = length * 8
+                  // 4. Get array address back
+                  g = g.emit_inst(Pop(Reg64("rcx"))) // rcx = array_addr, stack: [value]
+                  g = g.emit_inst(Add(Reg64("rax"), Reg64("rcx"))) // rax = array_addr + length*8
+                  g = g.emit_inst(Add(Reg64("rax"), Imm32(8))) // rax = array_addr + 8 + length*8 = position for new element
+                  // 5. Store the value
+                  g = g.emit_inst(Pop(Reg64("rcx"))) // rcx = value, stack: empty
+                  g = g.emit_inst(Mov(MemIndirect("rax"), Reg64("rcx")))
+                  // 6. Increment length in header
+                  g = g.codegen_expr(obj)
+                  g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rax")))
+                  g = g.emit_inst(Inc(Reg64("rcx")))
+                  g = g.emit_inst(Mov(MemIndirect("rax"), Reg64("rcx")))
+                  g
+                }
                 _ => self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
               }
             _ => self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
@@ -1865,6 +1944,159 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
                     g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
                   }
+                  Ident(var_name) =>
+                    if g.var_array_len.get(var_name) != None {
+                      // Print array: [elem0, elem1, ...]
+                      // Array layout: [length][elem0][elem1]...
+                      g = g.emit_inst(Push(Reg64("rbx"))) // save rbx
+                      g = g.emit_inst(Push(Reg64("r12"))) // save r12
+                      g = g.emit_inst(Push(Reg64("r13"))) // save r13
+                      g = g.emit_inst(Push(Reg64("r14"))) // save r14
+                      // Print "[" first
+                      let (g2, label1) = g.add_string("[")
+                      g = g2
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      // Load array address into r12
+                      g = g.codegen_expr(arg)
+                      g = g.emit_inst(Mov(Reg64("r12"), Reg64("rax")))
+                      // Load length into r13
+                      g = g.emit_inst(Mov(Reg64("r13"), MemIndirect("rax")))
+                      // If length is 0, skip to end
+                      let (g2, elem_loop) = g.new_label()
+                      let (g3, elem_done) = g2.new_label()
+                      g = g3
+                      g = g.emit_inst(Cmp(Reg64("r13"), Imm32(0)))
+                      g = g.emit_inst(Je(elem_done))
+                      // Initialize index in rbx
+                      g = g.emit_inst(Mov(Reg64("rbx"), Imm32(0)))
+                      g = g.define_label(elem_loop)
+                      // Print ", " before elements (except first)
+                      g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                      let (g2, no_comma) = g.new_label()
+                      g = g2
+                      g = g.emit_inst(Je(no_comma))
+                      let (g2, comma_label) = g.add_string(", ")
+                      g = g2
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(comma_label)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      g = g.define_label(no_comma)
+                      // Print element at index rbx
+                      // Calculate address: r12 + 8 + rbx*8
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                      g = g.emit_inst(Shl(Reg64("rax"), Imm8(3))) // rax = index * 8
+                      g = g.emit_inst(Add(Reg64("rax"), Reg64("r12")))
+                      g = g.emit_inst(Add(Reg64("rax"), Imm32(8)))
+                      g = g.emit_inst(Mov(Reg64("r14"), MemIndirect("rax"))) // load element into r14
+                      // Convert element to string and print
+                      let buf_label = ".Lint_buf"
+                      let (g2, digit_loop) = g.new_label()
+                      let (g3, done_label) = g2.new_label()
+                      let (g4, skip_zero) = g3.new_label()
+                      let (g5, skip_zero_end) = g4.new_label()
+                      g = g5
+                      g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                      g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0))) // digit count
+                      g = g.emit_inst(Cmp(Reg64("r14"), Imm32(0)))
+                      g = g.emit_inst(Je(done_label))
+                      g = g.define_label(digit_loop)
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("r14")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                      g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                      g = g.emit_inst(Idiv(Reg64("rsi"))) // rax = quotient, rdx = remainder
+                      g = g.emit_inst(Mov(Reg64("r14"), Reg64("rax"))) // save quotient in r14
+                      g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("dl")))
+                      g = g.emit_inst(Dec(Reg64("rdi")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Cmp(Reg64("r14"), Imm32(0)))
+                      g = g.emit_inst(Jne(digit_loop))
+                      g = g.define_label(done_label)
+                      g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                      g = g.emit_inst(Jne(skip_zero))
+                      g = g.emit_inst(Mov(Reg8("dl"), Imm8(48)))
+                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("dl")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Jmp(skip_zero_end))
+                      g = g.define_label(skip_zero)
+                      g = g.emit_inst(Inc(Reg64("rdi")))
+                      g = g.define_label(skip_zero_end)
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                      // Print the element
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      // Increment index and loop
+                      g = g.emit_inst(Inc(Reg64("rbx")))
+                      g = g.emit_inst(Cmp(Reg64("rbx"), Reg64("r13")))
+                      g = g.emit_inst(Jl(elem_loop))
+                      g = g.define_label(elem_done)
+                      // Print "]"
+                      let (g2, label2) = g.add_string("]")
+                      g = g2
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label2)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      // Restore saved registers
+                      g = g.emit_inst(Pop(Reg64("r14")))
+                      g = g.emit_inst(Pop(Reg64("r13")))
+                      g = g.emit_inst(Pop(Reg64("r12")))
+                      g = g.emit_inst(Pop(Reg64("rbx")))
+                    } else {
+                      // Not an array, treat as integer
+                      g = g.codegen_expr(arg)
+                      let buf_label = ".Lint_buf"
+                      let (g2, digit_loop) = g.new_label()
+                      let (g3, done_label) = g2.new_label()
+                      let (g4, skip_zero) = g3.new_label()
+                      let (g5, skip_zero_end) = g4.new_label()
+                      g = g5
+                      g = g.emit_inst(Push(Reg64("rbx")))
+                      g = g.emit_inst(Push(Reg64("rcx")))
+                      g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                      g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                      g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                      g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                      g = g.emit_inst(Je(done_label))
+                      g = g.define_label(digit_loop)
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                      g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                      g = g.emit_inst(Idiv(Reg64("rsi")))
+                      g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                      g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                      g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                      g = g.emit_inst(Dec(Reg64("rdi")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                      g = g.emit_inst(Jne(digit_loop))
+                      g = g.define_label(done_label)
+                      g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                      g = g.emit_inst(Jne(skip_zero))
+                      g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
+                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Jmp(skip_zero_end))
+                      g = g.define_label(skip_zero)
+                      g = g.emit_inst(Inc(Reg64("rdi")))
+                      g = g.define_label(skip_zero_end)
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                      g = g.emit_inst(Pop(Reg64("rcx")))
+                      g = g.emit_inst(Pop(Reg64("rbx")))
+                    }
                   CallExpr(Ident(fname), inner_args) =>
                     if fname == "int_to_string" {
                       g = g.codegen_expr(arg)
@@ -2375,15 +2607,23 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       if num_elems == 0 {
         self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
       } else {
-        let array_size = num_elems * 8
-        let first_elem_offset = self.next_offset - array_size
-        let mut g = { ..self, next_offset: first_elem_offset }
+        // Total size: elements + length header
+        let total_size = (num_elems + 1) * 8
+        // Calculate where the length field will be (top of array)
+        let array_offset = self.next_offset - total_size
+        let mut g = { ..self, next_offset: array_offset }
+        // Store elements in reverse order (last element pushed first, at lowest address)
         let mut i = num_elems - 1
         while i >= 0 {
           g = g.codegen_expr(elems[i])
           g = g.emit_inst(Push(Reg64("rax")))
           i = i - 1
         }
+        // Now push length last so it's at rsp (lowest address)
+        g = g.emit_inst(Mov(Reg64("rax"), Imm32(num_elems)))
+        g = g.emit_inst(Push(Reg64("rax")))
+        // rax = address of length field (rsp)
+        // Layout: [length][elem0][elem1]...
         g = g.emit_inst(Mov(Reg64("rax"), Reg64("rsp")))
         g
       }
@@ -2400,7 +2640,13 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
       }
       let g = g.emit_inst(Pop(Reg64("rcx")))
-      let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+      // For arrays, add 8 to skip the length field (offset 0 is length, elements start at offset 8)
+      let g = if is_str {
+        g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+      } else {
+        let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+        g.emit_inst(Add(Reg64("rcx"), Imm32(8)))
+      }
       let g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rcx")))
       g
     }
@@ -2708,8 +2954,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           }
         IndexExpr(arr, idx) => {
           // Array element assignment: arr[idx] = value
+          // Arrays are stored as memory addresses (from rsp)
           let g = self.codegen_expr(arr)
-          // Save the offset
+          // Save the array address
           let g = g.emit_inst(Push(Reg64("rax")))
           // Evaluate index
           let g = g.codegen_expr(idx)
@@ -2717,18 +2964,15 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           let g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
           let g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
           // rax = index * 8
-          // Pop array offset
+          // Pop array address
           let g = g.emit_inst(Pop(Reg64("rcx")))
-          // rcx = base_offset + index*8
+          // rcx = array_addr + index*8 + 8 (skip length field)
           let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+          let g = g.emit_inst(Add(Reg64("rcx"), Imm32(8)))
           // Evaluate value
           let g = g.codegen_expr(value)
-          // Store value at [rbp + rcx]
-          let g = g.emit_inst(Push(Reg64("rbx")))
-          let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rbp")))
-          let g = g.emit_inst(Add(Reg64("rbx"), Reg64("rcx")))
-          let g = g.emit_inst(Mov(MemIndirect("rbx"), Reg64("rax")))
-          g.emit_inst(Pop(Reg64("rbx")))
+          // Store value at [rcx]
+          g.emit_inst(Mov(MemIndirect("rcx"), Reg64("rax")))
         }
         FieldExpr(obj, _field) =>
           // Field assignment: obj.field = value
@@ -2801,6 +3045,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           }
         IndexExpr(arr, idx) => {
           // Array element compound assignment: arr[idx] += value
+          // Arrays are stored as memory addresses
           let g = self.codegen_expr(arr)
           let g = g.emit_inst(Push(Reg64("rax")))
           let g = g.codegen_expr(idx)
@@ -2808,12 +3053,10 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           let g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
           let g = g.emit_inst(Pop(Reg64("rcx")))
           let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
-          // rcx = base_offset + index*8
-          // Load current value at [rbp + rcx]
-          let g = g.emit_inst(Push(Reg64("rbx")))
-          let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rbp")))
-          let g = g.emit_inst(Add(Reg64("rbx"), Reg64("rcx")))
-          let g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rbx")))
+          let g = g.emit_inst(Add(Reg64("rcx"), Imm32(8))) // skip length field
+          // rcx = array_addr + 8 + index*8
+          // Load current value
+          let g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rcx")))
           let g = g.emit_inst(Push(Reg64("rax")))
           // Evaluate value
           let g = g.codegen_expr(value)
@@ -2826,21 +3069,17 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             "-" => g.emit_inst(Sub(Reg64("rcx"), Reg64("rax")))
             "*" => g.emit_inst(Imul(Reg64("rcx"), Reg64("rax")))
             "/" => {
-              // Save divisor in r8, save rbx on stack temporarily
               let g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
               let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
               let g = g.emit_inst(Cqo)
               let g = g.emit_inst(Idiv(Reg64("r8")))
-              // Quotient in rax, move to rcx
               g.emit_inst(Mov(Reg64("rcx"), Reg64("rax")))
             }
             "%" => {
-              // Save divisor in r8
               let g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
               let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
               let g = g.emit_inst(Cqo)
               let g = g.emit_inst(Idiv(Reg64("r8")))
-              // Remainder in rdx, move to rcx
               g.emit_inst(Mov(Reg64("rcx"), Reg64("rdx")))
             }
             "&" => g.emit_inst(And(Reg64("rcx"), Reg64("rax")))
@@ -2856,9 +3095,22 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             }
             _ => g
           }
-          // Store result
-          let g = g.emit_inst(Mov(MemIndirect("rbx"), Reg64("rcx")))
-          g.emit_inst(Pop(Reg64("rbx")))
+          // Store result - need to recalculate address
+          // Push result
+          let g = g.emit_inst(Push(Reg64("rcx")))
+          // Recalculate address
+          let g = g.codegen_expr(arr)
+          let g = g.emit_inst(Push(Reg64("rax")))
+          let g = g.codegen_expr(idx)
+          let g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
+          let g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
+          let g = g.emit_inst(Pop(Reg64("rcx")))
+          let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+          let g = g.emit_inst(Add(Reg64("rcx"), Imm32(8)))
+          // Pop result
+          let g = g.emit_inst(Pop(Reg64("rax")))
+          // Store
+          g.emit_inst(Mov(MemIndirect("rcx"), Reg64("rax")))
         }
         _ => self.codegen_expr(value)
       }
