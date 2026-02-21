@@ -2815,27 +2815,20 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     ForInLoop(var_name, iter, body) => {
       // for-in loop: for x in arr { body }
       // Array layout: [length][elem0][elem1]...
+      // Use callee-saved registers: r12=array, r13=length, r14=counter
       let mut g = self
-      // Allocate space on stack for array address, length, counter
-      // These will be at fixed offsets from rbp
-      // Save current next_offset as base for loop variables
-      let loop_base = g.next_offset
-      let array_offset = loop_base - 8
-      let length_offset = loop_base - 16
-      let counter_offset = loop_base - 24
-      // Update next_offset to account for our loop variables
-      g = { ..g, next_offset: counter_offset }
+      // Save callee-saved registers
+      g = g.emit_inst(Push(Reg64("r12")))
+      g = g.emit_inst(Push(Reg64("r13")))
+      g = g.emit_inst(Push(Reg64("r14")))
       // 1. Evaluate the array expression
       g = g.codegen_expr(iter)
-      // rax = array address
-      // Save array address
-      g = g.emit_inst(Mov(StackBP64(array_offset), Reg64("rax")))
+      // rax = array address, save to r12
+      g = g.emit_inst(Mov(Reg64("r12"), Reg64("rax")))
       // 2. Load array length (first 8 bytes at array address)
-      g = g.emit_inst(Mov(Reg64("rbx"), MemIndirect("rax"))) // rbx = array length
-      // Save length
-      g = g.emit_inst(Mov(StackBP64(length_offset), Reg64("rbx")))
-      // 3. Initialize counter at 0
-      g = g.emit_inst(Mov(StackBP64(counter_offset), Imm32(0)))
+      g = g.emit_inst(Mov(Reg64("r13"), MemIndirect("rax"))) // r13 = array length
+      // 3. Initialize counter at 0, save to r14
+      g = g.emit_inst(Mov(Reg64("r14"), Imm32(0)))
       // 4. Create loop labels
       let loop_label = ".Lforin_loop\{self.label_counter}"
       let end_label = ".Lforin_end\{self.label_counter + 1}"
@@ -2844,15 +2837,15 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       // Define loop label
       g = g.define_label(loop_label)
       // 5. Check if counter >= length
-      g = g.emit_inst(Mov(Reg64("rax"), StackBP64(counter_offset))) // rax = counter
-      g = g.emit_inst(Mov(Reg64("rbx"), StackBP64(length_offset))) // rbx = length
+      g = g.emit_inst(Mov(Reg64("rax"), Reg64("r14"))) // rax = counter
+      g = g.emit_inst(Mov(Reg64("rbx"), Reg64("r13"))) // rbx = length
       g = g.emit_inst(Cmp(Reg64("rax"), Reg64("rbx")))
       g = g.emit_inst(Jge(end_label))
       // 6. Load array element at index counter
       // element_addr = array_addr + counter*8 + 8
-      g = g.emit_inst(Mov(Reg64("rcx"), StackBP64(array_offset))) // rcx = array_addr
+      g = g.emit_inst(Mov(Reg64("rcx"), Reg64("r12"))) // rcx = array_addr
       // Multiply counter by 8
-      g = g.emit_inst(Mov(Reg64("rax"), StackBP64(counter_offset))) // rax = counter
+      g = g.emit_inst(Mov(Reg64("rax"), Reg64("r14"))) // rax = counter
       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
       g = g.emit_inst(Imul(Reg64("rax"), Reg64("rdx"))) // rax = counter * 8
       // Add to array address
@@ -2868,19 +2861,19 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g = g.emit_inst(Mov(StackBP64(offset), Reg64("rax")))
       // 8. Execute body
       g = g.codegen_expr(body)
-      // 9. After body, restore next_offset for counter/length/array
-      g = { ..g, next_offset: counter_offset }
-      // 10. Increment counter
-      g = g.emit_inst(Mov(Reg64("rax"), StackBP64(counter_offset))) // rax = counter
-      g = g.emit_inst(Inc(Reg64("rax"))) // rax = counter + 1
-      g = g.emit_inst(Mov(StackBP64(counter_offset), Reg64("rax"))) // store counter
-      // 11. Jump back to loop
+      // 9. Increment counter
+      g = g.emit_inst(Inc(Reg64("r14"))) // r14 = counter + 1
+      // 10. Jump back to loop
       g = g.emit_inst(Jmp(loop_label))
-      // 12. Define end label
+      // 11. Define end label
       g = g.define_label(end_label)
       // Pop loop labels
       let new_labels = g.loop_labels
       ignore(new_labels.pop())
+      // Restore callee-saved registers
+      g = g.emit_inst(Pop(Reg64("r14")))
+      g = g.emit_inst(Pop(Reg64("r13")))
+      g = g.emit_inst(Pop(Reg64("r12")))
       { ..g, loop_labels: new_labels }
     }
     Break =>

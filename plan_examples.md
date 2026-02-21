@@ -12,7 +12,7 @@
 | 006_basic_string | ✅ | ⚠️ | Basic strings work; `get_char()`, char equality, `+` for strings, interpolation not working |
 | 007_basic_tuple | ✅ | ⚠️ | Tuples parse; field access works for arrays but not for values (mixed types issue) |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
-| 009_basic_control_flows | ✅ | ⚠️ | fib/while/C-for work; for-in loop iterates but gives 14 instead of 15 (off-by-one bug) |
+| 009_basic_control_flows | ✅ | ✅ | All loops work: fib/while/C-for/for-in ✅ |
 | 010_basic_struct | ✅ | ❌ | Structs not working |
 | 011_basic_enum | ✅ | ❌ | Enums not working |
 | 012_basic_test | ✅ | ❌ | Test blocks ignored |
@@ -74,7 +74,7 @@ These are foundational issues blocking multiple examples.
 
 ### 3.1 Loops
 - [x] Implement C-style for loop `for i=0; i<n; i=i+1`
-- [x] Implement for-in loop `for x in arr` (partially working - gives 14 instead of 15)
+- [x] Implement for-in loop `for x in arr` ✅
 - [x] Implement while loop
 - [ ] Implement break statement
 - [ ] Implement continue statement
@@ -147,7 +147,7 @@ Update this section as tasks are completed:
 - [ ] 006_basic_string working
 - [ ] 007_basic_tuple working
 - [ ] 008_basic_map working
-- [ ] 009_basic_control_flows working
+- [x] 009_basic_control_flows working
 - [ ] 010_basic_struct working
 - [ ] 011_basic_enum working
 - [ ] 012_basic_test working
