@@ -2371,30 +2371,20 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g
     }
     ArrayLit(elems) => {
-      // Allocate array on stack by pushing elements
-      // Elements are pushed in reverse order so index 0 is at lowest address
-      // Result: rax = rbp-relative offset of first element
       let num_elems = elems.length()
       if num_elems == 0 {
-        // Empty array: return 0 offset
         self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
       } else {
         let array_size = num_elems * 8
         let first_elem_offset = self.next_offset - array_size
         let mut g = { ..self, next_offset: first_elem_offset }
-        // Push elements in reverse order (so index 0 ends up at lowest address)
         let mut i = num_elems - 1
         while i >= 0 {
           g = g.codegen_expr(elems[i])
           g = g.emit_inst(Push(Reg64("rax")))
           i = i - 1
         }
-        // After all pushes, rsp points to first element
-        // Return the rbp-relative offset of the first element
-        // We compute: offset = rsp - rbp (this will be negative)
-        // mov rax, rsp; sub rax, rbp
-        let g = g.emit_inst(Mov(Reg64("rax"), Reg64("rsp")))
-        let g = g.emit_inst(Sub(Reg64("rax"), Reg64("rbp")))
+        g = g.emit_inst(Mov(Reg64("rax"), Reg64("rsp")))
         g
       }
     }
@@ -2411,11 +2401,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       }
       let g = g.emit_inst(Pop(Reg64("rcx")))
       let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
-      let g = g.emit_inst(Push(Reg64("rbx")))
-      let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rbp")))
-      let g = g.emit_inst(Add(Reg64("rbx"), Reg64("rcx")))
-      let g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rbx")))
-      g.emit_inst(Pop(Reg64("rbx")))
+      let g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rcx")))
+      g
     }
     Tuple(elems) => {
       let num_elems = elems.length()

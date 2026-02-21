@@ -295,21 +295,40 @@ fn Parser::parse_while(self : Parser) -> (AST, Parser) {
 ///|
 fn Parser::parse_for(self : Parser) -> (AST, Parser) {
   let p = self.skip(1)
-  let (init, p2) = if self_token_eq(p.current(), LParen) {
-    let p3 = p.skip(1)
-    if self_token_eq(p3.current(), Semicolon) {
-      (None, p3.skip(1))
+  // Check if there's a '(' or if it's a simple identifier (for i = ...)
+  let has_paren = self_token_eq(p.current(), LParen)
+  let p_after_paren = if has_paren { p.skip(1) } else { p }
+
+  // Parse init (can be let-binding, assignment, or empty)
+  let (init, p2) = if self_token_eq(p_after_paren.current(), Semicolon) {
+    (None, p_after_paren.skip(1))
+  } else if self_token_eq(p_after_paren.current(), Let) {
+    // let binding
+    let (expr, p4) = p_after_paren.parse_let()
+    if self_token_eq(p4.current(), Semicolon) {
+      (Some(expr), p4.skip(1))
     } else {
-      let (expr, p4) = p3.parse_expr()
-      if self_token_eq(p4.current(), Semicolon) {
-        (Some(expr), p4.skip(1))
-      } else {
-        (Some(expr), p4)
-      }
+      (Some(expr), p4)
     }
   } else {
-    (None, p)
+    // Could be an identifier = value (for loop variable) or other expression
+    let (expr, p4) = p_after_paren.parse_expr()
+    // Check if this is an assignment to an undeclared variable (for loop init)
+    let init_expr = match expr {
+      Assign(Ident(name), value) =>
+        // Convert to LetBind for the loop scope
+        // We'll use Unit as the body since it's just initialization
+        LetBind(name, None, value, Unit)
+      _ => expr
+    }
+    if self_token_eq(p4.current(), Semicolon) {
+      (Some(init_expr), p4.skip(1))
+    } else {
+      (Some(init_expr), p4)
+    }
   }
+
+  // Parse condition
   let (cond, p3) = if self_token_eq(p2.current(), Semicolon) {
     (None, p2.skip(1))
   } else {
@@ -320,17 +339,27 @@ fn Parser::parse_for(self : Parser) -> (AST, Parser) {
       (Some(expr), p4)
     }
   }
-  let (step, p4) = if self_token_eq(p3.current(), RParen) {
-    (None, p3.advance())
+
+  // Parse step (either until ')' or until '{')
+  let (step, p4) = if has_paren {
+    if self_token_eq(p3.current(), RParen) {
+      (None, p3.advance())
+    } else {
+      let (expr, p5) = p3.parse_expr()
+      if self_token_eq(p5.current(), RParen) {
+        (Some(expr), p5.advance())
+      } else {
+        (Some(expr), p5)
+      }
+    }
+    // No parentheses - step goes until '{'
+  } else if self_token_eq(p3.current(), LBrace) {
+    (None, p3)
   } else {
     let (expr, p5) = p3.parse_expr()
-    // Skip the ')' after step expression
-    if self_token_eq(p5.current(), RParen) {
-      (Some(expr), p5.advance())
-    } else {
-      (Some(expr), p5)
-    }
+    (Some(expr), p5)
   }
+
   let (body, p5) = p4.parse_block_or_expr()
   (ForLoop(init, cond, step, body), p5)
 }
@@ -431,10 +460,18 @@ fn Parser::parse_type_name(self : Parser) -> (String, Parser) {
   match self.current() {
     Ident(name) => {
       let p = self.advance()
-      if self_token_eq(p.current(), LtLt) {
+      if self_token_eq(p.current(), LBracket) {
         let p2 = p.skip(1)
         let (inner, p3) = p2.parse_type_name()
-        ("Array<\{inner}>", p3)
+        if self_token_eq(p3.current(), RBracket) {
+          ("\{name}[\{inner}]", p3.advance())
+        } else {
+          ("\{name}[\{inner}]", p3)
+        }
+      } else if self_token_eq(p.current(), LtLt) {
+        let p2 = p.skip(1)
+        let (inner, p3) = p2.parse_type_name()
+        ("\{name}<\{inner}>", p3)
       } else {
         (name, p)
       }
@@ -488,7 +525,24 @@ fn Parser::parse_params(self : Parser) -> (Array[(String, AST?)], Parser) {
 ///|
 fn Parser::parse_type(self : Parser) -> (AST, Parser) {
   match self.current() {
-    Ident(name) => (Ident(name), self.advance())
+    Ident(name) => {
+      let p = self.advance()
+      if self_token_eq(p.current(), LBracket) {
+        let p2 = p.skip(1)
+        let (inner, p3) = p2.parse_type()
+        let inner_name = match inner {
+          Ident(n) => n
+          _ => "Unknown"
+        }
+        if self_token_eq(p3.current(), RBracket) {
+          (Ident("\{name}[\{inner_name}]"), p3.advance())
+        } else {
+          (Ident("\{name}[\{inner_name}]"), p3)
+        }
+      } else {
+        (Ident(name), p)
+      }
+    }
     LParen => self.parse_type_tuple()
     _ => (Ident("Unknown"), self)
   }

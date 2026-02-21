@@ -70,9 +70,9 @@ These are foundational issues blocking multiple examples.
 ## Phase 3: Control Flow (MEDIUM PRIORITY)
 
 ### 3.1 Loops
-- [ ] Implement C-style for loop `for i=0; i<n; i=i+1`
+- [x] Implement C-style for loop `for i=0; i<n; i=i+1`
 - [ ] Implement for-in loop `for x in arr`
-- [ ] Implement while loop
+- [x] Implement while loop
 - [ ] Implement break statement
 - [ ] Implement continue statement
 
