@@ -12,7 +12,7 @@
 | 006_basic_string | ✅ | ❌ | String ops broken |
 | 007_basic_tuple | ✅ | ❌ | Tuples broken, interpolation fails |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
-| 009_basic_control_flows | ✅ | ⚠️ | Outputs `<value>` placeholder |
+| 009_basic_control_flows | ✅ | ⚠️ | fib/while/C-for work; for-in loop parses but only executes body once (not iterating) |
 | 010_basic_struct | ✅ | ❌ | Structs not working |
 | 011_basic_enum | ✅ | ❌ | Enums not working |
 | 012_basic_test | ✅ | ❌ | Test blocks ignored |
