@@ -338,7 +338,9 @@ fn Parser::parse_for(self : Parser) -> (AST, Parser) {
 ///|
 fn Parser::parse_let(self : Parser) -> (AST, Parser) {
   let p = self.skip(1)
-  let (name, p2) = p.parse_ident()
+  let is_mut = self_token_eq(p.current(), Mut)
+  let p_after_mut = if is_mut { p.skip(1) } else { p }
+  let (name, p2) = p_after_mut.parse_ident()
   let (annot, p3) = if self_token_eq(p2.current(), Colon) {
     let p4 = p2.skip(1)
     let (t, p5) = p4.parse_type()

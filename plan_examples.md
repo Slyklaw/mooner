@@ -4,8 +4,8 @@
 
 | Example | Compile | Run | Priority Issues |
 |---------|---------|-----|-----------------|
-| 001_hello | ✅ | ❌ | String literals not printing |
-| 002_variable | ✅ | ⚠️ | Arithmetic returns 0, bool prints as 0 |
+| 001_hello | ✅ | ✅ | **FIXED** - Multiline strings now work |
+| 002_variable | ✅ | ✅ | **FIXED** - `let mut` parsing and boolean output work |
 | 003_basic_constants | ✅ | ⚠️ | Hex/binary/underscore literals fail |
 | 004_basic_function | ✅ | ❌ | Function calls not executing |
 | 005_basic_array | ✅ | ❌ | Arrays broken, garbage values |
@@ -23,14 +23,14 @@
 These are foundational issues blocking multiple examples.
 
 ### 1.1 Output System
-- [ ] Fix `println()` to output strings correctly
-- [ ] Fix `println()` to output integer values correctly
-- [ ] Fix `println()` to output boolean values (true/false, not 0/1)
+- [x] Fix `println()` to output strings correctly (multiline `#|` strings now supported)
+- [x] Fix `println()` to output integer values correctly
+- [x] Fix `println()` to output boolean values (true/false, not 0/1)
 
 ### 1.2 Expressions & Arithmetic
-- [ ] Fix integer arithmetic (10 + 20 should = 30, not 0)
-- [ ] Fix boolean literals (false should print as "false")
-- [ ] Fix variable assignment and retrieval
+- [x] Fix integer arithmetic (10 + 20 should = 30, not 0)
+- [x] Fix boolean literals (false should print as "false")
+- [x] Fix variable assignment and retrieval (`let mut` now parses correctly)
 
 ### 1.3 Function Calls
 - [ ] Fix function calls with arguments `add(2, 40)`
@@ -135,8 +135,8 @@ These are foundational issues blocking multiple examples.
 
 Update this section as tasks are completed:
 
-- [ ] 001_hello working
-- [ ] 002_variable working
+- [x] 001_hello working
+- [x] 002_variable working
 - [ ] 003_basic_constants working
 - [ ] 004_basic_function working
 - [ ] 005_basic_array working

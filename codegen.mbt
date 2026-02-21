@@ -98,6 +98,7 @@ pub struct CodeGen {
   var_offsets : Map[String, Int]
   var_is_float : Map[String, Bool]
   var_is_string : Map[String, Bool]
+  var_is_bool : Map[String, Bool]
   var_types : Map[String, String]
   next_offset : Int
   current_func : String?
@@ -120,6 +121,7 @@ fn CodeGen::new() -> CodeGen {
     var_offsets: Map::new(),
     var_is_float: Map::new(),
     var_is_string: Map::new(),
+    var_is_bool: Map::new(),
     var_types: Map::new(),
     next_offset: -8,
     current_func: None,
@@ -1508,6 +1510,25 @@ fn is_string_expr(expr : AST, var_is_string : Map[String, Bool]) -> Bool {
 }
 
 ///|
+fn is_bool_expr(expr : AST, var_is_bool : Map[String, Bool]) -> Bool {
+  match expr {
+    Bool(_) => true
+    Ident(name) => var_is_bool.get(name) == Some(true)
+    Unary("!", _) => true
+    Binary(op, _, _) =>
+      op == "==" ||
+      op == "!=" ||
+      op == "<" ||
+      op == ">" ||
+      op == "<=" ||
+      op == ">=" ||
+      op == "&&" ||
+      op == "||"
+    _ => false
+  }
+}
+
+///|
 fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
   match expr {
     Int(n) => {
@@ -1819,6 +1840,13 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
                 g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
               }
+              Bool(b) => {
+                let s = if b { "true" } else { "false" }
+                let (g2, label) = g.add_string(s)
+                g = g2
+                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+              }
               CallExpr(Ident(fname), inner_args) =>
                 if fname == "int_to_string" {
                   g = g.codegen_expr(arg)
@@ -1858,6 +1886,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               _ => {
                 let is_float = is_float_expr(arg, g.var_is_float)
                 let is_string = is_string_expr(arg, g.var_is_string)
+                let is_bool = is_bool_expr(arg, g.var_is_bool)
                 let is_int = is_int_expr(arg, g.var_is_float)
                 if is_string {
                   g = g.codegen_expr(arg)
@@ -1882,6 +1911,24 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   g = g2
                   g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
                   g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                } else if is_bool {
+                  let (g2, true_label) = g.new_label()
+                  let (g3, end_label) = g2.new_label()
+                  g = g3
+                  g = g.codegen_expr(arg)
+                  g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
+                  g = g.emit_inst(Je(true_label))
+                  let (g4, s_true) = g.add_string("true")
+                  g = g4
+                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_true)))
+                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(4)))
+                  g = g.emit_inst(Jmp(end_label))
+                  g = g.define_label(true_label)
+                  let (g5, s_false) = g.add_string("false")
+                  g = g5
+                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_false)))
+                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
+                  g = g.define_label(end_label)
                 } else if is_int {
                   g = g.codegen_expr(arg)
                   let buf_label = ".Lint_buf"
@@ -2403,6 +2450,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     LetBind(name, _annot, value, body) => {
       let is_float = is_float_expr(value, self.var_is_float)
       let is_string = is_string_expr(value, self.var_is_string)
+      let is_bool = is_bool_expr(value, self.var_is_bool)
       let is_struct_or_tuple = match value {
         StructLit(_, _) => true
         Tuple(_) => true
@@ -2429,6 +2477,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         new_floats[name] = is_float
         let new_strings = g2.var_is_string
         new_strings[name] = is_string
+        let new_bools = g2.var_is_bool
+        new_bools[name] = is_bool
         let new_types = g2.var_types
         match struct_type {
           Some(type_name) => new_types[name] = type_name
@@ -2439,6 +2489,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_offsets: new_offsets,
           var_is_float: new_floats,
           var_is_string: new_strings,
+          var_is_bool: new_bools,
           var_types: new_types,
           next_offset: offset - 8,
         }

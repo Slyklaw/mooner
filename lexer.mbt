@@ -2,6 +2,7 @@
 pub enum Token {
   Fn
   Let
+  Mut
   If
   Else
   Match
@@ -338,6 +339,53 @@ fn Lexer::read_number(self : Lexer) -> (String, Lexer) {
 }
 
 ///|
+fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
+  let mut lexer = self
+  let mut s = ""
+  let mut first_line = true
+  let mut done = false
+  while not(done) {
+    match char_at(lexer.input, lexer.pos) {
+      Some('#') =>
+        if char_at(lexer.input, lexer.pos + 1) == Some('|') {
+          lexer = lexer.advance().advance()
+          if not(first_line) {
+            s = s + "\n"
+          }
+          first_line = false
+          let mut line_done = false
+          while not(line_done) {
+            match char_at(lexer.input, lexer.pos) {
+              Some('\n') => {
+                lexer = lexer.advance()
+                line_done = true
+              }
+              Some(c) => {
+                s = s + c.to_string()
+                lexer = lexer.advance()
+              }
+              None => {
+                line_done = true
+                done = true
+              }
+            }
+          }
+        } else {
+          done = true
+        }
+      Some(c) =>
+        if is_whitespace(c) {
+          lexer = lexer.advance()
+        } else {
+          done = true
+        }
+      None => done = true
+    }
+  }
+  (s, lexer)
+}
+
+///|
 fn Lexer::read_string(self : Lexer) -> (String, Lexer) {
   let mut lexer = self.advance()
   let mut s = ""
@@ -442,6 +490,7 @@ fn is_keyword(s : String) -> Token {
   match s {
     "fn" => Fn
     "let" => Let
+    "mut" => Mut
     "if" => If
     "else" => Else
     "match" => Match
@@ -475,6 +524,7 @@ fn token_eq(a : Token, b : Token) -> Bool {
     (Eof, Eof) => true
     (Fn, Fn) => true
     (Let, Let) => true
+    (Mut, Mut) => true
     (If, If) => true
     (Else, Else) => true
     (Match, Match) => true
@@ -578,6 +628,9 @@ pub fn Lexer::next_token(self : Lexer) -> (Token, Lexer) {
       } else if c == '\'' {
         let (ch, lexer2) = lexer.read_char()
         (Char(ch), lexer2)
+      } else if c == '#' && char_at(lexer.input, lexer.pos + 1) == Some('|') {
+        let (s, lexer2) = lexer.read_multiline_string()
+        (String(s), lexer2)
       } else {
         let lexer2 = lexer.advance()
         match c {
