@@ -2791,22 +2791,70 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     }
     ForInLoop(var_name, iter, body) => {
       // for-in loop: for x in arr { body }
-      // Not fully implemented - need proper iteration
-      // For now, just execute body once (to avoid blocking progress on other features)
+      // Array layout: [length][elem0][elem1]...
       let mut g = self
-      // Create a variable in scope
+      // 1. Evaluate the array expression
+      g = g.codegen_expr(iter)
+      // rax = array address
+      // Save array address on the stack (will use rbp addressing instead)
+      let array_offset = g.next_offset - 8
+      g = { ..g, next_offset: array_offset }
+      g = g.emit_inst(Mov(StackBP64(array_offset), Reg64("rax")))
+      // 2. Load array length (first 8 bytes at array address)
+      g = g.emit_inst(Mov(Reg64("rbx"), MemIndirect("rax"))) // rbx = array length
+      // Save length on stack
+      let length_offset = g.next_offset - 8
+      g = { ..g, next_offset: length_offset }
+      g = g.emit_inst(Mov(StackBP64(length_offset), Reg64("rbx")))
+      // 3. Initialize counter at 0
+      let counter_offset = g.next_offset - 8
+      g = { ..g, next_offset: counter_offset }
+      g = g.emit_inst(Mov(StackBP64(counter_offset), Imm32(0)))
+      // 4. Create loop labels
+      let loop_label = ".Lforin_loop\{self.label_counter}"
+      let end_label = ".Lforin_end\{self.label_counter + 1}"
+      g = { ..g, label_counter: self.label_counter + 2 }
+      g = { ..g, loop_labels: g.loop_labels + [(end_label, loop_label)] }
+      // Define loop label
+      g = g.define_label(loop_label)
+      // 5. Check if counter >= length
+      g = g.emit_inst(Mov(Reg64("rax"), StackBP64(counter_offset))) // rax = counter
+      g = g.emit_inst(Mov(Reg64("rbx"), StackBP64(length_offset))) // rbx = length
+      g = g.emit_inst(Cmp(Reg64("rax"), Reg64("rbx")))
+      g = g.emit_inst(Jge(end_label))
+      // 6. Load array element at index counter
+      // element_addr = array_addr + counter*8 + 8
+      // First get array address
+      g = g.emit_inst(Mov(Reg64("rcx"), StackBP64(array_offset))) // rcx = array_addr
+      // Multiply counter by 8
+      g = g.emit_inst(Mov(Reg64("rax"), StackBP64(counter_offset))) // rax = counter
+      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
+      g = g.emit_inst(Imul(Reg64("rax"), Reg64("rdx"))) // rax = counter * 8
+      // Add to array address
+      g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax"))) // rcx = array_addr + counter*8
+      g = g.emit_inst(Add(Reg64("rcx"), Imm32(8))) // rcx = array_addr + counter*8 + 8
+      // Load element into rax
+      g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rcx")))
+      // 7. Store into loop variable
       let offset = g.next_offset - 8
       let new_offsets = g.var_offsets
       new_offsets[var_name] = offset
       g = { ..g, next_offset: offset, var_offsets: new_offsets }
-      // Store dummy value 0
-      g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-      g = g.emit_inst(Push(Reg64("rax")))
-      // Execute body
+      g = g.emit_inst(Mov(StackBP64(offset), Reg64("rax")))
+      // 8. Execute body
       g = g.codegen_expr(body)
-      // Pop the dummy value
-      g = g.emit_inst(Pop(Reg64("rax")))
-      g
+      // 9. Increment counter
+      g = g.emit_inst(Mov(Reg64("rax"), StackBP64(counter_offset))) // rax = counter
+      g = g.emit_inst(Inc(Reg64("rax"))) // rax = counter + 1
+      g = g.emit_inst(Mov(StackBP64(counter_offset), Reg64("rax"))) // store counter
+      // 10. Jump back to loop
+      g = g.emit_inst(Jmp(loop_label))
+      // 11. Define end label
+      g = g.define_label(end_label)
+      // Pop loop labels
+      let new_labels = g.loop_labels
+      ignore(new_labels.pop())
+      { ..g, loop_labels: new_labels }
     }
     Break =>
       // Jump to break label of innermost loop
