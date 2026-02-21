@@ -1562,6 +1562,9 @@ fn is_string_expr(expr : AST, var_is_string : Map[String, Bool]) -> Bool {
   match expr {
     String(_) => true
     Ident(name) => var_is_string.get(name) == Some(true)
+    Binary("+", left, right) =>
+      is_string_expr(left, var_is_string) ||
+      is_string_expr(right, var_is_string)
     CallExpr(Ident(fname), _) =>
       fname == "string_concat" ||
       fname == "input" ||
@@ -1642,6 +1645,10 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               g.emit_inst(Sub(Reg64("rax"), Imm32(-offset)))
             }
             g
+          } else if self.var_is_string.get(name) == Some(true) {
+            // String - load the address from stack (rbp + offset)
+            let g = self.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
+            g
           } else {
             let g = self.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
             g
@@ -1694,6 +1701,62 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         // Simplified: just evaluate right array and return it
         let mut g = self
         g = g.codegen_expr(right)
+        g
+      } else if op == "+" && is_string {
+        // String concatenation: call string_concat function
+        // We need to pass both strings and call the concat logic
+        let mut g = self
+        // Evaluate first string
+        g = g.codegen_expr(left)
+        g = g.emit_inst(Push(Reg64("rax")))
+        // Evaluate second string  
+        g = g.codegen_expr(right)
+        // Move second string to rdi (second arg)
+        g = g.emit_inst(Mov(Reg64("rdi"), Reg64("rax")))
+        // Pop first string to rsi (first arg)
+        g = g.emit_inst(Pop(Reg64("rsi")))
+        // Call string_concat manually
+        // We'll inline the concatenation logic here
+        let (g2, copy1_loop) = g.new_label()
+        let (g3, copy1_done) = g2.new_label()
+        let (g4, copy2_loop) = g3.new_label()
+        let (g5, copy2_done) = g4.new_label()
+        g = g5
+        g = g.emit_inst(Push(Reg64("rbx")))
+        g = g.emit_inst(Push(Reg64("rcx")))
+        g = g.emit_inst(Push(Reg64("r8")))
+        let buf_label = ".Lstrcat_buf"
+        g = g.emit_inst(Lea(Reg64("rax"), RipRel32(buf_label)))
+        g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+        g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+        g = g.define_label(copy1_loop)
+        g = g.emit_inst(Movzx(Reg64("r8"), MemIndirect("rsi")))
+        g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
+        g = g.emit_inst(Je(copy1_done))
+        g = g.emit_inst(Mov(Reg8("al"), Reg8("r8b")))
+        g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+        g = g.emit_inst(Inc(Reg64("rbx")))
+        g = g.emit_inst(Inc(Reg64("rsi")))
+        g = g.emit_inst(Inc(Reg64("rcx")))
+        g = g.emit_inst(Jmp(copy1_loop))
+        g = g.define_label(copy1_done)
+        g = g.define_label(copy2_loop)
+        g = g.emit_inst(Movzx(Reg64("r8"), MemIndirect("rdi")))
+        g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
+        g = g.emit_inst(Je(copy2_done))
+        g = g.emit_inst(Mov(Reg8("al"), Reg8("r8b")))
+        g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+        g = g.emit_inst(Inc(Reg64("rbx")))
+        g = g.emit_inst(Inc(Reg64("rdi")))
+        g = g.emit_inst(Inc(Reg64("rcx")))
+        g = g.emit_inst(Jmp(copy2_loop))
+        g = g.define_label(copy2_done)
+        g = g.emit_inst(Mov(Reg8("al"), Imm8(0)))
+        g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+        g = g.emit_inst(Lea(Reg64("rax"), RipRel32(buf_label)))
+        g = g.emit_inst(Pop(Reg64("r8")))
+        g = g.emit_inst(Pop(Reg64("rcx")))
+        g = g.emit_inst(Pop(Reg64("rbx")))
         g
       } else if is_float {
         let g = self.codegen_expr(left)
@@ -1897,6 +1960,23 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               let g = self.codegen_expr(obj)
               g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
             }
+            "get_char" => {
+              // str.get_char(index) - returns char at index
+              // String is stored as address, we just get the byte at that offset
+              let mut g = self
+              // Evaluate the string
+              g = g.codegen_expr(obj)
+              g = g.emit_inst(Push(Reg64("rax"))) // save string address
+              // Evaluate index
+              g = g.codegen_expr(args[0])
+              // rax = index
+              // Add to string address
+              g = g.emit_inst(Pop(Reg64("rcx"))) // rcx = string address
+              g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax"))) // rcx = address + index
+              // Load byte and zero-extend to 32 bits
+              g = g.emit_inst(Movzx(Reg64("rax"), MemIndirect("rcx")))
+              g
+            }
             "push" =>
               match obj {
                 Ident(var_name) => {
@@ -1930,6 +2010,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 }
                 _ => self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
               }
+            "unwrap" => {
+              // For unwrap on Option types - evaluate the object first, then return value
+              // The object expression result (e.g., get_char result) should be in rax
+              let g = self.codegen_expr(obj)
+              g
+            }
             _ => self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
           }
         _ => {
@@ -1981,14 +2067,25 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   }
                   Ident(var_name) =>
                     if g.var_array_len.get(var_name) != None {
-                      // Print array: [elem0, elem1, ...]
-                      // For now, print placeholder since full printing is buggy
-                      // Don't do syscall here - let the common code handle it
+                      // Print array - simple placeholder
+                      g = g.codegen_expr(arg)
+                      // Print '<array>'
+                      let (g2, label1) = g.add_string("<array>")
+                      g = g2
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                    } else if is_array_expr(arg, g.var_array_len) {
+                      // Array literal - evaluate and print placeholder
                       g = g.codegen_expr(arg)
                       let (g2, label1) = g.add_string("<array>")
                       g = g2
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                    } else if g.var_is_string.get(var_name) == Some(true) {
+                      // String variable - evaluate and print the string
+                      // Print up to 32 chars
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(32)))
                     } else {
                       // Not an array, treat as integer
                       g = g.codegen_expr(arg)
