@@ -1971,13 +1971,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     if g.var_array_len.get(var_name) != None {
                       // Print array: [elem0, elem1, ...]
                       // For now, print placeholder since full printing is buggy
+                      // Don't do syscall here - let the common code handle it
+                      g = g.codegen_expr(arg)
                       let (g2, label1) = g.add_string("<array>")
                       g = g2
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
-                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
-                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
-                      g = g.emit_inst(Syscall)
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
                     } else {
                       // Not an array, treat as integer
                       g = g.codegen_expr(arg)
