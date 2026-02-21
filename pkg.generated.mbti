@@ -291,6 +291,7 @@ pub enum X86Operand {
   RipRel32(String)
   Label(String)
   MemIndirect(String)
+  MemOffset(String, Int)
 }
 pub impl Show for X86Operand
 

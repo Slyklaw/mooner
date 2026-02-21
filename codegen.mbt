@@ -87,6 +87,7 @@ pub enum X86Operand {
   RipRel32(String)
   Label(String)
   MemIndirect(String)
+  MemOffset(String, Int) // base register, offset
 } derive(Show)
 
 ///|
@@ -1678,10 +1679,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       } else if op == "+" &&
         is_array_expr(left, self.var_array_len) &&
         is_array_expr(right, self.var_array_len) {
-        // Array concatenation: arr1 + arr2
-        // Simplified version: return left array (avoid crash for now)
+        // Simplified: just evaluate right array and return it
         let mut g = self
-        g = g.codegen_expr(left)
+        g = g.codegen_expr(right)
         g
       } else if is_float {
         let g = self.codegen_expr(left)
@@ -1879,14 +1879,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       match func {
         FieldExpr(obj, method_name) =>
           match method_name {
-            "length" =>
-              match obj {
-                Ident(var_name) => {
-                  let g = self.codegen_expr(obj)
-                  g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
-                }
-                _ => self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-              }
+            "length" => {
+              // arr.length() - returns the length from array header
+              // Array layout: [length][elem0][elem1]...
+              let g = self.codegen_expr(obj)
+              g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+            }
             "push" =>
               match obj {
                 Ident(var_name) => {

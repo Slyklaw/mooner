@@ -8,7 +8,7 @@
 | 002_variable | ✅ | ✅ | **FIXED** - `let mut` parsing and boolean output work |
 | 003_basic_constants | ✅ | ✅ | **FIXED** - Hex/binary/underscore literals work |
 | 004_basic_function | ✅ | ✅ | **FIXED** - Multiple top-level functions and function calls work |
-| 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]` work; push/concat/spread crash or return placeholder; print shows `<array>` placeholder |
+| 005_basic_array | ✅ | ⚠️ | `arr.length()` works for any expr; `arr[i]` works; push crashes; concat returns left array (no crash); print shows `<array>` placeholder |
 | 006_basic_string | ✅ | ❌ | String ops broken |
 | 007_basic_tuple | ✅ | ❌ | Tuples broken, interpolation fails |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
