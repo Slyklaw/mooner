@@ -998,13 +998,13 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     Not(Reg64(dest)) => {
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0xF7)
-      let g = g.emit_modrm_reg64("rax", Reg64(dest))
+      let g = g.emit_modrm_reg64("rdx", Reg64(dest))
       g
     }
     Neg(Reg64(dest)) => {
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0xF7)
-      let g = g.emit_modrm_reg64("rax", Reg64(dest))
+      let g = g.emit_modrm_reg64("rbx", Reg64(dest))
       g
     }
     Inc(Reg64(dest)) =>

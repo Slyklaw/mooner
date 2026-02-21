@@ -1,0 +1,150 @@
+# Plan: Get Official MoonBit Examples Working
+
+## Status Summary
+
+| Example | Compile | Run | Priority Issues |
+|---------|---------|-----|-----------------|
+| 001_hello | ✅ | ❌ | String literals not printing |
+| 002_variable | ✅ | ⚠️ | Arithmetic returns 0, bool prints as 0 |
+| 003_basic_constants | ✅ | ⚠️ | Hex/binary/underscore literals fail |
+| 004_basic_function | ✅ | ❌ | Function calls not executing |
+| 005_basic_array | ✅ | ❌ | Arrays broken, garbage values |
+| 006_basic_string | ✅ | ❌ | String ops broken |
+| 007_basic_tuple | ✅ | ❌ | Tuples broken, interpolation fails |
+| 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
+| 009_basic_control_flows | ✅ | ⚠️ | Outputs `<value>` placeholder |
+| 010_basic_struct | ✅ | ❌ | Structs not working |
+| 011_basic_enum | ✅ | ❌ | Enums not working |
+| 012_basic_test | ✅ | ❌ | Test blocks ignored |
+| 013_pattern_matching | ✅ | ❌ | Pattern matching not working |
+
+## Phase 1: Core Runtime (HIGH PRIORITY)
+
+These are foundational issues blocking multiple examples.
+
+### 1.1 Output System
+- [ ] Fix `println()` to output strings correctly
+- [ ] Fix `println()` to output integer values correctly
+- [ ] Fix `println()` to output boolean values (true/false, not 0/1)
+
+### 1.2 Expressions & Arithmetic
+- [ ] Fix integer arithmetic (10 + 20 should = 30, not 0)
+- [ ] Fix boolean literals (false should print as "false")
+- [ ] Fix variable assignment and retrieval
+
+### 1.3 Function Calls
+- [ ] Fix function calls with arguments `add(2, 40)`
+- [ ] Fix function return values
+- [ ] Fix nested function calls
+
+### 1.4 Control Flow - Conditionals
+- [ ] Fix if/else to execute correct branch
+- [ ] Implement if/else as expressions (return values)
+
+## Phase 2: Data Types (HIGH-MEDIUM PRIORITY)
+
+### 2.1 Number Literals
+- [ ] Support hex literals `0xFFFF`
+- [ ] Support binary literals `0b1001`
+- [ ] Support underscore separators `100_000_000`
+
+### 2.2 Arrays
+- [ ] Implement Array type with literal syntax `[1, 2, 3]`
+- [ ] Implement array indexing `arr[0]`
+- [ ] Implement `array.length()` method
+- [ ] Implement `array.push()` mutation
+- [ ] Implement array concatenation `arr1 + arr2`
+- [ ] Implement spread operator `[..arr1, 1000, ..arr2]`
+
+### 2.3 Strings
+- [ ] Implement String concatenation `str1 + str2`
+- [ ] Implement `string.get_char(index)`
+- [ ] Implement escape sequences `\n`, `\t`, `\u{}`
+- [ ] Implement string interpolation `"\{lang}"`
+
+### 2.4 Tuples
+- [ ] Implement Tuple type `(a, b, c)`
+- [ ] Implement tuple element access `tuple.0`
+
+## Phase 3: Control Flow (MEDIUM PRIORITY)
+
+### 3.1 Loops
+- [ ] Implement C-style for loop `for i=0; i<n; i=i+1`
+- [ ] Implement for-in loop `for x in arr`
+- [ ] Implement while loop
+- [ ] Implement break statement
+- [ ] Implement continue statement
+
+## Phase 4: Structured Data (MEDIUM-LOW PRIORITY)
+
+### 4.1 Structs
+- [ ] Parse struct definitions
+- [ ] Implement struct construction `{ x: 3, y: 4 }`
+- [ ] Implement struct field access `point.x`
+- [ ] Implement mutable fields `mut x`
+- [ ] Implement functional update `{ ..point, x: 20 }`
+
+### 4.2 Enums
+- [ ] Parse enum definitions
+- [ ] Implement simple enum constructors `Red`, `Green`, `Blue`
+- [ ] Implement enum constructors with data `RGB(Int, Int, Int)`
+
+### 4.3 Pattern Matching
+- [ ] Implement basic match expressions
+- [ ] Implement constructor patterns `RGB(r, g, b)`
+- [ ] Implement wildcard pattern `_`
+- [ ] Implement guard expressions `guard x is pattern`
+
+## Phase 5: Advanced Features (LOW PRIORITY)
+
+### 5.1 Maps
+- [ ] Implement Map type with literal `{"key": val}`
+- [ ] Implement map access `map["key"]`
+- [ ] Implement map update `map["key"] = val`
+- [ ] Fix segfault in map operations
+
+### 5.2 Testing
+- [ ] Parse `test {}` blocks
+- [ ] Either execute or properly ignore test blocks
+
+### 5.3 Derives
+- [ ] Implement `derive(Show)` for auto toString
+
+---
+
+## Execution Order Recommendation
+
+1. **Start with Phase 1** - Core runtime issues affect everything
+   - Fix println → Fix arithmetic → Fix functions → Fix if/else
+
+2. **Then Phase 2.1-2.2** - Number literals and Arrays are most common
+   - Hex/binary literals → Array basics → Array methods
+
+3. **Then Phase 3** - Control flow needed for many examples
+   - For loops → While → Break/continue
+
+4. **Then Phase 2.3-2.4** - Strings and Tuples
+   - String concat → Interpolation → Tuples
+
+5. **Finally Phases 4-5** - Advanced types
+   - Structs → Enums → Pattern matching → Maps → Testing
+
+---
+
+## Progress Tracking
+
+Update this section as tasks are completed:
+
+- [ ] 001_hello working
+- [ ] 002_variable working
+- [ ] 003_basic_constants working
+- [ ] 004_basic_function working
+- [ ] 005_basic_array working
+- [ ] 006_basic_string working
+- [ ] 007_basic_tuple working
+- [ ] 008_basic_map working
+- [ ] 009_basic_control_flows working
+- [ ] 010_basic_struct working
+- [ ] 011_basic_enum working
+- [ ] 012_basic_test working
+- [ ] 013_pattern_matching working

@@ -54,38 +54,39 @@ pub fn compile_file(
      0x00, 0x10, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, // p_paddr = 0x401000
   ]
 
-  // Calculate code size
+  // Calculate code size and pad to page boundary
   let code_len = code.length()
   let padded_code_len = (code_len + 0xFFF) & 0xFFFFF000
 
-  // Create phdr_filesz (8 bytes for p_filesz)
-  let mut phdr_filesz_arr : Array[Byte] = []
-  let mut i = 0
-  while i < 8 {
-    phdr_filesz_arr = phdr_filesz_arr +
-      [((padded_code_len >> (i * 8)) & 0xFF).to_byte()]
-    i = i + 1
-  }
-
-  // Create phdr_memsz (same as filesz)
-  let mut phdr_memsz_arr : Array[Byte] = []
-  i = 0
-  while i < 8 {
-    phdr_memsz_arr = phdr_memsz_arr +
-      [((padded_code_len >> (i * 8)) & 0xFF).to_byte()]
-    i = i + 1
-  }
-
-  // Create phdr_bytes - simpler approach: directly create the bytes
+  // Create phdr_bytes - write padded_code_len as little-endian bytes
   let mut phdr_all : Array[Byte] = []
 
-  // p_filesz (8 bytes) - at offset 0x60 in file
-  // Value will be padded_code_len
-  // For now, create placeholder 0x1000 bytes
-  phdr_all = phdr_all + [0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+  // p_filesz (8 bytes) - padded_code_len in little-endian
+  // For a 32-bit Int, we only need the lower 4 bytes; upper 4 are zero
+  phdr_all = phdr_all +
+    [
+      (padded_code_len & 0xFF).to_byte(),
+      ((padded_code_len >> 8) & 0xFF).to_byte(),
+      ((padded_code_len >> 16) & 0xFF).to_byte(),
+      ((padded_code_len >> 24) & 0xFF).to_byte(),
+      0x00,
+      0x00,
+      0x00,
+      0x00, // Upper 4 bytes are always 0 for 32-bit values
+    ]
 
   // p_memsz (8 bytes) - same as filesz
-  phdr_all = phdr_all + [0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+  phdr_all = phdr_all +
+    [
+      (padded_code_len & 0xFF).to_byte(),
+      ((padded_code_len >> 8) & 0xFF).to_byte(),
+      ((padded_code_len >> 16) & 0xFF).to_byte(),
+      ((padded_code_len >> 24) & 0xFF).to_byte(),
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+    ]
 
   // p_align (8 bytes) = 0x1000
   phdr_all = phdr_all + [0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
@@ -93,7 +94,11 @@ pub fn compile_file(
   let phdr_bytes = Bytes::from_array(phdr_all)
   let header_bytes = Bytes::from_array(header)
   let padding_bytes = Bytes::from_array(padding)
-  let code_bytes = code
+
+  // Pad code to match padded_code_len
+  let code_padding_len = padded_code_len - code_len
+  let code_padding : Array[Byte] = Array::make(code_padding_len, 0x00)
+  let code_bytes = code + Bytes::from_array(code_padding)
 
   let result = header_bytes + phdr_bytes + padding_bytes + code_bytes
 
