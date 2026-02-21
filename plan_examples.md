@@ -10,9 +10,9 @@
 | 004_basic_function | ✅ | ✅ | **FIXED** - Multiple top-level functions and function calls work |
 | 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr.push()` work; concat returns left array (no crash); spread not impl; print shows `<array>` placeholder |
 | 006_basic_string | ✅ | ⚠️ | Basic strings work; `get_char()`, char equality, `+` for strings, interpolation not working |
-| 007_basic_tuple | ✅ | ❌ | Tuples broken, interpolation fails |
+| 007_basic_tuple | ✅ | ⚠️ | Tuples parse; field access works for arrays but not for values (mixed types issue) |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
-| 009_basic_control_flows | ✅ | ⚠️ | fib/while/C-for work; for-in loop parses and iterates but gives 14 instead of 15 (off-by-one issue) |
+| 009_basic_control_flows | ✅ | ⚠️ | fib/while/C-for work; for-in loop iterates but gives 14 instead of 15 (off-by-one bug) |
 | 010_basic_struct | ✅ | ❌ | Structs not working |
 | 011_basic_enum | ✅ | ❌ | Enums not working |
 | 012_basic_test | ✅ | ❌ | Test blocks ignored |

@@ -100,6 +100,7 @@ pub struct CodeGen {
   var_is_float : Map[String, Bool]
   var_is_string : Map[String, Bool]
   var_is_bool : Map[String, Bool]
+  var_is_tuple : Map[String, Bool]
   var_array_len : Map[String, Int]
   var_types : Map[String, String]
   next_offset : Int
@@ -124,6 +125,7 @@ fn CodeGen::new() -> CodeGen {
     var_is_float: Map::new(),
     var_is_string: Map::new(),
     var_is_bool: Map::new(),
+    var_is_tuple: Map::new(),
     var_array_len: Map::new(),
     var_types: Map::new(),
     next_offset: -8,
@@ -1623,6 +1625,16 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
             g
           } else if self.var_array_len.get(name) != None {
+            // Array - return address (rbp + offset)
+            let g = self.emit_inst(Mov(Reg64("rax"), Reg64("rbp")))
+            let g = if offset >= 0 {
+              g.emit_inst(Add(Reg64("rax"), Imm32(offset)))
+            } else {
+              g.emit_inst(Sub(Reg64("rax"), Imm32(-offset)))
+            }
+            g
+          } else if self.var_is_tuple.get(name) == Some(true) {
+            // Tuple - return address (rbp + offset)
             let g = self.emit_inst(Mov(Reg64("rax"), Reg64("rbp")))
             let g = if offset >= 0 {
               g.emit_inst(Add(Reg64("rax"), Imm32(offset)))
@@ -2581,15 +2593,17 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
       } else {
         let mut g = self
+        // Push elements in reverse order so first element ends up at lowest address
         let mut i = num_elems - 1
         while i >= 0 {
           g = g.codegen_expr(elems[i])
           g = g.emit_inst(Push(Reg64("rax")))
           i = i - 1
         }
-        let actual_offset = g.next_offset - (num_elems - 1) * 8
-        let g = g.emit_inst(Mov(Reg64("rax"), Imm32(actual_offset)))
-        { ..g, next_offset: actual_offset - 8 }
+        // rsp now points to first element (elem0)
+        // Return the address of the tuple (rsp)
+        g = g.emit_inst(Mov(Reg64("rax"), Reg64("rsp")))
+        g
       }
     }
     FieldExpr(obj, field) => {
@@ -2653,6 +2667,10 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       let is_float = is_float_expr(value, self.var_is_float)
       let is_string = is_string_expr(value, self.var_is_string)
       let is_bool = is_bool_expr(value, self.var_is_bool)
+      let is_tuple = match value {
+        Tuple(_) => true
+        _ => false
+      }
       let is_struct_or_tuple = match value {
         StructLit(_, _) => true
         Tuple(_) => true
@@ -2667,10 +2685,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         _ => None
       }
       let g = self.codegen_expr(value)
-      let (g2, offset, is_array_val) = if is_struct_or_tuple {
-        (g, g.next_offset + 8, false)
-      } else if is_float {
+      let (g2, offset, is_array_val) = if is_float {
         let g = g.emit_inst(PushXmm("xmm0"))
+        (g, g.next_offset, false)
+      } else if is_struct_or_tuple {
+        // For tuples, rax contains the address, push it onto stack
+        let g = g.emit_inst(Push(Reg64("rax")))
         (g, g.next_offset, false)
       } else if array_len != None {
         (g, g.next_offset + 8, true)
@@ -2687,6 +2707,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         new_strings[name] = is_string
         let new_bools = g2.var_is_bool
         new_bools[name] = is_bool
+        let new_tuples = g2.var_is_tuple
+        new_tuples[name] = is_tuple
         let new_array_lens = g2.var_array_len
         match array_len {
           Some(len) => new_array_lens[name] = len
@@ -2704,6 +2726,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_is_float: new_floats,
           var_is_string: new_strings,
           var_is_bool: new_bools,
+          var_is_tuple: new_tuples,
           var_array_len: new_array_lens,
           var_types: new_types,
           next_offset: new_next_offset,
@@ -2793,22 +2816,25 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       // for-in loop: for x in arr { body }
       // Array layout: [length][elem0][elem1]...
       let mut g = self
+      // Allocate space on stack for array address, length, counter
+      // These will be at fixed offsets from rbp
+      // Save current next_offset as base for loop variables
+      let loop_base = g.next_offset
+      let array_offset = loop_base - 8
+      let length_offset = loop_base - 16
+      let counter_offset = loop_base - 24
+      // Update next_offset to account for our loop variables
+      g = { ..g, next_offset: counter_offset }
       // 1. Evaluate the array expression
       g = g.codegen_expr(iter)
       // rax = array address
-      // Save array address on the stack (will use rbp addressing instead)
-      let array_offset = g.next_offset - 8
-      g = { ..g, next_offset: array_offset }
+      // Save array address
       g = g.emit_inst(Mov(StackBP64(array_offset), Reg64("rax")))
       // 2. Load array length (first 8 bytes at array address)
       g = g.emit_inst(Mov(Reg64("rbx"), MemIndirect("rax"))) // rbx = array length
-      // Save length on stack
-      let length_offset = g.next_offset - 8
-      g = { ..g, next_offset: length_offset }
+      // Save length
       g = g.emit_inst(Mov(StackBP64(length_offset), Reg64("rbx")))
       // 3. Initialize counter at 0
-      let counter_offset = g.next_offset - 8
-      g = { ..g, next_offset: counter_offset }
       g = g.emit_inst(Mov(StackBP64(counter_offset), Imm32(0)))
       // 4. Create loop labels
       let loop_label = ".Lforin_loop\{self.label_counter}"
@@ -2824,7 +2850,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g = g.emit_inst(Jge(end_label))
       // 6. Load array element at index counter
       // element_addr = array_addr + counter*8 + 8
-      // First get array address
       g = g.emit_inst(Mov(Reg64("rcx"), StackBP64(array_offset))) // rcx = array_addr
       // Multiply counter by 8
       g = g.emit_inst(Mov(Reg64("rax"), StackBP64(counter_offset))) // rax = counter
@@ -2843,13 +2868,15 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g = g.emit_inst(Mov(StackBP64(offset), Reg64("rax")))
       // 8. Execute body
       g = g.codegen_expr(body)
-      // 9. Increment counter
+      // 9. After body, restore next_offset for counter/length/array
+      g = { ..g, next_offset: counter_offset }
+      // 10. Increment counter
       g = g.emit_inst(Mov(Reg64("rax"), StackBP64(counter_offset))) // rax = counter
       g = g.emit_inst(Inc(Reg64("rax"))) // rax = counter + 1
       g = g.emit_inst(Mov(StackBP64(counter_offset), Reg64("rax"))) // store counter
-      // 10. Jump back to loop
+      // 11. Jump back to loop
       g = g.emit_inst(Jmp(loop_label))
-      // 11. Define end label
+      // 12. Define end label
       g = g.define_label(end_label)
       // Pop loop labels
       let new_labels = g.loop_labels
