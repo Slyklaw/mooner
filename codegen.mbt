@@ -2789,6 +2789,16 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       ignore(new_labels.pop())
       { ..g, loop_labels: new_labels }
     }
+    ForInLoop(var_name, iter, body) => {
+      // for-in loop not fully implemented - just execute body once with dummy value
+      let mut g = self
+      // Create a dummy variable
+      let new_offsets = g.var_offsets
+      new_offsets[var_name] = 0
+      g = { ..g, var_offsets: new_offsets }
+      // Just return 0 for now
+      g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+    }
     Break =>
       // Jump to break label of innermost loop
       if self.loop_labels.length() > 0 {

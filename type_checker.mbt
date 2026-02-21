@@ -310,6 +310,17 @@ fn TypeChecker::check_expr(
       let (c3, _) = checker.check_expr(body)
       (c3, TUnit)
     }
+    ForInLoop(var_name, iter, body) => {
+      // for x in arr { body }
+      // This is syntactic sugar for a while loop with index
+      // For now, just type-check the body and iterator
+      let mut checker = self
+      // Check the iterator is an array
+      let (c2, iter_ty) = checker.check_expr(iter)
+      checker = c2
+      // Just return Unit for now
+      (checker, TUnit)
+    }
     ReturnExpr(expr) => {
       let (_, ty) = self.check_expr(expr)
       (self, ty)

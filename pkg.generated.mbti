@@ -15,11 +15,11 @@ pub fn tokenize(String) -> Array[Token]
 // Types and methods
 pub enum AST {
   Unit
-  Bool(Bool)
   Int(Int)
   Float(Double)
   String(String)
   Char(Char)
+  Bool(Bool)
   Ident(String)
   Block(Array[AST])
   Func(String, Array[(String, AST?)], AST?, AST)
@@ -28,6 +28,7 @@ pub enum AST {
   MatchExpr(AST, Array[(AST, AST)])
   WhileLoop(AST, AST)
   ForLoop(AST?, AST?, AST?, AST)
+  ForInLoop(String, AST, AST)
   ReturnExpr(AST)
   Break
   Continue
@@ -102,6 +103,7 @@ pub enum Token {
   Case
   While
   For
+  In
   Break
   Continue
   Return

@@ -9,6 +9,7 @@ pub enum Token {
   Case
   While
   For
+  In
   Break
   Continue
   Return
@@ -632,6 +633,7 @@ fn is_keyword(s : String) -> Token {
     "case" => Case
     "while" => While
     "for" => For
+    "in" => In
     "break" => Break
     "continue" => Continue
     "return" => Return
@@ -666,6 +668,7 @@ fn token_eq(a : Token, b : Token) -> Bool {
     (Case, Case) => true
     (While, While) => true
     (For, For) => true
+    (In, In) => true
     (Break, Break) => true
     (Continue, Continue) => true
     (Return, Return) => true

@@ -1,11 +1,11 @@
 ///|
 pub enum AST {
   Unit
-  Bool(Bool)
   Int(Int)
   Float(Double)
   String(String)
   Char(Char)
+  Bool(Bool)
   Ident(String)
   Block(Array[AST])
   Func(String, Array[(String, AST?)], AST?, AST)
@@ -14,6 +14,7 @@ pub enum AST {
   MatchExpr(AST, Array[(AST, AST)])
   WhileLoop(AST, AST)
   ForLoop(AST?, AST?, AST?, AST)
+  ForInLoop(String, AST, AST) // for x in arr { body }
   ReturnExpr(AST)
   Break
   Continue
@@ -295,6 +296,26 @@ fn Parser::parse_while(self : Parser) -> (AST, Parser) {
 ///|
 fn Parser::parse_for(self : Parser) -> (AST, Parser) {
   let p = self.skip(1)
+
+  // Check for "for-in" syntax: for x in arr { ... }
+  // This is when we have: for identifier in expression
+  // We need to peek without consuming
+  match p.current() {
+    Ident(name) => {
+      // Look ahead to see if next token is 'in'
+      let p_ahead = p.advance()
+      if self_token_eq(p_ahead.current(), In) {
+        let p3 = p_ahead.skip(1)
+        let (iter_expr, p4) = p3.parse_expr()
+        let (body, p5) = p4.parse_block_or_expr()
+        return (ForInLoop(name, iter_expr, body), p5)
+      }
+      // Not for-in, continue with C-style
+    }
+    _ => ()
+  }
+
+  // Otherwise, parse as C-style for loop: for (init; cond; step) { body }
   // Check if there's a '(' or if it's a simple identifier (for i = ...)
   let has_paren = self_token_eq(p.current(), LParen)
   let p_after_paren = if has_paren { p.skip(1) } else { p }
