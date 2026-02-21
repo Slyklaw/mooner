@@ -9,7 +9,7 @@
 | 003_basic_constants | ✅ | ✅ | **FIXED** - Hex/binary/underscore literals work |
 | 004_basic_function | ✅ | ✅ | **FIXED** - Multiple top-level functions and function calls work |
 | 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr.push()` work; concat returns left array (no crash); spread not impl; print shows `<array>` placeholder |
-| 006_basic_string | ✅ | ⚠️ | get_char(), unwrap(), char equality, concat with +, escape sequences work; char prints as code not char; unicode shows '?'; interpolation literal |
+| 006_basic_string | ✅ | ⚠️ | get_char(), unwrap(), char equality, concat with +, escape sequences, char printing as char work; unicode shows '?'; interpolation literal |
 | 007_basic_tuple | ✅ | ⚠️ | Tuples parse; field access works for arrays but not for values (mixed types issue) |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
 | 009_basic_control_flows | ✅ | ✅ | All loops work: fib/while/C-for/for-in ✅ |

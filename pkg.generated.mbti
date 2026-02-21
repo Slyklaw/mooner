@@ -54,6 +54,7 @@ pub struct CodeGen {
   var_offsets : Map[String, Int]
   var_is_float : Map[String, Bool]
   var_is_string : Map[String, Bool]
+  var_is_char : Map[String, Bool]
   var_is_bool : Map[String, Bool]
   var_is_tuple : Map[String, Bool]
   var_array_len : Map[String, Int]

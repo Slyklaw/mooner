@@ -99,6 +99,7 @@ pub struct CodeGen {
   var_offsets : Map[String, Int]
   var_is_float : Map[String, Bool]
   var_is_string : Map[String, Bool]
+  var_is_char : Map[String, Bool]
   var_is_bool : Map[String, Bool]
   var_is_tuple : Map[String, Bool]
   var_array_len : Map[String, Int]
@@ -124,6 +125,7 @@ fn CodeGen::new() -> CodeGen {
     var_offsets: Map::new(),
     var_is_float: Map::new(),
     var_is_string: Map::new(),
+    var_is_char: Map::new(),
     var_is_bool: Map::new(),
     var_is_tuple: Map::new(),
     var_array_len: Map::new(),
@@ -1575,6 +1577,16 @@ fn is_string_expr(expr : AST, var_is_string : Map[String, Bool]) -> Bool {
 }
 
 ///|
+fn is_char_expr(expr : AST, var_is_char : Map[String, Bool]) -> Bool {
+  match expr {
+    Char(_) => true
+    Ident(name) => var_is_char.get(name) == Some(true)
+    CallExpr(FieldExpr(_, "unwrap"), _) => true // unwrap returns the inner type
+    _ => false
+  }
+}
+
+///|
 fn is_bool_expr(expr : AST, var_is_bool : Map[String, Bool]) -> Bool {
   match expr {
     Bool(_) => true
@@ -1647,6 +1659,10 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             g
           } else if self.var_is_string.get(name) == Some(true) {
             // String - load the address from stack (rbp + offset)
+            let g = self.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
+            g
+          } else if self.var_is_char.get(name) == Some(true) {
+            // Char - load from stack
             let g = self.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
             g
           } else {
@@ -2085,6 +2101,16 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       // Print up to 32 chars
                       g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(32)))
+                    } else if g.var_is_char.get(var_name) == Some(true) {
+                      // Char variable - evaluate and print as 1-char string
+                      g = g.codegen_expr(arg)
+                      // rax has char code, put it in buffer and print
+                      g = g.emit_inst(Push(Reg64("rax")))
+                      let buf_label = ".Lint_buf"
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(buf_label)))
+                      g = g.emit_inst(Pop(Reg64("rax")))
+                      g = g.emit_inst(Mov(MemIndirect("rsi"), Reg8("al")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
                     } else {
                       // Not an array, treat as integer
                       g = g.codegen_expr(arg)
@@ -2762,6 +2788,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     LetBind(name, _annot, value, body) => {
       let is_float = is_float_expr(value, self.var_is_float)
       let is_string = is_string_expr(value, self.var_is_string)
+      let is_char = is_char_expr(value, self.var_is_char)
       let is_bool = is_bool_expr(value, self.var_is_bool)
       let is_tuple = match value {
         Tuple(_) => true
@@ -2801,6 +2828,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         new_floats[name] = is_float
         let new_strings = g2.var_is_string
         new_strings[name] = is_string
+        let new_chars = g2.var_is_char
+        new_chars[name] = is_char
         let new_bools = g2.var_is_bool
         new_bools[name] = is_bool
         let new_tuples = g2.var_is_tuple
@@ -2821,6 +2850,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_offsets: new_offsets,
           var_is_float: new_floats,
           var_is_string: new_strings,
+          var_is_char: new_chars,
           var_is_bool: new_bools,
           var_is_tuple: new_tuples,
           var_array_len: new_array_lens,
