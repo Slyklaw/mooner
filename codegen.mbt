@@ -1703,20 +1703,18 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         g = g.codegen_expr(right)
         g
       } else if op == "+" && is_string {
-        // String concatenation: call string_concat function
-        // We need to pass both strings and call the concat logic
+        // String concatenation - call string_concat function
         let mut g = self
         // Evaluate first string
         g = g.codegen_expr(left)
         g = g.emit_inst(Push(Reg64("rax")))
-        // Evaluate second string  
+        // Evaluate second string
         g = g.codegen_expr(right)
-        // Move second string to rdi (second arg)
+        // Move to rdi (second arg)
         g = g.emit_inst(Mov(Reg64("rdi"), Reg64("rax")))
-        // Pop first string to rsi (first arg)
+        // Pop first to rsi (first arg)
         g = g.emit_inst(Pop(Reg64("rsi")))
-        // Call string_concat manually
-        // We'll inline the concatenation logic here
+        // Inline the string_concat code
         let (g2, copy1_loop) = g.new_label()
         let (g3, copy1_done) = g2.new_label()
         let (g4, copy2_loop) = g3.new_label()
@@ -2083,6 +2081,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
                     } else if g.var_is_string.get(var_name) == Some(true) {
                       // String variable - evaluate and print the string
+                      g = g.codegen_expr(arg)
                       // Print up to 32 chars
                       g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(32)))

@@ -555,6 +555,49 @@ fn Lexer::read_string(self : Lexer) -> (String, Lexer) {
             s = s + "\""
             lexer = lexer.advance()
           }
+          Some('u') => {
+            // Unicode escape \u{XXXX}
+            lexer = lexer.advance()
+            match char_at(lexer.input, lexer.pos) {
+              Some('{') => {
+                lexer = lexer.advance()
+                let mut hex = ""
+                let mut reading = true
+                while reading {
+                  match char_at(lexer.input, lexer.pos) {
+                    Some('}') => {
+                      lexer = lexer.advance()
+                      reading = false
+                    }
+                    Some(c) =>
+                      if (c >= '0' && c <= '9') ||
+                        (c >= 'a' && c <= 'f') ||
+                        (c >= 'A' && c <= 'F') {
+                        hex = hex + c.to_string()
+                        lexer = lexer.advance()
+                      } else {
+                        reading = false
+                      }
+                    None => reading = false
+                  }
+                }
+                // Convert hex to unicode and encode as UTF-8
+                let code = parse_hex(hex)
+                // Just append as single char - our runtime doesn't fully support UTF-8 but at least shows something
+                // For display purposes, use a placeholder
+                s = s + "?"
+              }
+              Some(c) => {
+                s = s + "u"
+                s = s + c.to_string()
+                lexer = lexer.advance()
+              }
+              None => {
+                s = s + "u"
+                done = true
+              }
+            }
+          }
           Some(c) => {
             s = s + c.to_string()
             lexer = lexer.advance()

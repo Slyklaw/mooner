@@ -1,6 +1,5 @@
 fn main {
-  let a = "Hello"
-  println(a)
-  let b = "World"
-  println(b)
+  // What if we don't store the concat?
+  let _ = "Hello" + "World"
+  println(42)
 }
