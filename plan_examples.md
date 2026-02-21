@@ -6,9 +6,9 @@
 |---------|---------|-----|-----------------|
 | 001_hello | ✅ | ✅ | **FIXED** - Multiline strings now work |
 | 002_variable | ✅ | ✅ | **FIXED** - `let mut` parsing and boolean output work |
-| 003_basic_constants | ✅ | ⚠️ | Hex/binary/underscore literals fail |
-| 004_basic_function | ✅ | ❌ | Function calls not executing |
-| 005_basic_array | ✅ | ❌ | Arrays broken, garbage values |
+| 003_basic_constants | ✅ | ✅ | **FIXED** - Hex/binary/underscore literals work |
+| 004_basic_function | ✅ | ✅ | **FIXED** - Multiple top-level functions and function calls work |
+| 005_basic_array | ✅ | ⚠️ | `arr.length()` works; push/print/concat/spread need work |
 | 006_basic_string | ✅ | ❌ | String ops broken |
 | 007_basic_tuple | ✅ | ❌ | Tuples broken, interpolation fails |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
@@ -33,9 +33,10 @@ These are foundational issues blocking multiple examples.
 - [x] Fix variable assignment and retrieval (`let mut` now parses correctly)
 
 ### 1.3 Function Calls
-- [ ] Fix function calls with arguments `add(2, 40)`
-- [ ] Fix function return values
-- [ ] Fix nested function calls
+- [x] Fix function calls with arguments `add(2, 40)`
+- [x] Fix function return values
+- [x] Fix nested function calls
+- [x] Fix multiple top-level function declarations
 
 ### 1.4 Control Flow - Conditionals
 - [ ] Fix if/else to execute correct branch
@@ -44,14 +45,14 @@ These are foundational issues blocking multiple examples.
 ## Phase 2: Data Types (HIGH-MEDIUM PRIORITY)
 
 ### 2.1 Number Literals
-- [ ] Support hex literals `0xFFFF`
-- [ ] Support binary literals `0b1001`
-- [ ] Support underscore separators `100_000_000`
+- [x] Support hex literals `0xFFFF`
+- [x] Support binary literals `0b1001`
+- [x] Support underscore separators `100_000_000`
 
 ### 2.2 Arrays
-- [ ] Implement Array type with literal syntax `[1, 2, 3]`
-- [ ] Implement array indexing `arr[0]`
-- [ ] Implement `array.length()` method
+- [x] Implement Array type with literal syntax `[1, 2, 3]`
+- [x] Implement array indexing `arr[0]`
+- [x] Implement `array.length()` method
 - [ ] Implement `array.push()` mutation
 - [ ] Implement array concatenation `arr1 + arr2`
 - [ ] Implement spread operator `[..arr1, 1000, ..arr2]`
@@ -137,8 +138,8 @@ Update this section as tasks are completed:
 
 - [x] 001_hello working
 - [x] 002_variable working
-- [ ] 003_basic_constants working
-- [ ] 004_basic_function working
+- [x] 003_basic_constants working
+- [x] 004_basic_function working
 - [ ] 005_basic_array working
 - [ ] 006_basic_string working
 - [ ] 007_basic_tuple working

@@ -85,6 +85,38 @@ The output file is created in the same directory as the source file with `.exe` 
 moon test
 ```
 
+### Verify Output Against Official Compiler
+
+When working on compiler features, always compare output from our compiler to the official MoonBit compiler:
+
+```bash
+# Compile with our compiler
+moon run cmd/main examples/mbt_examples/001_hello.mbt
+chmod +x examples/mbt_examples/001_hello.exe
+
+# Compare outputs
+moon run examples/mbt_examples/001_hello.mbt > /tmp/moon_output.txt
+./examples/mbt_examples/001_hello.exe > /tmp/our_output.txt
+diff /tmp/moon_output.txt /tmp/our_output.txt
+```
+
+For batch verification of multiple examples:
+```bash
+for i in 001 002 003 004; do
+  moon run cmd/main examples/mbt_examples/${i}_*.mbt 2>/dev/null
+  chmod +x examples/mbt_examples/${i}_*.exe
+  moon run examples/mbt_examples/${i}_*.mbt 2>/dev/null > /tmp/moon_$i.txt
+  ./examples/mbt_examples/${i}_*.exe > /tmp/our_$i.txt 2>&1
+  if diff -q /tmp/moon_$i.txt /tmp/our_$i.txt > /dev/null; then
+    echo "$i: IDENTICAL"
+  else
+    echo "$i: DIFFERENT"
+  fi
+done
+```
+
+**Important**: Only mark an example as "working" in `plan_examples.md` if the output is IDENTICAL to the official compiler.
+
 ## Project Components
 
 - `lexer.mbt` - Tokenizer

@@ -310,31 +310,166 @@ fn parse_double(s : String) -> Double {
 }
 
 ///|
+fn is_hex_digit(c : Char) -> Bool {
+  (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+}
+
+///|
+fn is_binary_digit(c : Char) -> Bool {
+  c == '0' || c == '1'
+}
+
+///|
 fn Lexer::read_number(self : Lexer) -> (String, Lexer) {
-  let (int_part, lexer2) = read_while(self, is_digit)
-  match char_at(lexer2.input, lexer2.pos) {
-    Some('.') => {
-      let lexer3 = lexer2.advance()
-      let (frac_part, lexer4) = read_while(lexer3, is_digit)
-      match char_at(lexer4.input, lexer4.pos) {
-        Some('e') | Some('E') => {
-          let lexer5 = lexer4.advance()
-          let (exp_part, lexer6) = read_while(lexer5, fn(c) {
-            is_digit(c) || c == '-'
-          })
-          (int_part + "." + frac_part + "e" + exp_part, lexer6)
+  match char_at(self.input, self.pos) {
+    Some('0') =>
+      match char_at(self.input, self.pos + 1) {
+        Some('x') | Some('X') => {
+          let lexer = self.advance().advance()
+          let mut result = ""
+          let mut lex = lexer
+          let mut done = false
+          while not(done) {
+            match char_at(lex.input, lex.pos) {
+              Some(c) if is_hex_digit(c) => {
+                result = result + c.to_string()
+                lex = lex.advance()
+              }
+              Some('_') => lex = lex.advance()
+              _ => done = true
+            }
+          }
+          let val = parse_hex(result)
+          (val.to_string(), lex)
         }
-        _ => (int_part + "." + frac_part, lexer4)
+        Some('b') | Some('B') => {
+          let lexer = self.advance().advance()
+          let mut result = ""
+          let mut lex = lexer
+          let mut done = false
+          while not(done) {
+            match char_at(lex.input, lex.pos) {
+              Some(c) if is_binary_digit(c) => {
+                result = result + c.to_string()
+                lex = lex.advance()
+              }
+              Some('_') => lex = lex.advance()
+              _ => done = true
+            }
+          }
+          let val = parse_binary(result)
+          (val.to_string(), lex)
+        }
+        _ => self.read_decimal_number()
+      }
+    _ => self.read_decimal_number()
+  }
+}
+
+///|
+fn parse_hex(s : String) -> Int {
+  let mut result = 0
+  let mut i = 0
+  while i < s.length() {
+    let c = s[i]
+    let digit = if c >= 48 && c <= 57 {
+      c - 48
+    } else if c >= 97 && c <= 102 {
+      c - 97 + 10
+    } else if c >= 65 && c <= 70 {
+      c - 65 + 10
+    } else {
+      0
+    }
+    result = result * 16 + digit.to_int()
+    i = i + 1
+  }
+  result
+}
+
+///|
+fn parse_binary(s : String) -> Int {
+  let mut result = 0
+  let mut i = 0
+  while i < s.length() {
+    let c = s[i]
+    let digit = if c == 48 { 0 } else { 1 }
+    result = result * 2 + digit
+    i = i + 1
+  }
+  result
+}
+
+///|
+fn Lexer::read_decimal_number(self : Lexer) -> (String, Lexer) {
+  let mut int_part = ""
+  let mut lexer = self
+  let mut done = false
+  while not(done) {
+    match char_at(lexer.input, lexer.pos) {
+      Some(c) if is_digit(c) => {
+        int_part = int_part + c.to_string()
+        lexer = lexer.advance()
+      }
+      Some('_') => lexer = lexer.advance()
+      _ => done = true
+    }
+  }
+  match char_at(lexer.input, lexer.pos) {
+    Some('.') => {
+      let lexer3 = lexer.advance()
+      let mut frac_part = ""
+      let mut lex = lexer3
+      let mut done = false
+      while not(done) {
+        match char_at(lex.input, lex.pos) {
+          Some(c) if is_digit(c) => {
+            frac_part = frac_part + c.to_string()
+            lex = lex.advance()
+          }
+          Some('_') => lex = lex.advance()
+          _ => done = true
+        }
+      }
+      match char_at(lex.input, lex.pos) {
+        Some('e') | Some('E') => {
+          let lexer5 = lex.advance()
+          let mut exp_part = ""
+          let mut lex2 = lexer5
+          let mut done = false
+          while not(done) {
+            match char_at(lex2.input, lex2.pos) {
+              Some(c) if is_digit(c) || c == '-' => {
+                exp_part = exp_part + c.to_string()
+                lex2 = lex2.advance()
+              }
+              Some('_') => lex2 = lex2.advance()
+              _ => done = true
+            }
+          }
+          (int_part + "." + frac_part + "e" + exp_part, lex2)
+        }
+        _ => (int_part + "." + frac_part, lex)
       }
     }
     Some('e') | Some('E') => {
-      let lexer3 = lexer2.advance()
-      let (exp_part, lexer4) = read_while(lexer3, fn(c) {
-        is_digit(c) || c == '-'
-      })
-      (int_part + "e" + exp_part, lexer4)
+      let lexer3 = lexer.advance()
+      let mut exp_part = ""
+      let mut lex = lexer3
+      let mut done = false
+      while not(done) {
+        match char_at(lex.input, lex.pos) {
+          Some(c) if is_digit(c) || c == '-' => {
+            exp_part = exp_part + c.to_string()
+            lex = lex.advance()
+          }
+          Some('_') => lex = lex.advance()
+          _ => done = true
+        }
+      }
+      (int_part + "e" + exp_part, lex)
     }
-    _ => (int_part, lexer2)
+    _ => (int_part, lexer)
   }
 }
 

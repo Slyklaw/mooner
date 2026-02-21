@@ -99,6 +99,7 @@ pub struct CodeGen {
   var_is_float : Map[String, Bool]
   var_is_string : Map[String, Bool]
   var_is_bool : Map[String, Bool]
+  var_array_len : Map[String, Int]
   var_types : Map[String, String]
   next_offset : Int
   current_func : String?
@@ -122,6 +123,7 @@ fn CodeGen::new() -> CodeGen {
     var_is_float: Map::new(),
     var_is_string: Map::new(),
     var_is_bool: Map::new(),
+    var_array_len: Map::new(),
     var_types: Map::new(),
     next_offset: -8,
     current_func: None,
@@ -1491,6 +1493,7 @@ fn is_int_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
       var_is_float.get(name) == Some(false) || var_is_float.get(name) == None
     FieldExpr(_, _) => true
     IndexExpr(_, _) => true
+    CallExpr(FieldExpr(_, method), _) => method == "length"
     _ => false
   }
 }
@@ -1800,507 +1803,548 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         _ => g
       }
     }
-    CallExpr(func, args) => {
-      let func_name = match func {
-        Ident(name) => name
-        _ => ""
-      }
-      match func_name {
-        "println" | "print" => {
-          let is_println = func_name == "println"
-          let mut g = self
-          let mut arg_idx = 0
-          while arg_idx < args.length() {
-            let arg = args[arg_idx]
-            match arg {
-              String(s) => {
-                let (g2, label) = g.add_string(s)
-                g = g2
-                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+    CallExpr(func, args) =>
+      match func {
+        FieldExpr(obj, method_name) =>
+          match method_name {
+            "length" =>
+              match obj {
+                Ident(var_name) =>
+                  match self.var_array_len.get(var_name) {
+                    Some(len) => self.emit_inst(Mov(Reg64("rax"), Imm32(len)))
+                    None => self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+                  }
+                _ => self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
               }
-              Int(n) => {
-                let s = n.to_string()
-                let (g2, label) = g.add_string(s)
-                g = g2
-                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+            _ => self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+          }
+        _ => {
+          let func_name = match func {
+            Ident(name) => name
+            _ => ""
+          }
+          match func_name {
+            "println" | "print" => {
+              let is_println = func_name == "println"
+              let mut g = self
+              let mut arg_idx = 0
+              while arg_idx < args.length() {
+                let arg = args[arg_idx]
+                match arg {
+                  String(s) => {
+                    let (g2, label) = g.add_string(s)
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                  }
+                  Int(n) => {
+                    let s = n.to_string()
+                    let (g2, label) = g.add_string(s)
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                  }
+                  Float(f) => {
+                    let s = f.to_string()
+                    let (g2, label) = g.add_string(s)
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                  }
+                  Char(c) => {
+                    let s = c.to_string()
+                    let (g2, label) = g.add_string(s)
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                  }
+                  Bool(b) => {
+                    let s = if b { "true" } else { "false" }
+                    let (g2, label) = g.add_string(s)
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                  }
+                  CallExpr(Ident(fname), inner_args) =>
+                    if fname == "int_to_string" {
+                      g = g.codegen_expr(arg)
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                    } else if fname == "float_to_string" ||
+                      fname == "string_concat" {
+                      g = g.codegen_expr(arg)
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                    } else if fname == "string_to_float" {
+                      g = g.codegen_expr(arg)
+                      let (g2, label) = g.add_string("<float>")
+                      g = g2
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                    } else if fname == "input" {
+                      g = g.codegen_expr(arg)
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                    } else {
+                      g = g.codegen_expr(arg)
+                      let buf_label = ".Lint_buf"
+                      let (g2, digit_loop) = g.new_label()
+                      let (g3, done_label) = g2.new_label()
+                      let (g4, skip_zero) = g3.new_label()
+                      let (g5, skip_zero_end) = g4.new_label()
+                      g = g5
+                      g = g.emit_inst(Push(Reg64("rbx")))
+                      g = g.emit_inst(Push(Reg64("rcx")))
+                      g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                      g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                      g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                      g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                      g = g.emit_inst(Je(done_label))
+                      g = g.define_label(digit_loop)
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                      g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                      g = g.emit_inst(Idiv(Reg64("rsi")))
+                      g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                      g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                      g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                      g = g.emit_inst(Dec(Reg64("rdi")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                      g = g.emit_inst(Jne(digit_loop))
+                      g = g.define_label(done_label)
+                      g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                      g = g.emit_inst(Jne(skip_zero))
+                      g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
+                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Jmp(skip_zero_end))
+                      g = g.define_label(skip_zero)
+                      g = g.emit_inst(Inc(Reg64("rdi")))
+                      g = g.define_label(skip_zero_end)
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                      g = g.emit_inst(Pop(Reg64("rcx")))
+                      g = g.emit_inst(Pop(Reg64("rbx")))
+                    }
+                  _ => {
+                    let is_float = is_float_expr(arg, g.var_is_float)
+                    let is_string = is_string_expr(arg, g.var_is_string)
+                    let is_bool = is_bool_expr(arg, g.var_is_bool)
+                    let is_int = is_int_expr(arg, g.var_is_float)
+                    if is_string {
+                      g = g.codegen_expr(arg)
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                      let (g2, len_loop) = g.new_label()
+                      let (g3, len_done) = g2.new_label()
+                      g = g3
+                      g = g.emit_inst(Push(Reg64("rax")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                      g = g.define_label(len_loop)
+                      g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("rax")))
+                      g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                      g = g.emit_inst(Je(len_done))
+                      g = g.emit_inst(Inc(Reg64("rax")))
+                      g = g.emit_inst(Inc(Reg64("rdx")))
+                      g = g.emit_inst(Jmp(len_loop))
+                      g = g.define_label(len_done)
+                      g = g.emit_inst(Pop(Reg64("rax")))
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                    } else if is_float {
+                      let (g2, label) = g.add_string("<float>")
+                      g = g2
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                    } else if is_bool {
+                      let (g2, true_label) = g.new_label()
+                      let (g3, end_label) = g2.new_label()
+                      g = g3
+                      g = g.codegen_expr(arg)
+                      g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
+                      g = g.emit_inst(Je(true_label))
+                      let (g4, s_true) = g.add_string("true")
+                      g = g4
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_true)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(4)))
+                      g = g.emit_inst(Jmp(end_label))
+                      g = g.define_label(true_label)
+                      let (g5, s_false) = g.add_string("false")
+                      g = g5
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_false)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
+                      g = g.define_label(end_label)
+                    } else if is_int {
+                      g = g.codegen_expr(arg)
+                      let buf_label = ".Lint_buf"
+                      let (g2, digit_loop) = g.new_label()
+                      let (g3, done_label) = g2.new_label()
+                      let (g4, skip_zero) = g3.new_label()
+                      let (g5, skip_zero_end) = g4.new_label()
+                      g = g5
+                      g = g.emit_inst(Push(Reg64("rbx")))
+                      g = g.emit_inst(Push(Reg64("rcx")))
+                      g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                      g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                      g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                      g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                      g = g.emit_inst(Je(done_label))
+                      g = g.define_label(digit_loop)
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                      g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                      g = g.emit_inst(Idiv(Reg64("rsi")))
+                      g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                      g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                      g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                      g = g.emit_inst(Dec(Reg64("rdi")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                      g = g.emit_inst(Jne(digit_loop))
+                      g = g.define_label(done_label)
+                      g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                      g = g.emit_inst(Jne(skip_zero))
+                      g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
+                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Jmp(skip_zero_end))
+                      g = g.define_label(skip_zero)
+                      g = g.emit_inst(Inc(Reg64("rdi")))
+                      g = g.define_label(skip_zero_end)
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                      g = g.emit_inst(Pop(Reg64("rcx")))
+                      g = g.emit_inst(Pop(Reg64("rbx")))
+                    } else {
+                      g = g.codegen_expr(arg)
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                    }
+                  }
+                }
+                g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                g = g.emit_inst(Syscall)
+                arg_idx = arg_idx + 1
               }
-              Float(f) => {
-                let s = f.to_string()
-                let (g2, label) = g.add_string(s)
-                g = g2
-                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
-              }
-              Char(c) => {
-                let s = c.to_string()
-                let (g2, label) = g.add_string(s)
+              if is_println {
+                let (g2, label) = g.add_string("\n")
                 g = g2
                 g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
                 g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                g = g.emit_inst(Syscall)
               }
-              Bool(b) => {
-                let s = if b { "true" } else { "false" }
-                let (g2, label) = g.add_string(s)
-                g = g2
-                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
-              }
-              CallExpr(Ident(fname), inner_args) =>
-                if fname == "int_to_string" {
-                  g = g.codegen_expr(arg)
-                  g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
-                } else if fname == "float_to_string" || fname == "string_concat" {
-                  g = g.codegen_expr(arg)
-                  g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
-                } else if fname == "string_to_float" {
-                  g = g.codegen_expr(arg)
-                  let (g2, label) = g.add_string("<float>")
-                  g = g2
-                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
-                } else if fname == "input" {
-                  g = g.codegen_expr(arg)
-                  g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
-                } else {
-                  let is_float = is_float_expr(arg, g.var_is_float)
-                  let is_int = is_int_expr(arg, g.var_is_float)
-                  if is_float {
-                    let (g2, label) = g.add_string("<float>")
-                    g = g2
-                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
-                  } else if is_int {
-                    let (g2, label) = g.add_string("<int>")
-                    g = g2
-                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
-                  } else {
-                    let (g2, label) = g.add_string("<value>")
-                    g = g2
-                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
-                  }
-                }
-              _ => {
-                let is_float = is_float_expr(arg, g.var_is_float)
-                let is_string = is_string_expr(arg, g.var_is_string)
-                let is_bool = is_bool_expr(arg, g.var_is_bool)
-                let is_int = is_int_expr(arg, g.var_is_float)
-                if is_string {
-                  g = g.codegen_expr(arg)
-                  g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
-                  let (g2, len_loop) = g.new_label()
-                  let (g3, len_done) = g2.new_label()
-                  g = g3
-                  g = g.emit_inst(Push(Reg64("rax")))
-                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
-                  g = g.define_label(len_loop)
-                  g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("rax")))
-                  g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
-                  g = g.emit_inst(Je(len_done))
-                  g = g.emit_inst(Inc(Reg64("rax")))
-                  g = g.emit_inst(Inc(Reg64("rdx")))
-                  g = g.emit_inst(Jmp(len_loop))
-                  g = g.define_label(len_done)
-                  g = g.emit_inst(Pop(Reg64("rax")))
-                  g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
-                } else if is_float {
-                  let (g2, label) = g.add_string("<float>")
-                  g = g2
-                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
-                } else if is_bool {
-                  let (g2, true_label) = g.new_label()
-                  let (g3, end_label) = g2.new_label()
-                  g = g3
-                  g = g.codegen_expr(arg)
-                  g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
-                  g = g.emit_inst(Je(true_label))
-                  let (g4, s_true) = g.add_string("true")
-                  g = g4
-                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_true)))
-                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(4)))
-                  g = g.emit_inst(Jmp(end_label))
-                  g = g.define_label(true_label)
-                  let (g5, s_false) = g.add_string("false")
-                  g = g5
-                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_false)))
-                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
-                  g = g.define_label(end_label)
-                } else if is_int {
-                  g = g.codegen_expr(arg)
-                  let buf_label = ".Lint_buf"
-                  let (g2, digit_loop) = g.new_label()
-                  let (g3, done_label) = g2.new_label()
-                  let (g4, skip_zero) = g3.new_label()
-                  let (g5, skip_zero_end) = g4.new_label()
-                  g = g5
-                  g = g.emit_inst(Push(Reg64("rbx")))
-                  g = g.emit_inst(Push(Reg64("rcx")))
-                  g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
-                  g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
-                  g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
-                  g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
-                  g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
-                  g = g.emit_inst(Je(done_label))
-                  g = g.define_label(digit_loop)
-                  g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
-                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
-                  g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
-                  g = g.emit_inst(Idiv(Reg64("rsi")))
-                  g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
-                  g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
-                  g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
-                  g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
-                  g = g.emit_inst(Dec(Reg64("rdi")))
-                  g = g.emit_inst(Inc(Reg64("rcx")))
-                  g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
-                  g = g.emit_inst(Jne(digit_loop))
-                  g = g.define_label(done_label)
-                  g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
-                  g = g.emit_inst(Jne(skip_zero))
-                  g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
-                  g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
-                  g = g.emit_inst(Inc(Reg64("rcx")))
-                  g = g.emit_inst(Jmp(skip_zero_end))
-                  g = g.define_label(skip_zero)
-                  g = g.emit_inst(Inc(Reg64("rdi")))
-                  g = g.define_label(skip_zero_end)
-                  g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
-                  g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
-                  g = g.emit_inst(Pop(Reg64("rcx")))
-                  g = g.emit_inst(Pop(Reg64("rbx")))
-                } else {
-                  g = g.codegen_expr(arg)
-                  g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
-                }
-              }
+              g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+              g
             }
-            g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
-            g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
-            g = g.emit_inst(Syscall)
-            arg_idx = arg_idx + 1
-          }
-          if is_println {
-            let (g2, label) = g.add_string("\n")
-            g = g2
-            g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
-            g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
-            g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
-            g = g.emit_inst(Syscall)
-          }
-          g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-          g
-        }
-        "char_to_int" =>
-          if args.length() == 1 {
-            self.codegen_expr(args[0])
-          } else {
-            self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-          }
-        "int_to_char" =>
-          if args.length() == 1 {
-            self.codegen_expr(args[0])
-          } else {
-            self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-          }
-        "input" => {
-          let mut g = self
-          let label = ".Linput_buf"
-          g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-          g = g.emit_inst(Mov(Reg64("rdi"), Imm32(0)))
-          g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(255)))
-          g = g.emit_inst(Syscall)
-          g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rax")))
-          g = g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
-          g
-        }
-        "int_to_string" =>
-          if args.length() == 1 {
-            let mut g = self
-            g = g.codegen_expr(args[0])
-            let buf_label = ".Lint_buf"
-            let (g2, digit_loop) = g.new_label()
-            let (g3, done_label) = g2.new_label()
-            let (g4, skip_zero) = g3.new_label()
-            let (g5, skip_zero_end) = g4.new_label()
-            g = g5
-            g = g.emit_inst(Push(Reg64("rbx")))
-            g = g.emit_inst(Push(Reg64("rcx")))
-            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
-            g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
-            g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
-            g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
-            g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
-            g = g.emit_inst(Je(done_label))
-            g = g.define_label(digit_loop)
-            g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
-            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
-            g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
-            g = g.emit_inst(Idiv(Reg64("rsi")))
-            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
-            g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
-            g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
-            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
-            g = g.emit_inst(Dec(Reg64("rdi")))
-            g = g.emit_inst(Inc(Reg64("rcx")))
-            g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
-            g = g.emit_inst(Jne(digit_loop))
-            g = g.define_label(done_label)
-            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
-            g = g.emit_inst(Jne(skip_zero))
-            g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
-            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
-            g = g.emit_inst(Inc(Reg64("rcx")))
-            g = g.emit_inst(Jmp(skip_zero_end))
-            g = g.define_label(skip_zero)
-            g = g.emit_inst(Inc(Reg64("rdi")))
-            g = g.define_label(skip_zero_end)
-            g = g.emit_inst(Mov(Reg64("rax"), Reg64("rdi")))
-            g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
-            g = g.emit_inst(Pop(Reg64("rcx")))
-            g = g.emit_inst(Pop(Reg64("rbx")))
-            g
-          } else {
-            self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-          }
-        "string_to_int" =>
-          if args.length() == 1 {
-            let mut g = self
-            g = g.codegen_expr(args[0])
-            let (g2, loop_label) = g.new_label()
-            let (g3, done_label) = g2.new_label()
-            g = g3
-            g = g.emit_inst(Push(Reg64("rbx")))
-            g = g.emit_inst(Push(Reg64("rcx")))
-            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
-            g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-            g = g.emit_inst(Mov(Reg64("rcx"), Imm32(10)))
-            g = g.define_label(loop_label)
-            g = g.emit_inst(Movzx(Reg64("rdx"), MemIndirect("rbx")))
-            g = g.emit_inst(Cmp(Reg64("rdx"), Imm32(48)))
-            g = g.emit_inst(Jb(done_label))
-            g = g.emit_inst(Cmp(Reg64("rdx"), Imm32(57)))
-            g = g.emit_inst(Ja(done_label))
-            g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
-            g = g.emit_inst(Sub(Reg64("rdx"), Imm32(48)))
-            g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
-            g = g.emit_inst(Inc(Reg64("rbx")))
-            g = g.emit_inst(Jmp(loop_label))
-            g = g.define_label(done_label)
-            g = g.emit_inst(Pop(Reg64("rcx")))
-            g = g.emit_inst(Pop(Reg64("rbx")))
-            g
-          } else {
-            self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-          }
-        "string_to_float" =>
-          if args.length() == 1 {
-            let mut g = self
-            g = g.codegen_expr(args[0])
-            g = g.emit_inst(Push(Reg64("rbx")))
-            g = g.emit_inst(Push(Reg64("rcx")))
-            g = g.emit_inst(Push(Reg64("rdi")))
-            g = g.emit_inst(Push(Reg64("r8")))
-            g = g.emit_inst(Push(Reg64("r9")))
-            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
-            g = g.emit_inst(Mov(Reg64("r8"), Imm32(0)))
-            g = g.emit_inst(Cvtsi2sd(Xmm("xmm0"), Reg64("r8")))
-            let (g2, digit_loop) = g.new_label()
-            let (g3, found_dot) = g2.new_label()
-            let (g4, frac_loop) = g3.new_label()
-            let (g5, done) = g4.new_label()
-            g = g5
-            g = g.define_label(digit_loop)
-            g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("rbx")))
-            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(46)))
-            g = g.emit_inst(Je(found_dot))
-            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(48)))
-            g = g.emit_inst(Jb(done))
-            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(57)))
-            g = g.emit_inst(Ja(done))
-            g = g.emit_inst(Imul(Reg64("r8"), Imm32(10)))
-            g = g.emit_inst(Sub(Reg64("rcx"), Imm32(48)))
-            g = g.emit_inst(Add(Reg64("r8"), Reg64("rcx")))
-            g = g.emit_inst(Inc(Reg64("rbx")))
-            g = g.emit_inst(Jmp(digit_loop))
-            g = g.define_label(found_dot)
-            g = g.emit_inst(Inc(Reg64("rbx")))
-            g = g.emit_inst(Mov(Reg64("r9"), Imm32(0)))
-            g = g.define_label(frac_loop)
-            g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("rbx")))
-            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(48)))
-            g = g.emit_inst(Jb(done))
-            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(57)))
-            g = g.emit_inst(Ja(done))
-            g = g.emit_inst(Cvtsi2sd(Xmm("xmm1"), Reg64("r8")))
-            g = g.emit_inst(Mov(Reg64("r8"), Imm32(10)))
-            g = g.emit_inst(Cvtsi2sd(Xmm("xmm2"), Reg64("r8")))
-            g = g.emit_inst(Divsd(Xmm("xmm1"), Xmm("xmm2")))
-            g = g.emit_inst(Addsd(Xmm("xmm0"), Xmm("xmm1")))
-            g = g.emit_inst(Sub(Reg64("rcx"), Imm32(48)))
-            g = g.emit_inst(Cvtsi2sd(Xmm("xmm1"), Reg64("rcx")))
-            g = g.emit_inst(Divsd(Xmm("xmm1"), Xmm("xmm2")))
-            g = g.emit_inst(Addsd(Xmm("xmm0"), Xmm("xmm1")))
-            g = g.emit_inst(Inc(Reg64("rbx")))
-            g = g.emit_inst(Inc(Reg64("r9")))
-            g = g.emit_inst(Jmp(frac_loop))
-            g = g.define_label(done)
-            g = g.emit_inst(Pop(Reg64("r9")))
-            g = g.emit_inst(Pop(Reg64("r8")))
-            g = g.emit_inst(Pop(Reg64("rdi")))
-            g = g.emit_inst(Pop(Reg64("rcx")))
-            g = g.emit_inst(Pop(Reg64("rbx")))
-            g
-          } else {
-            self.emit_inst(Cvtsi2sd(Xmm("xmm0"), Imm32(0)))
-          }
-        "string_concat" =>
-          if args.length() == 2 {
-            let mut g = self
-            g = g.codegen_expr(args[0])
-            g = g.emit_inst(Push(Reg64("rax")))
-            g = g.codegen_expr(args[1])
-            g = g.emit_inst(Mov(Reg64("rdi"), Reg64("rax")))
-            g = g.emit_inst(Pop(Reg64("rsi")))
-            let (g2, copy1_loop) = g.new_label()
-            let (g3, copy1_done) = g2.new_label()
-            let (g4, copy2_loop) = g3.new_label()
-            let (g5, copy2_done) = g4.new_label()
-            g = g5
-            g = g.emit_inst(Push(Reg64("rbx")))
-            g = g.emit_inst(Push(Reg64("rcx")))
-            g = g.emit_inst(Push(Reg64("r8")))
-            let buf_label = ".Lstrcat_buf"
-            g = g.emit_inst(Lea(Reg64("rax"), RipRel32(buf_label)))
-            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
-            g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
-            g = g.define_label(copy1_loop)
-            g = g.emit_inst(Movzx(Reg64("r8"), MemIndirect("rsi")))
-            g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
-            g = g.emit_inst(Je(copy1_done))
-            g = g.emit_inst(Mov(Reg8("al"), Reg8("r8b")))
-            g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
-            g = g.emit_inst(Inc(Reg64("rbx")))
-            g = g.emit_inst(Inc(Reg64("rsi")))
-            g = g.emit_inst(Inc(Reg64("rcx")))
-            g = g.emit_inst(Jmp(copy1_loop))
-            g = g.define_label(copy1_done)
-            g = g.define_label(copy2_loop)
-            g = g.emit_inst(Movzx(Reg64("r8"), MemIndirect("rdi")))
-            g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
-            g = g.emit_inst(Je(copy2_done))
-            g = g.emit_inst(Mov(Reg8("al"), Reg8("r8b")))
-            g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
-            g = g.emit_inst(Inc(Reg64("rbx")))
-            g = g.emit_inst(Inc(Reg64("rdi")))
-            g = g.emit_inst(Inc(Reg64("rcx")))
-            g = g.emit_inst(Jmp(copy2_loop))
-            g = g.define_label(copy2_done)
-            g = g.emit_inst(Mov(Reg8("al"), Imm8(0)))
-            g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
-            g = g.emit_inst(Lea(Reg64("rax"), RipRel32(buf_label)))
-            g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
-            g = g.emit_inst(Pop(Reg64("r8")))
-            g = g.emit_inst(Pop(Reg64("rcx")))
-            g = g.emit_inst(Pop(Reg64("rbx")))
-            g
-          } else {
-            self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-          }
-        "float_to_string" =>
-          if args.length() == 1 {
-            let mut g = self
-            g = g.codegen_expr(args[0])
-            g = g.emit_inst(Push(Reg64("rbx")))
-            g = g.emit_inst(Push(Reg64("rcx")))
-            g = g.emit_inst(Push(Reg64("rsi")))
-            g = g.emit_inst(Push(Reg64("rdi")))
-            // xmm0 has the float - convert to int
-            g = g.emit_inst(Cvtsd2si(Reg64("rax"), Xmm("xmm0")))
-            g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
-            // Output to buffer (working backwards from end)
-            let flt_buf = ".Lflt_buf"
-            g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(flt_buf)))
-            g = g.emit_inst(Add(Reg64("rdi"), Imm32(40)))
-            g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
-            // Extract digits (in reverse order)
-            let (g2, zero_case) = g.new_label()
-            let (g3, done_digits) = g2.new_label()
-            g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
-            g = g.emit_inst(Je(zero_case))
-            g = g.define_label(done_digits)
-            g = g.emit_inst(Mov(Reg64("rax"), Reg64("r8")))
-            g = g.emit_inst(Mov(Reg64("rbx"), Imm32(0)))
-            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
-            g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
-            g = g.emit_inst(Idiv(Reg64("rsi")))
-            g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
-            g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
-            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("dl")))
-            g = g.emit_inst(Inc(Reg64("rdi")))
-            g = g.emit_inst(Inc(Reg64("rcx")))
-            g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
-            g = g.emit_inst(Jne(done_digits))
-            g = g.define_label(zero_case)
-            // Add ".x" suffix - force 2 bytes
-            g = g.emit_inst(Mov(Reg8("al"), Imm8(46))) // '.'
-            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("al")))
-            g = g.emit_inst(Inc(Reg64("rdi")))
-            g = g.emit_inst(Inc(Reg64("rcx")))
-            g = g.emit_inst(Mov(Reg8("al"), Imm8(120))) // 'x'
-            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("al")))
-            g = g.emit_inst(Inc(Reg64("rdi")))
-            g = g.emit_inst(Inc(Reg64("rcx")))
-            // Return
-            g = g.emit_inst(Lea(Reg64("rax"), RipRel32(flt_buf)))
-            g = g.emit_inst(Add(Reg64("rax"), Imm32(40)))
-            g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
-            g = g.emit_inst(Pop(Reg64("rdi")))
-            g = g.emit_inst(Pop(Reg64("rsi")))
-            g = g.emit_inst(Pop(Reg64("rcx")))
-            g = g.emit_inst(Pop(Reg64("rbx")))
-            g
-          } else {
-            self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-          }
-        _ => {
-          // User-defined function call
-          // System V AMD64 ABI: rdi, rsi, rdx, rcx, r8, r9 for first 6 args
-          let arg_regs = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
-          let mut g = self
-          // Evaluate args and push to stack (in reverse for stack args)
-          // First pass: evaluate all args, store results on stack
-          let num_args = args.length()
-          let mut i = num_args - 1
-          while i >= 0 {
-            g = g.codegen_expr(args[i])
-            g = g.emit_inst(Push(Reg64("rax")))
-            i = i - 1
-          }
-          // Pop args into registers (first 6) and leave rest on stack
-          let mut j = 0
-          while j < num_args {
-            if j < 6 {
-              g = g.emit_inst(Pop(Reg64(arg_regs[j])))
+            "char_to_int" =>
+              if args.length() == 1 {
+                self.codegen_expr(args[0])
+              } else {
+                self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+              }
+            "int_to_char" =>
+              if args.length() == 1 {
+                self.codegen_expr(args[0])
+              } else {
+                self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+              }
+            "input" => {
+              let mut g = self
+              let label = ".Linput_buf"
+              g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+              g = g.emit_inst(Mov(Reg64("rdi"), Imm32(0)))
+              g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+              g = g.emit_inst(Mov(Reg64("rdx"), Imm32(255)))
+              g = g.emit_inst(Syscall)
+              g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rax")))
+              g = g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
+              g
             }
-            j = j + 1
+            "int_to_string" =>
+              if args.length() == 1 {
+                let mut g = self
+                g = g.codegen_expr(args[0])
+                let buf_label = ".Lint_buf"
+                let (g2, digit_loop) = g.new_label()
+                let (g3, done_label) = g2.new_label()
+                let (g4, skip_zero) = g3.new_label()
+                let (g5, skip_zero_end) = g4.new_label()
+                g = g5
+                g = g.emit_inst(Push(Reg64("rbx")))
+                g = g.emit_inst(Push(Reg64("rcx")))
+                g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                g = g.emit_inst(Je(done_label))
+                g = g.define_label(digit_loop)
+                g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                g = g.emit_inst(Idiv(Reg64("rsi")))
+                g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+                g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                g = g.emit_inst(Dec(Reg64("rdi")))
+                g = g.emit_inst(Inc(Reg64("rcx")))
+                g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                g = g.emit_inst(Jne(digit_loop))
+                g = g.define_label(done_label)
+                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                g = g.emit_inst(Jne(skip_zero))
+                g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
+                g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                g = g.emit_inst(Inc(Reg64("rcx")))
+                g = g.emit_inst(Jmp(skip_zero_end))
+                g = g.define_label(skip_zero)
+                g = g.emit_inst(Inc(Reg64("rdi")))
+                g = g.define_label(skip_zero_end)
+                g = g.emit_inst(Mov(Reg64("rax"), Reg64("rdi")))
+                g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                g = g.emit_inst(Pop(Reg64("rcx")))
+                g = g.emit_inst(Pop(Reg64("rbx")))
+                g
+              } else {
+                self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+              }
+            "string_to_int" =>
+              if args.length() == 1 {
+                let mut g = self
+                g = g.codegen_expr(args[0])
+                let (g2, loop_label) = g.new_label()
+                let (g3, done_label) = g2.new_label()
+                g = g3
+                g = g.emit_inst(Push(Reg64("rbx")))
+                g = g.emit_inst(Push(Reg64("rcx")))
+                g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+                g = g.emit_inst(Mov(Reg64("rcx"), Imm32(10)))
+                g = g.define_label(loop_label)
+                g = g.emit_inst(Movzx(Reg64("rdx"), MemIndirect("rbx")))
+                g = g.emit_inst(Cmp(Reg64("rdx"), Imm32(48)))
+                g = g.emit_inst(Jb(done_label))
+                g = g.emit_inst(Cmp(Reg64("rdx"), Imm32(57)))
+                g = g.emit_inst(Ja(done_label))
+                g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
+                g = g.emit_inst(Sub(Reg64("rdx"), Imm32(48)))
+                g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
+                g = g.emit_inst(Inc(Reg64("rbx")))
+                g = g.emit_inst(Jmp(loop_label))
+                g = g.define_label(done_label)
+                g = g.emit_inst(Pop(Reg64("rcx")))
+                g = g.emit_inst(Pop(Reg64("rbx")))
+                g
+              } else {
+                self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+              }
+            "string_to_float" =>
+              if args.length() == 1 {
+                let mut g = self
+                g = g.codegen_expr(args[0])
+                g = g.emit_inst(Push(Reg64("rbx")))
+                g = g.emit_inst(Push(Reg64("rcx")))
+                g = g.emit_inst(Push(Reg64("rdi")))
+                g = g.emit_inst(Push(Reg64("r8")))
+                g = g.emit_inst(Push(Reg64("r9")))
+                g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                g = g.emit_inst(Mov(Reg64("r8"), Imm32(0)))
+                g = g.emit_inst(Cvtsi2sd(Xmm("xmm0"), Reg64("r8")))
+                let (g2, digit_loop) = g.new_label()
+                let (g3, found_dot) = g2.new_label()
+                let (g4, frac_loop) = g3.new_label()
+                let (g5, done) = g4.new_label()
+                g = g5
+                g = g.define_label(digit_loop)
+                g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("rbx")))
+                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(46)))
+                g = g.emit_inst(Je(found_dot))
+                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(48)))
+                g = g.emit_inst(Jb(done))
+                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(57)))
+                g = g.emit_inst(Ja(done))
+                g = g.emit_inst(Imul(Reg64("r8"), Imm32(10)))
+                g = g.emit_inst(Sub(Reg64("rcx"), Imm32(48)))
+                g = g.emit_inst(Add(Reg64("r8"), Reg64("rcx")))
+                g = g.emit_inst(Inc(Reg64("rbx")))
+                g = g.emit_inst(Jmp(digit_loop))
+                g = g.define_label(found_dot)
+                g = g.emit_inst(Inc(Reg64("rbx")))
+                g = g.emit_inst(Mov(Reg64("r9"), Imm32(0)))
+                g = g.define_label(frac_loop)
+                g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("rbx")))
+                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(48)))
+                g = g.emit_inst(Jb(done))
+                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(57)))
+                g = g.emit_inst(Ja(done))
+                g = g.emit_inst(Cvtsi2sd(Xmm("xmm1"), Reg64("r8")))
+                g = g.emit_inst(Mov(Reg64("r8"), Imm32(10)))
+                g = g.emit_inst(Cvtsi2sd(Xmm("xmm2"), Reg64("r8")))
+                g = g.emit_inst(Divsd(Xmm("xmm1"), Xmm("xmm2")))
+                g = g.emit_inst(Addsd(Xmm("xmm0"), Xmm("xmm1")))
+                g = g.emit_inst(Sub(Reg64("rcx"), Imm32(48)))
+                g = g.emit_inst(Cvtsi2sd(Xmm("xmm1"), Reg64("rcx")))
+                g = g.emit_inst(Divsd(Xmm("xmm1"), Xmm("xmm2")))
+                g = g.emit_inst(Addsd(Xmm("xmm0"), Xmm("xmm1")))
+                g = g.emit_inst(Inc(Reg64("rbx")))
+                g = g.emit_inst(Inc(Reg64("r9")))
+                g = g.emit_inst(Jmp(frac_loop))
+                g = g.define_label(done)
+                g = g.emit_inst(Pop(Reg64("r9")))
+                g = g.emit_inst(Pop(Reg64("r8")))
+                g = g.emit_inst(Pop(Reg64("rdi")))
+                g = g.emit_inst(Pop(Reg64("rcx")))
+                g = g.emit_inst(Pop(Reg64("rbx")))
+                g
+              } else {
+                self.emit_inst(Cvtsi2sd(Xmm("xmm0"), Imm32(0)))
+              }
+            "string_concat" =>
+              if args.length() == 2 {
+                let mut g = self
+                g = g.codegen_expr(args[0])
+                g = g.emit_inst(Push(Reg64("rax")))
+                g = g.codegen_expr(args[1])
+                g = g.emit_inst(Mov(Reg64("rdi"), Reg64("rax")))
+                g = g.emit_inst(Pop(Reg64("rsi")))
+                let (g2, copy1_loop) = g.new_label()
+                let (g3, copy1_done) = g2.new_label()
+                let (g4, copy2_loop) = g3.new_label()
+                let (g5, copy2_done) = g4.new_label()
+                g = g5
+                g = g.emit_inst(Push(Reg64("rbx")))
+                g = g.emit_inst(Push(Reg64("rcx")))
+                g = g.emit_inst(Push(Reg64("r8")))
+                let buf_label = ".Lstrcat_buf"
+                g = g.emit_inst(Lea(Reg64("rax"), RipRel32(buf_label)))
+                g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                g = g.define_label(copy1_loop)
+                g = g.emit_inst(Movzx(Reg64("r8"), MemIndirect("rsi")))
+                g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
+                g = g.emit_inst(Je(copy1_done))
+                g = g.emit_inst(Mov(Reg8("al"), Reg8("r8b")))
+                g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+                g = g.emit_inst(Inc(Reg64("rbx")))
+                g = g.emit_inst(Inc(Reg64("rsi")))
+                g = g.emit_inst(Inc(Reg64("rcx")))
+                g = g.emit_inst(Jmp(copy1_loop))
+                g = g.define_label(copy1_done)
+                g = g.define_label(copy2_loop)
+                g = g.emit_inst(Movzx(Reg64("r8"), MemIndirect("rdi")))
+                g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
+                g = g.emit_inst(Je(copy2_done))
+                g = g.emit_inst(Mov(Reg8("al"), Reg8("r8b")))
+                g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+                g = g.emit_inst(Inc(Reg64("rbx")))
+                g = g.emit_inst(Inc(Reg64("rdi")))
+                g = g.emit_inst(Inc(Reg64("rcx")))
+                g = g.emit_inst(Jmp(copy2_loop))
+                g = g.define_label(copy2_done)
+                g = g.emit_inst(Mov(Reg8("al"), Imm8(0)))
+                g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+                g = g.emit_inst(Lea(Reg64("rax"), RipRel32(buf_label)))
+                g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                g = g.emit_inst(Pop(Reg64("r8")))
+                g = g.emit_inst(Pop(Reg64("rcx")))
+                g = g.emit_inst(Pop(Reg64("rbx")))
+                g
+              } else {
+                self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+              }
+            "float_to_string" =>
+              if args.length() == 1 {
+                let mut g = self
+                g = g.codegen_expr(args[0])
+                g = g.emit_inst(Push(Reg64("rbx")))
+                g = g.emit_inst(Push(Reg64("rcx")))
+                g = g.emit_inst(Push(Reg64("rsi")))
+                g = g.emit_inst(Push(Reg64("rdi")))
+                // xmm0 has the float - convert to int
+                g = g.emit_inst(Cvtsd2si(Reg64("rax"), Xmm("xmm0")))
+                g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
+                // Output to buffer (working backwards from end)
+                let flt_buf = ".Lflt_buf"
+                g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(flt_buf)))
+                g = g.emit_inst(Add(Reg64("rdi"), Imm32(40)))
+                g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                // Extract digits (in reverse order)
+                let (g2, zero_case) = g.new_label()
+                let (g3, done_digits) = g2.new_label()
+                g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
+                g = g.emit_inst(Je(zero_case))
+                g = g.define_label(done_digits)
+                g = g.emit_inst(Mov(Reg64("rax"), Reg64("r8")))
+                g = g.emit_inst(Mov(Reg64("rbx"), Imm32(0)))
+                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                g = g.emit_inst(Idiv(Reg64("rsi")))
+                g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
+                g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("dl")))
+                g = g.emit_inst(Inc(Reg64("rdi")))
+                g = g.emit_inst(Inc(Reg64("rcx")))
+                g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
+                g = g.emit_inst(Jne(done_digits))
+                g = g.define_label(zero_case)
+                // Add ".x" suffix - force 2 bytes
+                g = g.emit_inst(Mov(Reg8("al"), Imm8(46))) // '.'
+                g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("al")))
+                g = g.emit_inst(Inc(Reg64("rdi")))
+                g = g.emit_inst(Inc(Reg64("rcx")))
+                g = g.emit_inst(Mov(Reg8("al"), Imm8(120))) // 'x'
+                g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("al")))
+                g = g.emit_inst(Inc(Reg64("rdi")))
+                g = g.emit_inst(Inc(Reg64("rcx")))
+                // Return
+                g = g.emit_inst(Lea(Reg64("rax"), RipRel32(flt_buf)))
+                g = g.emit_inst(Add(Reg64("rax"), Imm32(40)))
+                g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                g = g.emit_inst(Pop(Reg64("rdi")))
+                g = g.emit_inst(Pop(Reg64("rsi")))
+                g = g.emit_inst(Pop(Reg64("rcx")))
+                g = g.emit_inst(Pop(Reg64("rbx")))
+                g
+              } else {
+                self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+              }
+            _ => {
+              // User-defined function call
+              // System V AMD64 ABI: rdi, rsi, rdx, rcx, r8, r9 for first 6 args
+              let arg_regs = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
+              let mut g = self
+              // Evaluate args and push to stack (in reverse for stack args)
+              // First pass: evaluate all args, store results on stack
+              let num_args = args.length()
+              let mut i = num_args - 1
+              while i >= 0 {
+                g = g.codegen_expr(args[i])
+                g = g.emit_inst(Push(Reg64("rax")))
+                i = i - 1
+              }
+              // Pop args into registers (first 6) and leave rest on stack
+              let mut j = 0
+              while j < num_args {
+                if j < 6 {
+                  g = g.emit_inst(Pop(Reg64(arg_regs[j])))
+                }
+                j = j + 1
+              }
+              // Call the function
+              g = g.emit_inst(Call(func_name))
+              // Clean up stack args if any (args beyond 6)
+              if num_args > 6 {
+                let cleanup = (num_args - 6) * 8
+                g = g.emit_inst(Add(Reg64("rsp"), Imm32(cleanup)))
+              }
+              g
+            }
           }
-          // Call the function
-          g = g.emit_inst(Call(func_name))
-          // Clean up stack args if any (args beyond 6)
-          if num_args > 6 {
-            let cleanup = (num_args - 6) * 8
-            g = g.emit_inst(Add(Reg64("rsp"), Imm32(cleanup)))
-          }
-          g
         }
       }
-    }
     IfExpr(cond, then, else_opt) => {
       let (g_end, end_label) = self.new_label()
       let (g_else, else_label) = g_end.new_label()
@@ -2460,6 +2504,10 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         StructLit(type_name, _) => Some(type_name)
         _ => None
       }
+      let array_len = match value {
+        ArrayLit(elems) => Some(elems.length())
+        _ => None
+      }
       let g = self.codegen_expr(value)
       let (g2, offset) = if is_struct_or_tuple {
         (g, g.next_offset + 8)
@@ -2479,6 +2527,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         new_strings[name] = is_string
         let new_bools = g2.var_is_bool
         new_bools[name] = is_bool
+        let new_array_lens = g2.var_array_len
+        match array_len {
+          Some(len) => new_array_lens[name] = len
+          None => ()
+        }
         let new_types = g2.var_types
         match struct_type {
           Some(type_name) => new_types[name] = type_name
@@ -2490,6 +2543,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_is_float: new_floats,
           var_is_string: new_strings,
           var_is_bool: new_bools,
+          var_array_len: new_array_lens,
           var_types: new_types,
           next_offset: offset - 8,
         }

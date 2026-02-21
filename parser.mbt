@@ -806,8 +806,23 @@ fn Parser::parse_expr(self : Parser) -> (AST, Parser) {
 
 ///|
 pub fn Parser::parse(self : Parser) -> AST {
-  let (expr, _) = self.parse_expr()
-  expr
+  let mut stmts : Array[AST] = []
+  let mut parser = self
+  let mut done = false
+  while not(done) {
+    if self_token_eq(parser.current(), Eof) {
+      done = true
+    } else {
+      let (expr, p2) = parser.parse_expr()
+      stmts = stmts + [expr]
+      parser = p2
+    }
+  }
+  if stmts.length() == 1 {
+    stmts[0]
+  } else {
+    Block(stmts)
+  }
 }
 
 ///|
