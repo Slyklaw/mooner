@@ -29,6 +29,7 @@ pub enum AST {
   AssignOp(String, AST, AST)
   TypeDecl(String, Array[(String, String)])
   StructLit(String, Array[(String, AST)])
+  StructUpdate(AST, Array[(String, AST)])
 } derive(Show)
 
 ///|
@@ -193,7 +194,8 @@ fn Parser::parse_primary(self : Parser) -> (AST, Parser) {
     Let => self.parse_let()
     Fn => self.parse_function()
     Type => self.parse_type_decl()
-    LBrace => self.parse_block()
+    Struct => self.parse_type_decl()
+    LBrace => self.parse_struct_or_block()
     Return => {
       let p = self.advance()
       let (expr, p2) = p.parse_expr()
@@ -231,6 +233,12 @@ fn Parser::parse_block(self : Parser) -> (AST, Parser) {
     }
   }
   (Block(stmts), parser)
+}
+
+///|
+fn Parser::parse_struct_or_block(self : Parser) -> (AST, Parser) {
+  let p = self.skip(1)
+  p.parse_block()
 }
 
 ///|
@@ -450,6 +458,8 @@ fn Parser::parse_type_decl(self : Parser) -> (AST, Parser) {
         done = true
       } else if self_token_eq(parser.current(), Eof) {
         done = true
+      } else if self_token_eq(parser.current(), Mut) {
+        parser = parser.advance()
       } else {
         let (field_name, p4) = parser.parse_ident()
         let (field_type, p5) = if self_token_eq(p4.current(), Colon) {
@@ -465,6 +475,8 @@ fn Parser::parse_type_decl(self : Parser) -> (AST, Parser) {
         } else if self_token_eq(p5.current(), RBrace) {
           parser = p5.advance()
           done = true
+        } else if self_token_eq(p5.current(), Mut) {
+          parser = p5.advance()
         } else {
           parser = p5
         }

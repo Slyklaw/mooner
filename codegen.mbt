@@ -1587,6 +1587,15 @@ fn is_char_expr(expr : AST, var_is_char : Map[String, Bool]) -> Bool {
 }
 
 ///|
+fn is_struct_expr(expr : AST, var_types : Map[String, String]) -> Bool {
+  match expr {
+    StructLit(_type_name, _fields) => true
+    Ident(name) => var_types.get(name) != None
+    _ => false
+  }
+}
+
+///|
 fn is_bool_expr(expr : AST, var_is_bool : Map[String, Bool]) -> Bool {
   match expr {
     Bool(_) => true
@@ -2111,6 +2120,15 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Pop(Reg64("rax")))
                       g = g.emit_inst(Mov(MemIndirect("rsi"), Reg8("al")))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                    } else if g.var_types.get(var_name) != None ||
+                      is_struct_expr(arg, g.var_types) {
+                      // Struct variable - evaluate and print as address
+                      g = g.codegen_expr(arg)
+                      // Print '<struct>'
+                      let (g2, label1) = g.add_string("<struct>")
+                      g = g2
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
                     } else {
                       // Not an array, treat as integer
                       g = g.codegen_expr(arg)
@@ -3261,12 +3279,14 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       sf[name] = field_names
       { ..self, struct_fields: sf }
     }
-    StructLit(_type_name, fields) => {
+    StructLit(type_name, fields) => {
       let num_fields = fields.length()
       if num_fields == 0 {
         self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
       } else {
         let mut g = self
+        // Evaluate all field values and push onto stack (in reverse order)
+        // This puts field 0 at the highest address, field N at lowest
         let mut i = num_fields - 1
         while i >= 0 {
           let (_fname, fval) = fields[i]
@@ -3274,9 +3294,15 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           g = g.emit_inst(Push(Reg64("rax")))
           i = i - 1
         }
-        let actual_offset = g.next_offset - (num_fields - 1) * 8
-        let g = g.emit_inst(Mov(Reg64("rax"), Imm32(actual_offset)))
-        { ..g, next_offset: actual_offset - 8 }
+        // After pushing N values, next_offset is decreased by N*8
+        // The first field (index 0) is at offset = next_offset + 8 (most recently pushed)
+        // The second field (index 1) is at offset = next_offset + 16, etc.
+        // We want field 0 to be at offset -8, field 1 at -16, etc.
+        // So we return offset = next_offset + 8
+        let actual_offset = g.next_offset + 8
+        g = g.emit_inst(Mov(Reg64("rax"), Imm32(actual_offset)))
+        g = { ..g, next_offset: actual_offset - 8 }
+        g
       }
     }
     _ => self

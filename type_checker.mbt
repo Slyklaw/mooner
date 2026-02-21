@@ -589,14 +589,30 @@ fn TypeChecker::check_expr(
         checker = c2
         i = i + 1
       }
-      match checker.env.get_type(type_name) {
-        Some(t) => (checker, t)
-        None =>
-          (
-            checker.add_error(TypeError::new("Unknown type: \{type_name}")),
-            TUnknown,
-          )
+      if type_name == "" {
+        (checker, TUnknown)
+      } else {
+        match checker.env.get_type(type_name) {
+          Some(t) => (checker, t)
+          None =>
+            (
+              checker.add_error(TypeError::new("Unknown type: \{type_name}")),
+              TUnknown,
+            )
+        }
       }
+    }
+    StructUpdate(base, fields) => {
+      let (c2, base_type) = self.check_expr(base)
+      let mut checker = c2
+      let mut i = 0
+      while i < fields.length() {
+        let (_fname, fval) = fields[i]
+        let (c3, _) = checker.check_expr(fval)
+        checker = c3
+        i = i + 1
+      }
+      (checker, base_type)
     }
   }
 }

@@ -18,6 +18,7 @@ pub enum Token {
   Unit
   Self
   Type
+  Struct
   Interface
   Impl
   Pub
@@ -685,6 +686,7 @@ fn is_keyword(s : String) -> Token {
     "unit" => Unit
     "self" => Self
     "type" => Type
+    "struct" => Struct
     "interface" => Interface
     "impl" => Impl
     "pub" => Pub
@@ -720,6 +722,7 @@ fn token_eq(a : Token, b : Token) -> Bool {
     (Unit, Unit) => true
     (Self, Self) => true
     (Type, Type) => true
+    (Struct, Struct) => true
     (Interface, Interface) => true
     (Impl, Impl) => true
     (Pub, Pub) => true

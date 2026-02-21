@@ -13,7 +13,7 @@
 | 007_basic_tuple | ✅ | ⚠️ | Tuples parse; field access works for arrays but not for values (mixed types issue) |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
 | 009_basic_control_flows | ✅ | ✅ | All loops work: fib/while/C-for/for-in ✅ |
-| 010_basic_struct | ✅ | ❌ | Structs not working |
+| 010_basic_struct | ✅ | ⚠️ | Struct parsing works; field access works; Show derive not implemented (shows addresses/placeholders) |
 | 011_basic_enum | ✅ | ❌ | Enums not working |
 | 012_basic_test | ✅ | ❌ | Test blocks ignored |
 | 013_pattern_matching | ✅ | ❌ | Pattern matching not working |

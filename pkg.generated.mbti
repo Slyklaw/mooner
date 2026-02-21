@@ -43,6 +43,7 @@ pub enum AST {
   AssignOp(String, AST, AST)
   TypeDecl(String, Array[(String, String)])
   StructLit(String, Array[(String, AST)])
+  StructUpdate(AST, Array[(String, AST)])
 }
 pub impl Show for AST
 
@@ -114,6 +115,7 @@ pub enum Token {
   Unit
   Self
   Type
+  Struct
   Interface
   Impl
   Pub
