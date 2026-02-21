@@ -104,6 +104,7 @@ pub struct CodeGen {
   var_is_tuple : Map[String, Bool]
   var_array_len : Map[String, Int]
   var_types : Map[String, String]
+  var_struct_fields : Map[String, Array[String]]
   next_offset : Int
   current_func : String?
   func_bodies : Map[String, AST]
@@ -130,6 +131,7 @@ fn CodeGen::new() -> CodeGen {
     var_is_tuple: Map::new(),
     var_array_len: Map::new(),
     var_types: Map::new(),
+    var_struct_fields: Map::new(),
     next_offset: -8,
     current_func: None,
     func_bodies: Map::new(),
@@ -2773,23 +2775,39 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         } else {
           match obj {
             Ident(var_name) =>
-              match self.var_types.get(var_name) {
-                Some(type_name) =>
-                  match self.struct_fields.get(type_name) {
-                    Some(field_names) => {
-                      let mut i = 0
-                      let mut found = 0
-                      while i < field_names.length() {
-                        if field_names[i] == field {
-                          found = i
-                        }
-                        i = i + 1
-                      }
-                      found
+              // First try var_struct_fields (for anonymous structs)
+              match self.var_struct_fields.get(var_name) {
+                Some(field_names) => {
+                  let mut i = 0
+                  let mut found = 0
+                  while i < field_names.length() {
+                    if field_names[i] == field {
+                      found = i
                     }
+                    i = i + 1
+                  }
+                  found
+                }
+                None =>
+                  // Then try var_types -> struct_fields (for named structs)
+                  match self.var_types.get(var_name) {
+                    Some(type_name) =>
+                      match self.struct_fields.get(type_name) {
+                        Some(field_names) => {
+                          let mut i = 0
+                          let mut found = 0
+                          while i < field_names.length() {
+                            if field_names[i] == field {
+                              found = i
+                            }
+                            i = i + 1
+                          }
+                          found
+                        }
+                        None => 0
+                      }
                     None => 0
                   }
-                None => 0
               }
             _ => 0
           }
@@ -2811,6 +2829,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           (g, 0)
         }
       }
+      // For structs: base_offset is the offset from rbp to field 0
+      // Field idx is at base_offset + idx * 8
       let total_offset = base_offset + idx * 8
       let g = g.emit_inst(Push(Reg64("rbx")))
       let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rbp")))
@@ -2840,24 +2860,40 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         StructLit(type_name, _) => Some(type_name)
         _ => None
       }
+      let struct_field_names = match value {
+        StructLit(_, fields) => {
+          let mut names : Array[String] = []
+          let mut i = 0
+          while i < fields.length() {
+            let (fname, _) = fields[i]
+            names = names + [fname]
+            i = i + 1
+          }
+          Some(names)
+        }
+        _ => None
+      }
       let array_len = match value {
         ArrayLit(elems) => Some(elems.length())
         _ => None
       }
       let g = self.codegen_expr(value)
-      let (g2, offset, is_array_val) = if is_float {
-        let g = g.emit_inst(PushXmm("xmm0"))
-        (g, g.next_offset, false)
-      } else if is_struct_or_tuple {
-        // For tuples, rax contains the address, push it onto stack
-        let g = g.emit_inst(Push(Reg64("rax")))
-        (g, g.next_offset, false)
-      } else if array_len != None {
-        (g, g.next_offset + 8, true)
-      } else {
-        let g = g.emit_inst(Push(Reg64("rax")))
-        (g, g.next_offset, false)
-      }
+      let (g2, offset, is_array_val) = 
+        if is_struct_or_tuple {
+          // For structs/tuples, the fields are already pushed onto the stack
+          // The base offset is computed at compile time
+          // Don't push anything - just use the base offset directly
+          // next_offset points to field 0
+          (g, g.next_offset, false)
+        } else if is_float {
+          let g = g.emit_inst(PushXmm("xmm0"))
+          (g, g.next_offset, false)
+        } else if array_len != None {
+          (g, g.next_offset + 8, true)
+        } else {
+          let g = g.emit_inst(Push(Reg64("rax")))
+          (g, g.next_offset, false)
+        }
       let g3 = {
         let new_offsets = g2.var_offsets
         new_offsets[name] = offset
@@ -2881,6 +2917,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           Some(type_name) => new_types[name] = type_name
           None => ()
         }
+        let new_struct_fields = g2.var_struct_fields
+        match struct_field_names {
+          Some(names) => new_struct_fields[name] = names
+          None => ()
+        }
         let new_next_offset = offset - 8
         {
           ..g2,
@@ -2892,6 +2933,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_is_tuple: new_tuples,
           var_array_len: new_array_lens,
           var_types: new_types,
+          var_struct_fields: new_struct_fields,
           next_offset: new_next_offset,
         }
       }
@@ -3250,22 +3292,20 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       } else {
         let mut g = self
         // Evaluate all field values and push onto stack (in reverse order)
-        // This puts field 0 at the highest address, field N at lowest
+        // Push field N-1 first (goes to highest address)
+        // Push field 0 last (goes to lowest address)
+        // After pushing: field 0 is at next_offset, field 1 is at next_offset + 8, etc.
         let mut i = num_fields - 1
         while i >= 0 {
           let (_fname, fval) = fields[i]
           g = g.codegen_expr(fval)
           g = g.emit_inst(Push(Reg64("rax")))
+          // Update next_offset for each push
+          g = { ..g, next_offset: g.next_offset - 8 }
           i = i - 1
         }
-        // After pushing N values, next_offset is decreased by N*8
-        // The first field (index 0) is at offset = next_offset + 8 (most recently pushed)
-        // The second field (index 1) is at offset = next_offset + 16, etc.
-        // We want field 0 to be at offset -8, field 1 at -16, etc.
-        // So we return offset = next_offset + 8
-        let actual_offset = g.next_offset + 8
-        g = g.emit_inst(Mov(Reg64("rax"), Imm32(actual_offset)))
-        g = { ..g, next_offset: actual_offset - 8 }
+        // After pushing N values, field 0 is at next_offset (the lowest address)
+        // The struct is now on the stack, no need to put anything in rax
         g
       }
     }
