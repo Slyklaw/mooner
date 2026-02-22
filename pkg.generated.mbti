@@ -58,6 +58,7 @@ pub struct CodeGen {
   var_is_char : Map[String, Bool]
   var_is_bool : Map[String, Bool]
   var_is_tuple : Map[String, Bool]
+  var_tuple_field_types : Map[String, Array[Bool]]
   var_array_len : Map[String, Int]
   var_types : Map[String, String]
   var_struct_fields : Map[String, Array[String]]
@@ -279,7 +280,7 @@ pub enum X86Inst {
   Divsd(X86Operand, X86Operand)
   Ucomisd(X86Operand, X86Operand)
   Cvtsi2sd(X86Operand, X86Operand)
-  Cvtsd2si(X86Operand, X86Operand)
+  Cvttsd2si(X86Operand, X86Operand)
 }
 pub impl Show for X86Inst
 

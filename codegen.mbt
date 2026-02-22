@@ -68,7 +68,7 @@ pub enum X86Inst {
   Divsd(X86Operand, X86Operand)
   Ucomisd(X86Operand, X86Operand)
   Cvtsi2sd(X86Operand, X86Operand)
-  Cvtsd2si(X86Operand, X86Operand)
+  Cvttsd2si(X86Operand, X86Operand)
 } derive(Show)
 
 ///|
@@ -102,6 +102,7 @@ pub struct CodeGen {
   var_is_char : Map[String, Bool]
   var_is_bool : Map[String, Bool]
   var_is_tuple : Map[String, Bool]
+  var_tuple_field_types : Map[String, Array[Bool]]
   var_array_len : Map[String, Int]
   var_types : Map[String, String]
   var_struct_fields : Map[String, Array[String]]
@@ -129,6 +130,7 @@ fn CodeGen::new() -> CodeGen {
     var_is_char: Map::new(),
     var_is_bool: Map::new(),
     var_is_tuple: Map::new(),
+    var_tuple_field_types: Map::new(),
     var_array_len: Map::new(),
     var_types: Map::new(),
     var_struct_fields: Map::new(),
@@ -913,9 +915,17 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
         "r15" => 7
         _ => 0
       }
-      let g = self.emit_byte(0x48)
+      let is_ext = src == "r8" ||
+        src == "r9" ||
+        src == "r10" ||
+        src == "r11" ||
+        src == "r12" ||
+        src == "r13" ||
+        src == "r14" ||
+        src == "r15"
+      let rex : Byte = if is_ext { 0x49 } else { 0x48 }
+      let g = self.emit_byte(rex)
       let g = g.emit_byte(0xF7)
-      // mod=11, reg=7 (idiv extension), rm=src_code
       let g = g.emit_byte(modrm(3, 7, src_code))
       g
     }
@@ -1446,11 +1456,33 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = g.emit_byte(modrm(2, dest_code, 5))
       g.emit32(offset)
     }
+    Movsd(Xmm(dest), MemIndirect(base)) => {
+      let dest_code = xmm_reg_code(dest)
+      let base_code = reg_code(base)
+      let g = self.emit_bytes([0xF2, 0x0F, 0x10])
+      if base == "rsp" {
+        let g = g.emit_byte(modrm(0, dest_code, 4))
+        g.emit_byte(sib(0, 4, 4))
+      } else {
+        g.emit_byte(modrm(0, dest_code, base_code))
+      }
+    }
     Movsd(StackBP64(offset), Xmm(src)) => {
       let src_code = xmm_reg_code(src)
       let g = self.emit_bytes([0xF2, 0x0F, 0x11])
       let g = g.emit_byte(modrm(2, src_code, 5))
       g.emit32(offset)
+    }
+    Movsd(MemIndirect(base), Xmm(src)) => {
+      let src_code = xmm_reg_code(src)
+      let base_code = reg_code(base)
+      let g = self.emit_bytes([0xF2, 0x0F, 0x11])
+      if base == "rsp" {
+        let g = g.emit_byte(modrm(0, src_code, 4))
+        g.emit_byte(sib(0, 4, 4))
+      } else {
+        g.emit_byte(modrm(0, src_code, base_code))
+      }
     }
     Addsd(Xmm(dest), Xmm(src)) => {
       let g = self.emit_bytes([0xF2, 0x0F, 0x58])
@@ -1488,8 +1520,8 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let src_code = reg_code(src)
       g.emit_byte(modrm(3, dest_code, src_code))
     }
-    Cvtsd2si(Reg64(dest), Xmm(src)) => {
-      let g = self.emit_bytes([0xF2, 0x48, 0x0F, 0x2D])
+    Cvttsd2si(Reg64(dest), Xmm(src)) => {
+      let g = self.emit_bytes([0xF2, 0x48, 0x0F, 0x2C])
       let dest_code = reg_code(dest)
       let src_code = xmm_reg_code(src)
       g.emit_byte(modrm(3, src_code, dest_code))
@@ -2290,6 +2322,76 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Pop(Reg64("rax")))
                       g = g.emit_inst(Mov(MemIndirect("rsi"), Reg8("al")))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                    } else if g.var_is_float.get(var_name) == Some(true) {
+                      // Float variable - print float value
+                      g = g.codegen_expr(arg)
+                      // xmm0 has the float - convert to string and print
+                      let flt_buf = ".Lflt_buf"
+                      g = g.emit_inst(Push(Reg64("rbx")))
+                      g = g.emit_inst(Push(Reg64("rcx")))
+                      g = g.emit_inst(Push(Reg64("r8")))
+                      // Convert float to int for integer part
+                      g = g.emit_inst(Cvttsd2si(Reg64("rax"), Xmm("xmm0")))
+                      g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
+                      // Output to buffer
+                      g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(flt_buf)))
+                      g = g.emit_inst(Add(Reg64("rbx"), Imm32(40)))
+                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                      // Handle negative
+                      let (g2, pos_label) = g.new_label()
+                      let (g3, print_digits) = g2.new_label()
+                      g = g3
+                      g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
+                      g = g.emit_inst(Jge(pos_label))
+                      g = g.emit_inst(Neg(Reg64("r8")))
+                      g = g.emit_inst(Mov(Reg8("al"), Imm8(45))) // '-'
+                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+                      g = g.emit_inst(Dec(Reg64("rbx")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.define_label(pos_label)
+                      // Extract digits
+                      g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
+                      g = g.emit_inst(Jne(print_digits))
+                      g = g.emit_inst(Mov(Reg8("al"), Imm8(48))) // '0'
+                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+                      g = g.emit_inst(Dec(Reg64("rbx")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Jmp(print_digits))
+                      g = g.define_label(print_digits)
+                      // Just print integer part for now with ".0" suffix
+                      g = g.emit_inst(Mov(Reg8("al"), Imm8(48))) // '0'
+                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+                      g = g.emit_inst(Dec(Reg64("rbx")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Mov(Reg8("al"), Imm8(46))) // '.'
+                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+                      g = g.emit_inst(Dec(Reg64("rbx")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      // Now print the integer part
+                      let (g4, digit_loop) = g.new_label()
+                      let (g5, done_digits) = g4.new_label()
+                      g = g5
+                      g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
+                      g = g.emit_inst(Je(done_digits))
+                      g = g.define_label(digit_loop)
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("r8")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                      g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                      g = g.emit_inst(Idiv(Reg64("rsi")))
+                      g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
+                      g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("dl")))
+                      g = g.emit_inst(Dec(Reg64("rbx")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
+                      g = g.emit_inst(Jne(digit_loop))
+                      g = g.define_label(done_digits)
+                      g = g.emit_inst(Inc(Reg64("rbx")))
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rbx")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                      g = g.emit_inst(Pop(Reg64("r8")))
+                      g = g.emit_inst(Pop(Reg64("rcx")))
+                      g = g.emit_inst(Pop(Reg64("rbx")))
                     } else if g.var_is_bool.get(var_name) == Some(true) {
                       // Bool variable - print true/false
                       g = g.codegen_expr(arg)
@@ -2430,6 +2532,25 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     let is_string = is_string_expr(arg, g.var_is_string)
                     let is_bool = is_bool_expr(arg, g.var_is_bool)
                     let is_int = is_int_expr(arg, g.var_is_float)
+                    let is_tuple_float_field = match arg {
+                      FieldExpr(Ident(var_name), field) => {
+                        let idx = if field.length() > 0 {
+                          let c = field[0]
+                          if c >= '0' && c <= '9' {
+                            c.to_int() - 48
+                          } else {
+                            0
+                          }
+                        } else {
+                          0
+                        }
+                        match g.var_tuple_field_types.get(var_name) {
+                          Some(types) => idx < types.length() && types[idx]
+                          None => false
+                        }
+                      }
+                      _ => false
+                    }
                     if is_arr {
                       g = g.codegen_expr(arg)
                       g = g.emit_inst(Push(Reg64("rbx")))
@@ -2548,11 +2669,58 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.define_label(len_done)
                       g = g.emit_inst(Pop(Reg64("rax")))
                       g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
-                    } else if is_float {
-                      let (g2, label) = g.add_string("<float>")
-                      g = g2
-                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                    } else if is_float || is_tuple_float_field {
+                      g = g.codegen_expr(arg)
+                      let flt_buf = ".Lflt_buf"
+                      g = g.emit_inst(Push(Reg64("rbx")))
+                      g = g.emit_inst(Push(Reg64("rcx")))
+                      g = g.emit_inst(Push(Reg64("r8")))
+                      g = g.emit_inst(Push(Reg64("r9")))
+                      g = g.emit_inst(Cvttsd2si(Reg64("rax"), Xmm("xmm0")))
+                      g = g.emit_inst(Mov(Reg64("r9"), Reg64("rax")))
+                      g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(flt_buf)))
+                      g = g.emit_inst(Add(Reg64("rbx"), Imm32(40)))
+                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                      let (g2, digit_loop) = g.new_label()
+                      let (g3, skip_zero) = g2.new_label()
+                      let (g4, skip_zero_end) = g3.new_label()
+                      g = g4
+                      g = g.emit_inst(Cmp(Reg64("r9"), Imm32(0)))
+                      g = g.emit_inst(Jne(digit_loop))
+                      g = g.emit_inst(Mov(Reg8("al"), Imm8(48)))
+                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+                      g = g.emit_inst(Dec(Reg64("rbx")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Jmp(skip_zero_end))
+                      g = g.define_label(digit_loop)
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("r9")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                      g = g.emit_inst(Mov(Reg64("r8"), Imm32(10)))
+                      g = g.emit_inst(Idiv(Reg64("r8")))
+                      g = g.emit_inst(Mov(Reg64("r9"), Reg64("rax")))
+                      g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("dl")))
+                      g = g.emit_inst(Dec(Reg64("rbx")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Cmp(Reg64("r9"), Imm32(0)))
+                      g = g.emit_inst(Jne(digit_loop))
+                      g = g.define_label(skip_zero)
+                      g = g.emit_inst(Inc(Reg64("rbx")))
+                      g = g.define_label(skip_zero_end)
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rbx")))
+                      g = g.emit_inst(Mov(Reg64("r8"), Reg64("rcx")))
+                      g = g.emit_inst(Add(Reg64("rbx"), Reg64("rcx")))
+                      g = g.emit_inst(Mov(Reg8("al"), Imm8(46)))
+                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+                      g = g.emit_inst(Inc(Reg64("rbx")))
+                      g = g.emit_inst(Mov(Reg8("al"), Imm8(48)))
+                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Reg64("r8")))
+                      g = g.emit_inst(Add(Reg64("rdx"), Imm32(2)))
+                      g = g.emit_inst(Pop(Reg64("r9")))
+                      g = g.emit_inst(Pop(Reg64("r8")))
+                      g = g.emit_inst(Pop(Reg64("rcx")))
+                      g = g.emit_inst(Pop(Reg64("rbx")))
                     } else if is_bool {
                       let (g2, true_label) = g.new_label()
                       let (g3, end_label) = g2.new_label()
@@ -2860,7 +3028,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 g = g.emit_inst(Push(Reg64("rsi")))
                 g = g.emit_inst(Push(Reg64("rdi")))
                 // xmm0 has the float - convert to int
-                g = g.emit_inst(Cvtsd2si(Reg64("rax"), Xmm("xmm0")))
+                g = g.emit_inst(Cvttsd2si(Reg64("rax"), Xmm("xmm0")))
                 g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
                 // Output to buffer (working backwards from end)
                 let flt_buf = ".Lflt_buf"
@@ -3023,8 +3191,15 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         // Push elements in reverse order so first element ends up at lowest address
         let mut i = num_elems - 1
         while i >= 0 {
+          let elem_is_float = is_float_expr(elems[i], g.var_is_float)
           g = g.codegen_expr(elems[i])
-          g = g.emit_inst(Push(Reg64("rax")))
+          if elem_is_float {
+            // Float is in xmm0, push it to stack
+            g = g.emit_inst(Sub(Reg64("rsp"), Imm32(8)))
+            g = g.emit_inst(Movsd(MemIndirect("rsp"), Xmm("xmm0")))
+          } else {
+            g = g.emit_inst(Push(Reg64("rax")))
+          }
           i = i - 1
         }
         // rsp now points to first element (elem0)
@@ -3095,6 +3270,14 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           (g, 0)
         }
       }
+      let field_is_float = match obj {
+        Ident(var_name) =>
+          match self.var_tuple_field_types.get(var_name) {
+            Some(types) => idx < types.length() && types[idx]
+            None => false
+          }
+        _ => false
+      }
       // For structs: base_offset is the offset from rbp to field 0
       // Field idx is at base_offset + idx * 8
       let total_offset = base_offset + idx * 8
@@ -3105,7 +3288,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       } else {
         g.emit_inst(Sub(Reg64("rbx"), Imm32(-total_offset)))
       }
-      let g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rbx")))
+      let g = if field_is_float {
+        g.emit_inst(Movsd(Xmm("xmm0"), MemIndirect("rbx")))
+      } else {
+        g.emit_inst(Mov(Reg64("rax"), MemIndirect("rbx")))
+      }
       g.emit_inst(Pop(Reg64("rbx")))
     }
     LetBind(name, _annot, value, body) => {
@@ -3136,6 +3323,18 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             i = i + 1
           }
           Some(names)
+        }
+        _ => None
+      }
+      let tuple_field_types = match value {
+        Tuple(elems) => {
+          let mut types : Array[Bool] = []
+          let mut i = 0
+          while i < elems.length() {
+            types = types + [is_float_expr(elems[i], self.var_is_float)]
+            i = i + 1
+          }
+          Some(types)
         }
         _ => None
       }
@@ -3240,6 +3439,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           Some(names) => new_struct_fields[name] = names
           None => ()
         }
+        let new_tuple_field_types = g2.var_tuple_field_types
+        match tuple_field_types {
+          Some(types) => new_tuple_field_types[name] = types
+          None => ()
+        }
         let new_next_offset = offset - 8
         {
           ..g2,
@@ -3249,6 +3453,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_is_char: new_chars,
           var_is_bool: new_bools,
           var_is_tuple: new_tuples,
+          var_tuple_field_types: new_tuple_field_types,
           var_array_len: new_array_lens,
           var_types: new_types,
           var_struct_fields: new_struct_fields,
@@ -3836,7 +4041,6 @@ pub fn codegen(ast : AST) -> Bytes {
     let (label_name, ref_pos) = g.pending_labels[i]
     match g.labels.get(label_name) {
       Some(target_pos) => {
-        // RIP-relative: offset from end of instruction (ref_pos + 4 bytes for displacement)
         let offset = target_pos - (ref_pos + 4)
         let b0 = (offset.reinterpret_as_uint() & 0xFF).to_byte()
         let b1 = ((offset.reinterpret_as_uint() >> 8) & 0xFF).to_byte()
