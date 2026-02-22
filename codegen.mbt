@@ -920,7 +920,26 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Cmp(Reg64(dest), Reg64(src)) => {
-      let g = self.emit_byte(0x48)
+      let src_ext = src == "r8" ||
+        src == "r9" ||
+        src == "r10" ||
+        src == "r11" ||
+        src == "r12" ||
+        src == "r13" ||
+        src == "r14" ||
+        src == "r15"
+      let dest_ext = dest == "r8" ||
+        dest == "r9" ||
+        dest == "r10" ||
+        dest == "r11" ||
+        dest == "r12" ||
+        dest == "r13" ||
+        dest == "r14" ||
+        dest == "r15"
+      let rex_value = (0x40 |
+      (if src_ext { 4 } else { 0 }) |
+      (if dest_ext { 1 } else { 0 })).to_byte()
+      let g = self.emit_byte(rex_value)
       let g = g.emit_byte(0x39)
       let g = g.emit_modrm_reg64(src, Reg64(dest))
       g
@@ -2053,6 +2072,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               let is_println = func_name == "println"
               let mut g = self
               let mut arg_idx = 0
+              let skip_print_label = ".Lskip_print\{g.label_counter}"
+              g = { ..g, label_counter: g.label_counter + 1 }
+              let mut need_skip_print = false
               while arg_idx < args.length() {
                 let arg = args[arg_idx]
                 match arg {
@@ -2092,13 +2114,124 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   }
                   Ident(var_name) =>
                     if g.var_array_len.get(var_name) != None {
-                      // Print array - simple placeholder
+                      // Print array - iterate through elements
+                      // Use callee-saved registers to avoid stack offset issues
                       g = g.codegen_expr(arg)
-                      // Print '<array>'
-                      let (g2, label1) = g.add_string("<array>")
+                      // rax = array address
+                      // Save callee-saved registers first
+                      g = g.emit_inst(Push(Reg64("rbx")))
+                      g = g.emit_inst(Push(Reg64("r12")))
+                      g = g.emit_inst(Push(Reg64("r13")))
+                      g = g.emit_inst(Push(Reg64("r14")))
+                      g = g.emit_inst(Push(Reg64("r15")))
+                      // r12 = array address
+                      g = g.emit_inst(Mov(Reg64("r12"), Reg64("rax")))
+                      // r13 = array length  
+                      g = g.emit_inst(Mov(Reg64("r13"), MemIndirect("rax")))
+                      // r14 = counter (starts at 0)
+                      g = g.emit_inst(Mov(Reg64("r14"), Imm32(0)))
+                      // Print opening bracket
+                      let (g2, open_label) = g.add_string("[")
                       g = g2
-                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(open_label)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      // Loop labels
+                      let arr_loop = ".Larr_print_loop\{g.label_counter}"
+                      let arr_done = ".Larr_print_done\{g.label_counter}"
+                      let elem_print = ".Larr_elem_print\{g.label_counter + 1}"
+                      g = { ..g, label_counter: g.label_counter + 2 }
+                      g = g.define_label(arr_loop)
+                      // Check if counter >= length (exit if counter >= length)
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("r14")))
+                      g = g.emit_inst(Cmp(Reg64("rax"), Reg64("r13")))
+                      g = g.emit_inst(Jae(arr_done))
+                      // Print comma before element (if not first)
+                      g = g.emit_inst(Cmp(Reg64("r14"), Imm32(0)))
+                      g = g.emit_inst(Je(elem_print))
+                      // Print ", "
+                      let (g3, comma_label) = g.add_string(", ")
+                      g = g3
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(comma_label)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      g = g.define_label(elem_print)
+                      // Load element: array_addr + 8 + counter*8
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("r14")))
+                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
+                      g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
+                      g = g.emit_inst(Mov(Reg64("rbx"), Reg64("r12")))
+                      g = g.emit_inst(Add(Reg64("rbx"), Reg64("rax")))
+                      g = g.emit_inst(Add(Reg64("rbx"), Imm32(8)))
+                      g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rbx")))
+                      // Convert element to string and print
+                      // Save the element value in r15
+                      g = g.emit_inst(Mov(Reg64("r15"), Reg64("rax")))
+                      let buf_label = ".Lint_buf"
+                      let (g4, digit_loop) = g.new_label()
+                      let (g5, done_label) = g4.new_label()
+                      let (g6, skip_zero) = g5.new_label()
+                      let (g7, skip_zero_end) = g6.new_label()
+                      g = g7
+                      g = g.emit_inst(Mov(Reg64("rbx"), Reg64("r15")))
+                      g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                      g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                      g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                      g = g.emit_inst(Je(done_label))
+                      g = g.define_label(digit_loop)
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                      g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                      g = g.emit_inst(Idiv(Reg64("rsi")))
+                      g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                      g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                      g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                      g = g.emit_inst(Dec(Reg64("rdi")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                      g = g.emit_inst(Jne(digit_loop))
+                      g = g.define_label(done_label)
+                      g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                      g = g.emit_inst(Jne(skip_zero))
+                      g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
+                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Jmp(skip_zero_end))
+                      g = g.define_label(skip_zero)
+                      g = g.emit_inst(Inc(Reg64("rdi")))
+                      g = g.define_label(skip_zero_end)
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                      // Print the number
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      // Increment counter
+                      g = g.emit_inst(Inc(Reg64("r14")))
+                      g = g.emit_inst(Jmp(arr_loop))
+                      g = g.define_label(arr_done)
+                      // Print closing bracket
+                      let (g8, close_label) = g.add_string("]")
+                      g = g8
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(close_label)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      // Restore callee-saved registers
+                      g = g.emit_inst(Pop(Reg64("r15")))
+                      g = g.emit_inst(Pop(Reg64("r14")))
+                      g = g.emit_inst(Pop(Reg64("r13")))
+                      g = g.emit_inst(Pop(Reg64("r12")))
+                      g = g.emit_inst(Pop(Reg64("rbx")))
+                      need_skip_print = true
+                      g = g.emit_inst(Jmp(skip_print_label))
                     } else if is_array_expr(arg, g.var_array_len) {
                       // Array literal - evaluate and print placeholder
                       g = g.codegen_expr(arg)
@@ -2354,6 +2487,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
                 g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
                 g = g.emit_inst(Syscall)
+                g = g.define_label(skip_print_label)
                 arg_idx = arg_idx + 1
               }
               if is_println {
@@ -2878,22 +3012,21 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         _ => None
       }
       let g = self.codegen_expr(value)
-      let (g2, offset, is_array_val) = 
-        if is_struct_or_tuple {
-          // For structs/tuples, the fields are already pushed onto the stack
-          // The base offset is computed at compile time
-          // Don't push anything - just use the base offset directly
-          // next_offset points to field 0
-          (g, g.next_offset, false)
-        } else if is_float {
-          let g = g.emit_inst(PushXmm("xmm0"))
-          (g, g.next_offset, false)
-        } else if array_len != None {
-          (g, g.next_offset + 8, true)
-        } else {
-          let g = g.emit_inst(Push(Reg64("rax")))
-          (g, g.next_offset, false)
-        }
+      let (g2, offset, is_array_val) = if is_struct_or_tuple {
+        // For structs/tuples, the fields are already pushed onto the stack
+        // The base offset is computed at compile time
+        // Don't push anything - just use the base offset directly
+        // next_offset points to field 0
+        (g, g.next_offset, false)
+      } else if is_float {
+        let g = g.emit_inst(PushXmm("xmm0"))
+        (g, g.next_offset, false)
+      } else if array_len != None {
+        (g, g.next_offset + 8, true)
+      } else {
+        let g = g.emit_inst(Push(Reg64("rax")))
+        (g, g.next_offset, false)
+      }
       let g3 = {
         let new_offsets = g2.var_offsets
         new_offsets[name] = offset

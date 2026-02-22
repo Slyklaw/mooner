@@ -8,7 +8,7 @@
 | 002_variable | ✅ | ✅ | **FIXED** - `let mut` parsing and boolean output work; OUTPUT MATCHES official |
 | 003_basic_constants | ✅ | ✅ | **FIXED** - Hex/binary/underscore literals work; OUTPUT MATCHES official |
 | 004_basic_function | ✅ | ✅ | **FIXED** - Multiple top-level functions and function calls work; OUTPUT MATCHES official |
-| 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr.push()` work; concat returns left array (no crash); spread not impl; print shows `<array>` placeholder |
+| 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr.push()`, `println(arr)` work; concat (+) and spread not implemented |
 | 006_basic_string | ✅ | ⚠️ | get_char(), unwrap(), char equality, concat with +, escape sequences, char printing as char work; unicode shows '?'; interpolation literal |
 | 007_basic_tuple | ✅ | ⚠️ | Tuples parse; field access works for arrays but not for values (mixed types issue) |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
@@ -54,11 +54,11 @@ These are foundational issues blocking multiple examples.
 - [x] Implement array indexing `arr[0]`
 - [x] Implement `array.length()` method (reads from array header)
 - [x] Implement array element assignment `arr[i] = value`
+- [x] Implement array printing in `println` (loop-based printing with comma separators)
 - [x] Array layout: `[length][elem0][elem1]...` (length at offset 0, elements at offset 8)
 - [ ] Implement `array.push()` mutation
 - [ ] Implement array concatenation `arr1 + arr2`
 - [ ] Implement spread operator `[..arr1, 1000, ..arr2]`
-- [ ] Implement array printing in `println` (loop-based printing has register issues)
 
 ### 2.3 Strings
 - [ ] Implement String concatenation `str1 + str2`

@@ -272,9 +272,7 @@ fn Parser::parse_struct_or_block(self : Parser) -> (AST, Parser) {
                     return p.parse_block()
                   }
                 }
-                _ => {
-                  parser = p5
-                }
+                _ => parser = p5
               }
             }
           } else if self_token_eq(parser.current(), RBrace) {
@@ -295,10 +293,9 @@ fn Parser::parse_struct_or_block(self : Parser) -> (AST, Parser) {
       let p2 = p.advance()
       (StructLit("", []), p2)
     }
-    _ => {
+    _ =>
       // Not a struct literal, parse as block
       p.parse_block()
-    }
   }
 }
 
