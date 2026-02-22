@@ -1565,6 +1565,32 @@ fn is_float_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
   }
 }
 
+fn is_float_field_expr(expr : AST, var_tuple_field_types : Map[String, Array[Bool]]) -> Bool {
+  match expr {
+    FieldExpr(Ident(var_name), field) => {
+      let idx = if field.length() > 0 {
+        let c = field[0]
+        if c >= '0' && c <= '9' {
+          c.to_int() - 48
+        } else {
+          -1
+        }
+      } else {
+        -1
+      }
+      if idx >= 0 {
+        match var_tuple_field_types.get(var_name) {
+          Some(types) => idx < types.length() && types[idx]
+          None => false
+        }
+      } else {
+        false
+      }
+    }
+    _ => false
+  }
+}
+
 ///|
 fn is_int_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
   match expr {
@@ -3344,7 +3370,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g.emit_inst(Pop(Reg64("rbx")))
     }
     LetBind(name, _annot, value, body) => {
-      let is_float = is_float_expr(value, self.var_is_float)
+      let is_float = is_float_expr(value, self.var_is_float) ||
+        is_float_field_expr(value, self.var_tuple_field_types)
       let is_string = is_string_expr(value, self.var_is_string)
       let is_char = is_char_expr(value, self.var_is_char)
       let is_bool = is_bool_expr(value, self.var_is_bool)
