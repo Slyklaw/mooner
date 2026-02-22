@@ -2454,6 +2454,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_false)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
                       g = g.define_label(end_label)
+                    } else if g.var_is_tuple.get(var_name) == Some(true) {
+                      g = g.codegen_expr(arg)
+                      let (g2, label1) = g.add_string("<tuple>")
+                      g = g2
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
                     } else if g.var_types.get(var_name) != None ||
                       is_struct_expr(arg, g.var_types) {
                       // Struct variable - evaluate and print as address
@@ -2508,6 +2514,13 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Pop(Reg64("rcx")))
                       g = g.emit_inst(Pop(Reg64("rbx")))
                     }
+                  Tuple(_) => {
+                    g = g.codegen_expr(arg)
+                    let (g2, label1) = g.add_string("<tuple>")
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
+                  }
                   CallExpr(Ident(fname), inner_args) =>
                     if fname == "int_to_string" {
                       g = g.codegen_expr(arg)
