@@ -4,15 +4,15 @@
 
 | Example | Compile | Run | Priority Issues |
 |---------|---------|-----|-----------------|
-| 001_hello | ✅ | ✅ | **FIXED** - Multiline strings and long strings now work; OUTPUT MATCHES official |
-| 002_variable | ✅ | ✅ | **FIXED** - `let mut` parsing and boolean output work; OUTPUT MATCHES official |
-| 003_basic_constants | ✅ | ✅ | **FIXED** - Hex/binary/underscore literals work; OUTPUT MATCHES official |
-| 004_basic_function | ✅ | ✅ | **FIXED** - Multiple top-level functions and function calls work; OUTPUT MATCHES official |
-| 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr.push()`, `println(arr)` work; concat (+) returns right array (placeholder); spread not implemented |
-| 006_basic_string | ✅ | ⚠️ | get_char(), unwrap(), char equality, concat with +, escape sequences work; unicode shows '?'; interpolation not implemented |
-| 007_basic_tuple | ✅ | ⚠️ | Tuples parse; field access works for arrays but not for values (mixed types issue) |
+| 001_hello | ✅ | ✅ | OUTPUT MATCHES official |
+| 002_variable | ✅ | ✅ | OUTPUT MATCHES official |
+| 003_basic_constants | ✅ | ✅ | OUTPUT MATCHES official |
+| 004_basic_function | ✅ | ✅ | OUTPUT MATCHES official |
+| 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr.push()`, `println(arr)` work; concat (+) returns right array; spread not implemented |
+| 006_basic_string | ✅ | ⚠️ | get_char(), unwrap(), char equality, concat (+), escape sequences work; unicode shows '?'; interpolation not implemented |
+| 007_basic_tuple | ✅ | ⚠️ | Tuple field access works for int tuples; mixed types (float/bool) broken; printing shows address; destructuring broken |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
-| 009_basic_control_flows | ✅ | ✅ | All loops work: fib/while/C-for/for-in ✅; OUTPUT MATCHES official |
+| 009_basic_control_flows | ✅ | ✅ | OUTPUT MATCHES official |
 | 010_basic_struct | ✅ | ⚠️ | Struct parsing works; field access works; Show derive not implemented |
 | 011_basic_enum | ✅ | ❌ | Enums parse but constructors not implemented; match expression broken |
 | 012_basic_test | ✅ | ❌ | Test blocks parse but not executed |
@@ -144,9 +144,9 @@ Update this section as tasks are completed:
 - [x] 002_variable working (OUTPUT MATCHES official)
 - [x] 003_basic_constants working (OUTPUT MATCHES official)
 - [x] 004_basic_function working (OUTPUT MATCHES official)
-- [ ] 005_basic_array working (concat/spread incomplete)
+- [ ] 005_basic_array working (concat returns right array, spread not impl)
 - [ ] 006_basic_string working (unicode/interpolation not impl)
-- [ ] 007_basic_tuple working
+- [ ] 007_basic_tuple working (mixed types/float in tuple broken)
 - [ ] 008_basic_map working
 - [x] 009_basic_control_flows working (OUTPUT MATCHES official)
 - [ ] 010_basic_struct working

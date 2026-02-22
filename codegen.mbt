@@ -3151,11 +3151,57 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         _ => None
       }
       let g = self.codegen_expr(value)
-      let (g2, offset, is_array_val) = if is_struct_or_tuple {
+      let num_tuple_elems = match value {
+        Tuple(elems) => elems.length()
+        StructLit(_, fields) => fields.length()
+        _ => 0
+      }
+      let (g2, offset, is_array_val) = if is_struct_or_tuple &&
+        num_tuple_elems > 0 {
         // For structs/tuples, the fields are already pushed onto the stack
-        // The base offset is computed at compile time
-        // Don't push anything - just use the base offset directly
-        // next_offset points to field 0
+        // Each element is 8 bytes, pushed in reverse order
+        // The tuple starts at the current rsp, which is:
+        // rbp - (stack slots used before this tuple) - num_tuple_elems * 8
+        // Since we track next_offset as where the NEXT slot would go,
+        // and we haven't updated next_offset during the tuple push,
+        // the tuple offset is: next_offset - num_tuple_elems * 8 + 8
+        // Simplify: the tuple starts at rsp, which moved by num_elems * 8 from
+        // its original position. If next_offset was in sync, offset = next_offset - num_elems * 8 + 8
+        // But actually, next_offset tracks the next SLOT, not the current stack position.
+        // The first element pushed ends up at next_offset - 8 - (num_elems-1) * 8
+        // Simplify: first element at next_offset - num_elems * 8
+        // But that's wrong... Let me just compute it correctly.
+        // After pushing num_elems elements, rsp = original_rsp - num_elems * 8
+        // original_rsp = rbp + next_offset + 8 (since next_offset points to the NEXT slot)
+        // Actually, next_offset = -(slots_used * 8), and slots_used = (num previous pushes)
+        // After tuple pushes: rsp = rbp - (slots_used + num_tuple_elems) * 8
+        // So offset = -(slots_used + num_tuple_elems) * 8 = next_offset - num_tuple_elems * 8
+        // But wait, slots_used = -next_offset / 8, so after tuple, slots_used increases by num_tuple_elems
+        // Let me just compute: offset = -(num_tuple_elems) * 8 relative to rbp
+        // Since rsp started at rbp (no previous pushes), offset = -num_tuple_elems * 8
+        // But we also need to account for previous local variables...
+        // The correct formula: offset = next_offset - num_tuple_elems * 8 + 8
+        // No, that's still wrong. Let me trace through more carefully:
+        // - next_offset starts at -8 (meaning first local var will be at rbp - 8)
+        // - Before tuple, nothing pushed, rsp = rbp
+        // - After tuple (num_elems = 2): rsp = rbp - 16
+        // - Tuple should be at rbp - 16, so offset = -16
+        // - Formula: offset = -num_tuple_elems * 8 = -16 ✓
+        // But this doesn't use next_offset...
+        // The issue is next_offset isn't tracking the actual stack position
+        // Let's fix the formula: offset = -(num_tuple_elems) * 8
+        // But we need to account for previous vars too...
+        // After a previous var: next_offset = -16, rsp = rbp - 8
+        // After tuple: rsp = rbp - 8 - 16 = rbp - 24
+        // So offset = next_offset - num_tuple_elems * 8 = -16 - 16 = -32... wrong!
+        // The tuple should be at rbp - 24, not -32
+        // So the formula should be: offset = next_offset - num_tuple_elems * 8 + 8
+        // = -16 - 16 + 8 = -24 ✓
+        // For the first var (next_offset = -8, no previous pushes):
+        // offset = -8 - 16 + 8 = -16 ✓
+        (g, g.next_offset - num_tuple_elems * 8 + 8, false)
+      } else if is_struct_or_tuple {
+        // Empty struct/tuple
         (g, g.next_offset, false)
       } else if is_float {
         let g = g.emit_inst(PushXmm("xmm0"))
