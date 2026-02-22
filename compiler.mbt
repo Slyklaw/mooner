@@ -58,6 +58,12 @@ pub fn compile_file(
   let code_len = code.length()
   let padded_code_len = (code_len + 0xFFF) & 0xFFFFF000
 
+  // Header is 96 bytes (ELF header 64 + partial program header 32)
+  // phdr_extra is 24 bytes (p_filesz, p_memsz, p_align)
+  // Total: 120 bytes
+  // Padding: 0x1000 - 120 = 3976 bytes (0xF88)
+  let padding_len = 0x1000 - 120
+
   // Create phdr_bytes - write padded_code_len as little-endian bytes
   let mut phdr_all : Array[Byte] = []
 
@@ -93,6 +99,7 @@ pub fn compile_file(
 
   let phdr_bytes = Bytes::from_array(phdr_all)
   let header_bytes = Bytes::from_array(header)
+  let padding : Array[Byte] = Array::make(padding_len, 0x00B)
   let padding_bytes = Bytes::from_array(padding)
 
   // Pad code to match padded_code_len

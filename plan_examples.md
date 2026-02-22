@@ -10,13 +10,23 @@
 | 004_basic_function | ✅ | ✅ | OUTPUT MATCHES official |
 | 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr.push()`, `println(arr)` work; concat (+) returns right array; spread not implemented |
 | 006_basic_string | ✅ | ⚠️ | get_char(), unwrap(), char equality, concat (+), escape sequences work; unicode shows '?'; interpolation not implemented |
-| 007_basic_tuple | ✅ | ⚠️ | Tuple field access works for int tuples; mixed types (float/bool) broken; printing shows address; destructuring broken |
+| 007_basic_tuple | ✅ | ⚠️ | Tuple field access works for int tuples; float tuples now work; printing shows address; destructuring broken |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
 | 009_basic_control_flows | ✅ | ✅ | OUTPUT MATCHES official |
 | 010_basic_struct | ✅ | ⚠️ | Struct parsing works; field access works; Show derive not implemented |
 | 011_basic_enum | ✅ | ❌ | Enums parse but constructors not implemented; match expression broken |
 | 012_basic_test | ✅ | ❌ | Test blocks parse but not executed |
 | 013_pattern_matching | ✅ | ❌ | Pattern matching broken (match expression has control flow bugs) |
+
+## Recent Fixes
+
+### 2024-02-21: Float Truncation Bug Fixed
+- **Issue**: Float values were being rounded instead of truncated when printing
+  - 2.71 → printed as "3.0" (should be "2.0")
+  - 5.5 → printed as "6.0" (should be "5.0")
+- **Root cause**: Used `cvtsd2si` (round to nearest) instead of `cvttsd2si` (truncate toward zero)
+- **Fix**: Changed opcode from `0x2D` to `0x2C`, renamed `Cvtsd2si` → `Cvttsd2si` in codegen.mbt
+- **Result**: Float variables now work correctly with multiple floats
 
 ## Phase 1: Core Runtime (HIGH PRIORITY)
 

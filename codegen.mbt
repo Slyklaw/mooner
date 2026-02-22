@@ -1778,10 +1778,58 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       } else if op == "+" &&
         is_array_expr(left, self.var_array_len) &&
         is_array_expr(right, self.var_array_len) {
-        // Array concatenation: create new array with elements from both
-        // Simpler approach: just evaluate right array and return it
-        // (placeholder - full implementation requires more work)
-        let g = self.codegen_expr(right)
+        let mut g = self
+        g = g.codegen_expr(left)
+        g = g.emit_inst(Push(Reg64("rbx")))
+        g = g.emit_inst(Push(Reg64("r12")))
+        g = g.emit_inst(Push(Reg64("r13")))
+        g = g.emit_inst(Push(Reg64("r14")))
+        g = g.emit_inst(Push(Reg64("r15")))
+        g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+        g = g.codegen_expr(right)
+        g = g.emit_inst(Mov(Reg64("r12"), Reg64("rax")))
+        g = g.emit_inst(Mov(Reg64("r13"), MemIndirect("rbx")))
+        g = g.emit_inst(Mov(Reg64("r14"), MemIndirect("r12")))
+        g = g.emit_inst(Mov(Reg64("r15"), Reg64("r13")))
+        g = g.emit_inst(Add(Reg64("r15"), Reg64("r14")))
+        let (g2, copy1_loop) = g.new_label()
+        let (g3, copy1_done) = g2.new_label()
+        let (g4, copy2_loop) = g3.new_label()
+        let (g5, copy2_done) = g4.new_label()
+        g = g5
+        let arrcat_buf = ".Larrcat_buf"
+        g = g.emit_inst(Lea(Reg64("rax"), RipRel32(arrcat_buf)))
+        g = g.emit_inst(Mov(MemIndirect("rax"), Reg64("r15")))
+        g = g.emit_inst(Mov(Reg64("rcx"), Reg64("rax")))
+        g = g.emit_inst(Add(Reg64("rcx"), Imm32(8)))
+        g = g.emit_inst(Add(Reg64("rbx"), Imm32(8)))
+        g = g.define_label(copy1_loop)
+        g = g.emit_inst(Test(Reg64("r13"), Reg64("r13")))
+        g = g.emit_inst(Jz(copy1_done))
+        g = g.emit_inst(Mov(Reg64("rdx"), MemIndirect("rbx")))
+        g = g.emit_inst(Mov(MemIndirect("rcx"), Reg64("rdx")))
+        g = g.emit_inst(Add(Reg64("rbx"), Imm32(8)))
+        g = g.emit_inst(Add(Reg64("rcx"), Imm32(8)))
+        g = g.emit_inst(Dec(Reg64("r13")))
+        g = g.emit_inst(Jmp(copy1_loop))
+        g = g.define_label(copy1_done)
+        g = g.emit_inst(Add(Reg64("r12"), Imm32(8)))
+        g = g.define_label(copy2_loop)
+        g = g.emit_inst(Test(Reg64("r14"), Reg64("r14")))
+        g = g.emit_inst(Jz(copy2_done))
+        g = g.emit_inst(Mov(Reg64("rdx"), MemIndirect("r12")))
+        g = g.emit_inst(Mov(MemIndirect("rcx"), Reg64("rdx")))
+        g = g.emit_inst(Add(Reg64("r12"), Imm32(8)))
+        g = g.emit_inst(Add(Reg64("rcx"), Imm32(8)))
+        g = g.emit_inst(Dec(Reg64("r14")))
+        g = g.emit_inst(Jmp(copy2_loop))
+        g = g.define_label(copy2_done)
+        g = g.emit_inst(Lea(Reg64("rax"), RipRel32(arrcat_buf)))
+        g = g.emit_inst(Pop(Reg64("r15")))
+        g = g.emit_inst(Pop(Reg64("r14")))
+        g = g.emit_inst(Pop(Reg64("r13")))
+        g = g.emit_inst(Pop(Reg64("r12")))
+        g = g.emit_inst(Pop(Reg64("rbx")))
         g
       } else if op == "+" && is_string {
         // String concatenation
@@ -4032,6 +4080,12 @@ pub fn codegen(ast : AST) -> Bytes {
   g = g.define_label(".Lflt_buf")
   buf_idx = 0
   while buf_idx < 64 {
+    g = g.emit_byte(0x00)
+    buf_idx = buf_idx + 1
+  }
+  g = g.define_label(".Larrcat_buf")
+  buf_idx = 0
+  while buf_idx < 2048 {
     g = g.emit_byte(0x00)
     buf_idx = buf_idx + 1
   }
