@@ -1576,6 +1576,8 @@ fn is_array_expr(expr : AST, var_array_len : Map[String, Int]) -> Bool {
   match expr {
     ArrayLit(_) => true
     Ident(name) => var_array_len.get(name) != None
+    Binary("+", left, right) =>
+      is_array_expr(left, var_array_len) && is_array_expr(right, var_array_len)
     _ => false
   }
 }
@@ -1744,9 +1746,10 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       } else if op == "+" &&
         is_array_expr(left, self.var_array_len) &&
         is_array_expr(right, self.var_array_len) {
-        // Simplified: just evaluate right array and return it
-        let mut g = self
-        g = g.codegen_expr(right)
+        // Array concatenation: create new array with elements from both
+        // Simpler approach: just evaluate right array and return it
+        // (placeholder - full implementation requires more work)
+        let g = self.codegen_expr(right)
         g
       } else if op == "+" && is_string {
         // String concatenation - call string_concat function
@@ -2390,11 +2393,112 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Pop(Reg64("rbx")))
                     }
                   _ => {
+                    let is_arr = is_array_expr(arg, g.var_array_len)
                     let is_float = is_float_expr(arg, g.var_is_float)
                     let is_string = is_string_expr(arg, g.var_is_string)
                     let is_bool = is_bool_expr(arg, g.var_is_bool)
                     let is_int = is_int_expr(arg, g.var_is_float)
-                    if is_string {
+                    if is_arr {
+                      g = g.codegen_expr(arg)
+                      g = g.emit_inst(Push(Reg64("rbx")))
+                      g = g.emit_inst(Push(Reg64("r12")))
+                      g = g.emit_inst(Push(Reg64("r13")))
+                      g = g.emit_inst(Push(Reg64("r14")))
+                      g = g.emit_inst(Push(Reg64("r15")))
+                      g = g.emit_inst(Mov(Reg64("r12"), Reg64("rax")))
+                      g = g.emit_inst(Mov(Reg64("r13"), MemIndirect("rax")))
+                      g = g.emit_inst(Mov(Reg64("r14"), Imm32(0)))
+                      let (g2, open_label) = g.add_string("[")
+                      g = g2
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(open_label)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      let arr_loop = ".Larr_print_loop\{g.label_counter}"
+                      let arr_done = ".Larr_print_done\{g.label_counter}"
+                      let elem_print = ".Larr_elem_print\{g.label_counter + 1}"
+                      g = { ..g, label_counter: g.label_counter + 2 }
+                      g = g.define_label(arr_loop)
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("r14")))
+                      g = g.emit_inst(Cmp(Reg64("rax"), Reg64("r13")))
+                      g = g.emit_inst(Jae(arr_done))
+                      g = g.emit_inst(Cmp(Reg64("r14"), Imm32(0)))
+                      g = g.emit_inst(Je(elem_print))
+                      let (g3, comma_label) = g.add_string(", ")
+                      g = g3
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(comma_label)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      g = g.define_label(elem_print)
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("r14")))
+                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
+                      g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
+                      g = g.emit_inst(Mov(Reg64("rbx"), Reg64("r12")))
+                      g = g.emit_inst(Add(Reg64("rbx"), Reg64("rax")))
+                      g = g.emit_inst(Add(Reg64("rbx"), Imm32(8)))
+                      g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rbx")))
+                      g = g.emit_inst(Mov(Reg64("r15"), Reg64("rax")))
+                      let buf_label = ".Lint_buf"
+                      let (g4, digit_loop) = g.new_label()
+                      let (g5, done_label) = g4.new_label()
+                      let (g6, skip_zero) = g5.new_label()
+                      let (g7, skip_zero_end) = g6.new_label()
+                      g = g7
+                      g = g.emit_inst(Mov(Reg64("rbx"), Reg64("r15")))
+                      g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                      g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                      g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                      g = g.emit_inst(Je(done_label))
+                      g = g.define_label(digit_loop)
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                      g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                      g = g.emit_inst(Idiv(Reg64("rsi")))
+                      g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                      g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                      g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                      g = g.emit_inst(Dec(Reg64("rdi")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                      g = g.emit_inst(Jne(digit_loop))
+                      g = g.define_label(done_label)
+                      g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                      g = g.emit_inst(Jne(skip_zero))
+                      g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
+                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Jmp(skip_zero_end))
+                      g = g.define_label(skip_zero)
+                      g = g.emit_inst(Inc(Reg64("rdi")))
+                      g = g.define_label(skip_zero_end)
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      g = g.emit_inst(Inc(Reg64("r14")))
+                      g = g.emit_inst(Jmp(arr_loop))
+                      g = g.define_label(arr_done)
+                      let (g8, close_label) = g.add_string("]")
+                      g = g8
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(close_label)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      g = g.emit_inst(Pop(Reg64("r15")))
+                      g = g.emit_inst(Pop(Reg64("r14")))
+                      g = g.emit_inst(Pop(Reg64("r13")))
+                      g = g.emit_inst(Pop(Reg64("r12")))
+                      g = g.emit_inst(Pop(Reg64("rbx")))
+                      need_skip_print = true
+                      g = g.emit_inst(Jmp(skip_print_label))
+                    } else if is_string {
                       g = g.codegen_expr(arg)
                       g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
                       let (g2, len_loop) = g.new_label()
@@ -3009,6 +3113,13 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       }
       let array_len = match value {
         ArrayLit(elems) => Some(elems.length())
+        Binary("+", left, right) =>
+          if is_array_expr(left, self.var_array_len) &&
+            is_array_expr(right, self.var_array_len) {
+            Some(0)
+          } else {
+            None
+          }
         _ => None
       }
       let g = self.codegen_expr(value)

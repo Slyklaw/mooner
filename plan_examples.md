@@ -8,7 +8,7 @@
 | 002_variable | ✅ | ✅ | **FIXED** - `let mut` parsing and boolean output work; OUTPUT MATCHES official |
 | 003_basic_constants | ✅ | ✅ | **FIXED** - Hex/binary/underscore literals work; OUTPUT MATCHES official |
 | 004_basic_function | ✅ | ✅ | **FIXED** - Multiple top-level functions and function calls work; OUTPUT MATCHES official |
-| 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr.push()`, `println(arr)` work; concat (+) and spread not implemented |
+| 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr.push()`, `println(arr)` work; concat (+) returns right array (placeholder); spread not implemented |
 | 006_basic_string | ✅ | ⚠️ | get_char(), unwrap(), char equality, concat with +, escape sequences, char printing as char work; unicode shows '?'; interpolation literal |
 | 007_basic_tuple | ✅ | ⚠️ | Tuples parse; field access works for arrays but not for values (mixed types issue) |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
