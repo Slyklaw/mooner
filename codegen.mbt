@@ -3861,17 +3861,16 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         // Evaluate all field values and push onto stack (in reverse order)
         // Push field N-1 first (goes to highest address)
         // Push field 0 last (goes to lowest address)
-        // After pushing: field 0 is at next_offset, field 1 is at next_offset + 8, etc.
+        // After pushing: field 0 is at rsp, field 1 is at rsp + 8, etc.
         let mut i = num_fields - 1
         while i >= 0 {
           let (_fname, fval) = fields[i]
           g = g.codegen_expr(fval)
           g = g.emit_inst(Push(Reg64("rax")))
-          // Update next_offset for each push
-          g = { ..g, next_offset: g.next_offset - 8 }
+          // Do NOT update next_offset here - LetBind will calculate the correct offset
           i = i - 1
         }
-        // After pushing N values, field 0 is at next_offset (the lowest address)
+        // After pushing N values, rsp points to field 0
         // The struct is now on the stack, no need to put anything in rax
         g
       }
