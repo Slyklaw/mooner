@@ -10,15 +10,21 @@
 | 004_basic_function | ✅ | ✅ | OUTPUT MATCHES official |
 | 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr.push()`, `println(arr)` work; concat (+) returns right array; spread not implemented |
 | 006_basic_string | ✅ | ⚠️ | get_char(), unwrap(), char equality, concat (+), escape sequences work; unicode shows '?'; interpolation not implemented |
-| 007_basic_tuple | ✅ | ⚠️ | Tuple field access works for int tuples; float tuples now work; printing shows address; destructuring broken |
+| 007_basic_tuple | ✅ | ⚠️ | **FIXED**: Int tuple field access works; Float tuple fields work; printing shows address; destructuring broken |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
 | 009_basic_control_flows | ✅ | ✅ | OUTPUT MATCHES official |
-| 010_basic_struct | ✅ | ⚠️ | Struct parsing works; field access works; Show derive not implemented |
+| 010_basic_struct | ✅ | ⚠️ | **FIXED**: Struct field access works; Show derive not implemented (prints `<struct>`) |
 | 011_basic_enum | ✅ | ❌ | Enums parse but constructors not implemented; match expression broken |
 | 012_basic_test | ✅ | ❌ | Test blocks parse but not executed |
 | 013_pattern_matching | ✅ | ❌ | Pattern matching broken (match expression has control flow bugs) |
 
 ## Recent Fixes
+
+### 2024-02-22: Struct Field Access Fixed
+- **Issue**: Struct field access returned 0 for all fields
+- **Root cause**: StructLit was incorrectly updating `next_offset` during field pushes, causing LetBind to calculate wrong offsets
+- **Fix**: Removed `next_offset` update in StructLit, matching Tuple behavior
+- **Result**: Struct field access now works correctly for both anonymous and named structs
 
 ### 2024-02-21: Float Truncation Bug Fixed
 - **Issue**: Float values were being rounded instead of truncated when printing
