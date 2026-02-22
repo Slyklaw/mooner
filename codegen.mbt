@@ -1752,7 +1752,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         let g = self.codegen_expr(right)
         g
       } else if op == "+" && is_string {
-        // String concatenation - call string_concat function
+        // String concatenation
         let mut g = self
         // Evaluate first string
         g = g.codegen_expr(left)
@@ -1771,16 +1771,14 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         g = g5
         g = g.emit_inst(Push(Reg64("rbx")))
         g = g.emit_inst(Push(Reg64("rcx")))
-        g = g.emit_inst(Push(Reg64("r8")))
         let buf_label = ".Lstrcat_buf"
         g = g.emit_inst(Lea(Reg64("rax"), RipRel32(buf_label)))
         g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
         g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
         g = g.define_label(copy1_loop)
-        g = g.emit_inst(Movzx(Reg64("r8"), MemIndirect("rsi")))
-        g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
-        g = g.emit_inst(Je(copy1_done))
-        g = g.emit_inst(Mov(Reg8("al"), Reg8("r8b")))
+        g = g.emit_inst(Movzx(Reg64("rax"), MemIndirect("rsi")))
+        g = g.emit_inst(Test(Reg64("rax"), Reg64("rax")))
+        g = g.emit_inst(Jz(copy1_done))
         g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
         g = g.emit_inst(Inc(Reg64("rbx")))
         g = g.emit_inst(Inc(Reg64("rsi")))
@@ -1788,10 +1786,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         g = g.emit_inst(Jmp(copy1_loop))
         g = g.define_label(copy1_done)
         g = g.define_label(copy2_loop)
-        g = g.emit_inst(Movzx(Reg64("r8"), MemIndirect("rdi")))
-        g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
-        g = g.emit_inst(Je(copy2_done))
-        g = g.emit_inst(Mov(Reg8("al"), Reg8("r8b")))
+        g = g.emit_inst(Movzx(Reg64("rax"), MemIndirect("rdi")))
+        g = g.emit_inst(Test(Reg64("rax"), Reg64("rax")))
+        g = g.emit_inst(Jz(copy2_done))
         g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
         g = g.emit_inst(Inc(Reg64("rbx")))
         g = g.emit_inst(Inc(Reg64("rdi")))
@@ -1801,7 +1798,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         g = g.emit_inst(Mov(Reg8("al"), Imm8(0)))
         g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
         g = g.emit_inst(Lea(Reg64("rax"), RipRel32(buf_label)))
-        g = g.emit_inst(Pop(Reg64("r8")))
         g = g.emit_inst(Pop(Reg64("rcx")))
         g = g.emit_inst(Pop(Reg64("rbx")))
         g
@@ -2002,10 +1998,32 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         FieldExpr(obj, method_name) =>
           match method_name {
             "length" => {
-              // arr.length() - returns the length from array header
-              // Array layout: [length][elem0][elem1]...
-              let g = self.codegen_expr(obj)
-              g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+              // Check if it's a string or array
+              let is_str = is_string_expr(obj, self.var_is_string)
+              if is_str {
+                // String length - count chars until null terminator
+                let mut g = self.codegen_expr(obj)
+                let (g2, len_loop) = g.new_label()
+                let (g3, len_done) = g2.new_label()
+                g = g3
+                g = g.emit_inst(Push(Reg64("rbx")))
+                g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+                g = g.define_label(len_loop)
+                g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("rbx")))
+                g = g.emit_inst(Test(Reg64("rcx"), Reg64("rcx")))
+                g = g.emit_inst(Jz(len_done))
+                g = g.emit_inst(Inc(Reg64("rbx")))
+                g = g.emit_inst(Inc(Reg64("rax")))
+                g = g.emit_inst(Jmp(len_loop))
+                g = g.define_label(len_done)
+                g = g.emit_inst(Pop(Reg64("rbx")))
+                g
+              } else {
+                // Array length - read from array header
+                let g = self.codegen_expr(obj)
+                g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+              }
             }
             "get_char" => {
               // str.get_char(index) - returns char at index
@@ -2245,9 +2263,23 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     } else if g.var_is_string.get(var_name) == Some(true) {
                       // String variable - evaluate and print the string
                       g = g.codegen_expr(arg)
-                      // Print up to 32 chars
+                      // Calculate string length
                       g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(32)))
+                      let (g2, len_loop) = g.new_label()
+                      let (g3, len_done) = g2.new_label()
+                      g = g3
+                      g = g.emit_inst(Push(Reg64("rax")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                      g = g.define_label(len_loop)
+                      g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("rax")))
+                      g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                      g = g.emit_inst(Je(len_done))
+                      g = g.emit_inst(Inc(Reg64("rax")))
+                      g = g.emit_inst(Inc(Reg64("rdx")))
+                      g = g.emit_inst(Jmp(len_loop))
+                      g = g.define_label(len_done)
+                      g = g.emit_inst(Pop(Reg64("rax")))
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
                     } else if g.var_is_char.get(var_name) == Some(true) {
                       // Char variable - evaluate and print as 1-char string
                       g = g.codegen_expr(arg)
@@ -2785,16 +2817,14 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 g = g5
                 g = g.emit_inst(Push(Reg64("rbx")))
                 g = g.emit_inst(Push(Reg64("rcx")))
-                g = g.emit_inst(Push(Reg64("r8")))
                 let buf_label = ".Lstrcat_buf"
                 g = g.emit_inst(Lea(Reg64("rax"), RipRel32(buf_label)))
                 g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
                 g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
                 g = g.define_label(copy1_loop)
-                g = g.emit_inst(Movzx(Reg64("r8"), MemIndirect("rsi")))
-                g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
-                g = g.emit_inst(Je(copy1_done))
-                g = g.emit_inst(Mov(Reg8("al"), Reg8("r8b")))
+                g = g.emit_inst(Movzx(Reg64("rax"), MemIndirect("rsi")))
+                g = g.emit_inst(Test(Reg64("rax"), Reg64("rax")))
+                g = g.emit_inst(Jz(copy1_done))
                 g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
                 g = g.emit_inst(Inc(Reg64("rbx")))
                 g = g.emit_inst(Inc(Reg64("rsi")))
@@ -2802,10 +2832,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 g = g.emit_inst(Jmp(copy1_loop))
                 g = g.define_label(copy1_done)
                 g = g.define_label(copy2_loop)
-                g = g.emit_inst(Movzx(Reg64("r8"), MemIndirect("rdi")))
-                g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
-                g = g.emit_inst(Je(copy2_done))
-                g = g.emit_inst(Mov(Reg8("al"), Reg8("r8b")))
+                g = g.emit_inst(Movzx(Reg64("rax"), MemIndirect("rdi")))
+                g = g.emit_inst(Test(Reg64("rax"), Reg64("rax")))
+                g = g.emit_inst(Jz(copy2_done))
                 g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
                 g = g.emit_inst(Inc(Reg64("rbx")))
                 g = g.emit_inst(Inc(Reg64("rdi")))
@@ -2816,7 +2845,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
                 g = g.emit_inst(Lea(Reg64("rax"), RipRel32(buf_label)))
                 g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
-                g = g.emit_inst(Pop(Reg64("r8")))
                 g = g.emit_inst(Pop(Reg64("rcx")))
                 g = g.emit_inst(Pop(Reg64("rbx")))
                 g
