@@ -106,6 +106,7 @@ pub struct CodeGen {
   var_array_len : Map[String, Int]
   var_types : Map[String, String]
   var_struct_fields : Map[String, Array[String]]
+  enum_discriminants : Map[String, Int]
   next_offset : Int
   current_func : String?
   func_bodies : Map[String, AST]
@@ -134,6 +135,7 @@ fn CodeGen::new() -> CodeGen {
     var_array_len: Map::new(),
     var_types: Map::new(),
     var_struct_fields: Map::new(),
+    enum_discriminants: Map::new(),
     next_offset: -8,
     current_func: None,
     func_bodies: Map::new(),
@@ -849,14 +851,8 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
-      if dest == "rsp" {
-        let g = g.emit_byte(modrm(3, 0, 4))
-        let g = g.emit_byte(sib(0, 4, 4))
-        g.emit32(v)
-      } else {
-        let g = g.emit_byte(modrm(3, 0, rm_code))
-        g.emit32(v)
-      }
+      let g = g.emit_byte(modrm(3, 0, rm_code))
+      g.emit32(v)
     }
     Sub(Reg64(dest), Reg64(src)) => {
       let g = self.emit_byte(0x48)
@@ -878,14 +874,8 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
-      if dest == "rsp" {
-        let g = g.emit_byte(modrm(3, 5, 4))
-        let g = g.emit_byte(sib(0, 4, 4))
-        g.emit32(v)
-      } else {
-        let g = g.emit_byte(modrm(3, 5, rm_code))
-        g.emit32(v)
-      }
+      let g = g.emit_byte(modrm(3, 5, rm_code))
+      g.emit32(v)
     }
     Imul(Reg64(dest), Reg64(src)) => {
       let g = self.emit_byte(0x48)
@@ -1565,7 +1555,11 @@ fn is_float_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
   }
 }
 
-fn is_float_field_expr(expr : AST, var_tuple_field_types : Map[String, Array[Bool]]) -> Bool {
+///|
+fn is_float_field_expr(
+  expr : AST,
+  var_tuple_field_types : Map[String, Array[Bool]],
+) -> Bool {
   match expr {
     FieldExpr(Ident(var_name), field) => {
       let idx = if field.length() > 0 {
@@ -1760,8 +1754,27 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             g
           }
         None => {
-          let g = self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-          g
+          let disc_val = match self.enum_discriminants.get(name) {
+            Some(disc) => Some(disc)
+            None => {
+              let parts = name.split("::").to_array()
+              if parts.length() == 2 {
+                self.enum_discriminants.get(parts[1].to_string())
+              } else {
+                None
+              }
+            }
+          }
+          match disc_val {
+            Some(disc) => {
+              let g = self.emit_inst(Mov(Reg64("rax"), Imm32(disc)))
+              g
+            }
+            None => {
+              let g = self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+              g
+            }
+          }
         }
       }
     Binary(op, left, right) => {
@@ -3680,10 +3693,69 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     MatchExpr(scrutinee, cases) => {
       let mut g = self
       g = g.codegen_expr(scrutinee)
-      if cases.length() > 0 {
-        let (_, body) = cases[0]
-        g = g.codegen_expr(body)
+      g = g.emit_inst(Push(Reg64("rax")))
+      let end_label = ".Lmatch_end\{g.label_counter}"
+      g = { ..g, label_counter: g.label_counter + 1 }
+      let mut need_end_label = false
+      let mut case_idx = 0
+      while case_idx < cases.length() {
+        let (pattern, body) = cases[case_idx]
+        let is_last = case_idx == cases.length() - 1
+        match pattern {
+          Int(n) => {
+            g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
+            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(n)))
+            if is_last {
+              g = g.codegen_expr(body)
+            } else {
+              let next_case = ".Lmatch_next\{g.label_counter}"
+              g = { ..g, label_counter: g.label_counter + 1 }
+              g = g.emit_inst(Jne(next_case))
+              g = g.codegen_expr(body)
+              g = g.emit_inst(Jmp(end_label))
+              need_end_label = true
+              g = g.define_label(next_case)
+            }
+          }
+          Ident(var_name) => {
+            let disc_val = match g.enum_discriminants.get(var_name) {
+              Some(disc) => Some(disc)
+              None => {
+                let parts = var_name.split("::").to_array()
+                if parts.length() == 2 {
+                  g.enum_discriminants.get(parts[1].to_string())
+                } else {
+                  None
+                }
+              }
+            }
+            match disc_val {
+              Some(disc) => {
+                g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
+                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(disc)))
+                if is_last {
+                  g = g.codegen_expr(body)
+                } else {
+                  let next_case = ".Lmatch_next\{g.label_counter}"
+                  g = { ..g, label_counter: g.label_counter + 1 }
+                  g = g.emit_inst(Jne(next_case))
+                  g = g.codegen_expr(body)
+                  g = g.emit_inst(Jmp(end_label))
+                  need_end_label = true
+                  g = g.define_label(next_case)
+                }
+              }
+              None => if is_last { g = g.codegen_expr(body) }
+            }
+          }
+          _ => if is_last { g = g.codegen_expr(body) }
+        }
+        case_idx = case_idx + 1
       }
+      if need_end_label {
+        g = g.define_label(end_label)
+      }
+      g = g.emit_inst(Add(Reg64("rsp"), Imm32(8)))
       g
     }
     Assign(target, value) =>
@@ -3867,6 +3939,15 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       let sf = self.struct_fields
       sf[name] = field_names
       { ..self, struct_fields: sf }
+    }
+    EnumDef(name, variants) => {
+      let ed = self.enum_discriminants
+      let mut i = 0
+      while i < variants.length() {
+        ed[variants[i]] = i
+        i = i + 1
+      }
+      { ..self, enum_discriminants: ed }
     }
     StructLit(type_name, fields) => {
       let num_fields = fields.length()

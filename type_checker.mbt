@@ -614,6 +614,7 @@ fn TypeChecker::check_expr(
       }
       (checker, base_type)
     }
+    EnumDef(_, _) => (self, TUnit)
   }
 }
 

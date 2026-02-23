@@ -28,6 +28,7 @@ pub enum AST {
   Assign(AST, AST)
   AssignOp(String, AST, AST)
   TypeDecl(String, Array[(String, String)])
+  EnumDef(String, Array[String])
   StructLit(String, Array[(String, AST)])
   StructUpdate(AST, Array[(String, AST)])
 } derive(Show)
@@ -195,6 +196,7 @@ fn Parser::parse_primary(self : Parser) -> (AST, Parser) {
     Fn => self.parse_function()
     Type => self.parse_type_decl()
     Struct => self.parse_type_decl()
+    Enum => self.parse_enum()
     LBrace => self.parse_struct_or_block()
     Return => {
       let p = self.advance()
@@ -570,6 +572,40 @@ fn Parser::parse_type_decl(self : Parser) -> (AST, Parser) {
 }
 
 ///|
+fn Parser::parse_enum(self : Parser) -> (AST, Parser) {
+  let p = self.skip(1)
+  let (name, p2) = p.parse_ident()
+  if self_token_eq(p2.current(), LBrace) {
+    let p3 = p2.skip(1)
+    let mut variants : Array[String] = []
+    let mut parser = p3
+    let mut done = false
+    while not(done) {
+      if self_token_eq(parser.current(), RBrace) {
+        parser = parser.advance()
+        done = true
+      } else if self_token_eq(parser.current(), Eof) {
+        done = true
+      } else {
+        match parser.current() {
+          Token::Ident(variant_name) => {
+            variants = variants + [variant_name]
+            parser = parser.advance()
+            if self_token_eq(parser.current(), Comma) {
+              parser = parser.skip(1)
+            }
+          }
+          _ => parser = parser.advance()
+        }
+      }
+    }
+    (EnumDef(name, variants), parser)
+  } else {
+    (EnumDef(name, []), p2)
+  }
+}
+
+///|
 fn Parser::parse_type_name(self : Parser) -> (String, Parser) {
   match self.current() {
     Ident(name) => {
@@ -722,7 +758,6 @@ fn Parser::parse_postfix(self : Parser) -> (AST, Parser) {
       expr = CallExpr(expr, args)
       parser = p3
     } else if self_token_eq(parser.current(), ColonColon) {
-      // Struct literal: TypeName::{ field: value, ... }
       let type_name = match expr {
         Ident(name) => name
         _ => ""
@@ -762,7 +797,13 @@ fn Parser::parse_postfix(self : Parser) -> (AST, Parser) {
         expr = StructLit(type_name, fields)
         parser = p5
       } else {
-        parser = p3
+        match p3.current() {
+          Token::Ident(variant_name) => {
+            expr = Ident("\{type_name}::\{variant_name}")
+            parser = p3.advance()
+          }
+          _ => parser = p3
+        }
       }
     } else if self_token_eq(parser.current(), Dot) {
       let p3 = parser.skip(1)

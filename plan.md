@@ -521,6 +521,9 @@ This document outlines features that need to be implemented to make Mooner a com
 - ✅ For loops (with break/continue)
 - ✅ Bitwise operators (`&`, `|`, `^`, `<<`, `>>`)
 - ✅ Match expressions with Int/Bool/wildcard patterns
+- ✅ Enum definitions with simple variants (`enum Color { Red, Green, Blue }`)
+- ✅ Enum discriminants (Red=0, Green=1, etc.)
+- ✅ Scoped enum access (`Color::Green`)
 - ✅ Array literals, indexing, and element assignment
 - ✅ Tuple literals and field access (`t.0`, `t.1`)
 - ✅ User-defined types with named field access (`type Point { x: Int, y: Int }`, `p.x`)
@@ -532,8 +535,15 @@ This document outlines features that need to be implemented to make Mooner a com
 - Runtime float values print as `<float>` (no runtime float-to-string conversion)
 - Limited stdlib functions
 - Parser only supports one top-level function (use nested functions for multiple functions)
-- Match patterns limited to Int, Bool, and wildcard (no tuples or guards)
+- Match patterns limited to Int, Bool, Ident (enum discriminants), and wildcard (no tuples or guards or enum variants with data)
+- Enum variants with data (e.g., `RGB(Int,Int,Int)`) not fully supported in pattern matching
+- String interpolation (`"Value: \{x}"`) not implemented - shows literal `{x}`
 - Exit codes limited to 8-bit (0-255) due to Linux syscall convention
 - User-defined types require all fields to be 64-bit values
+
+### Recent Bug Fixes (Feb 2026):
+- Fixed Add/Sub instruction encoding for RSP - was incorrectly emitting SIB byte in register-direct mode (mod=3), causing segfaults in match expression cleanup
+- Fixed scoped enum access parsing (`Color::Green`) - parser now correctly creates `Ident("Color::Green")` instead of returning just `Ident("Color")`
+- Fixed enum discriminant lookup to handle both `Green` and `Color::Green` formats
 
 The compiler currently generates basic but functional code for simple expressions. Focus on making the core MoonBit features work correctly (fn main, println, basic operators). Consider adding a `-v`/`--verbose` flag to see generated code for debugging. Consider adding an `-O` flag for optimizations in the future. The goal is MoonBit language compatibility, not custom extensions.

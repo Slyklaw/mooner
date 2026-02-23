@@ -42,6 +42,7 @@ pub enum AST {
   Assign(AST, AST)
   AssignOp(String, AST, AST)
   TypeDecl(String, Array[(String, String)])
+  EnumDef(String, Array[String])
   StructLit(String, Array[(String, AST)])
   StructUpdate(AST, Array[(String, AST)])
 }
@@ -62,6 +63,7 @@ pub struct CodeGen {
   var_array_len : Map[String, Int]
   var_types : Map[String, String]
   var_struct_fields : Map[String, Array[String]]
+  enum_discriminants : Map[String, Int]
   next_offset : Int
   current_func : String?
   func_bodies : Map[String, AST]
@@ -118,6 +120,7 @@ pub enum Token {
   Self
   Type
   Struct
+  Enum
   Interface
   Impl
   Pub
