@@ -341,8 +341,31 @@ fn Parser::parse_match(self : Parser) -> (AST, Parser) {
         } else {
           parser = p3
         }
+      } else if self_token_eq(parser.current(), Underscore) {
+        let (pattern, p2) = parser.parse_expr()
+        if self_token_eq(p2.current(), Arrow) {
+          let p3 = p2.skip(1)
+          let (body, p4) = p3.parse_block_or_expr()
+          cases = cases + [(pattern, body)]
+          parser = p4
+        } else {
+          parser = p2
+        }
       } else {
-        parser = parser.advance()
+        match parser.current() {
+          Token::Ident(_) | Token::Int(_) => {
+            let (pattern, p2) = parser.parse_expr()
+            if self_token_eq(p2.current(), Arrow) {
+              let p3 = p2.skip(1)
+              let (body, p4) = p3.parse_block_or_expr()
+              cases = cases + [(pattern, body)]
+              parser = p4
+            } else {
+              parser = p2
+            }
+          }
+          _ => parser = parser.advance()
+        }
       }
     }
     (MatchExpr(expr, cases), parser)

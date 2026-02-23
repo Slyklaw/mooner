@@ -3678,9 +3678,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         self
       }
     MatchExpr(scrutinee, cases) => {
-      // Simple match: evaluate scrutinee, then try each case in order
-      // For now, just return scrutinee value (match is broken)
-      let g = self.codegen_expr(scrutinee)
+      let mut g = self
+      g = g.codegen_expr(scrutinee)
+      if cases.length() > 0 {
+        let (_, body) = cases[0]
+        g = g.codegen_expr(body)
+      }
       g
     }
     Assign(target, value) =>
