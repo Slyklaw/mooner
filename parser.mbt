@@ -304,6 +304,45 @@ fn Parser::parse_struct_or_block(self : Parser) -> (AST, Parser) {
         p.parse_block()
       }
     }
+    DotDot => {
+      // Functional update syntax: { ..point, x: 20 }
+      let p2 = p.skip(1)
+      let (base, p3) = p2.parse_expr()
+      let mut fields : Array[(String, AST)] = []
+      let mut parser = p3
+      if self_token_eq(parser.current(), Comma) {
+        parser = parser.skip(1)
+        let mut done = false
+        while not(done) {
+          if self_token_eq(parser.current(), RBrace) {
+            parser = parser.advance()
+            done = true
+          } else {
+            match parser.current() {
+              Token::Ident(fname) => {
+                let p4 = parser.advance()
+                if self_token_eq(p4.current(), Colon) {
+                  let p5 = p4.skip(1)
+                  let (v, p6) = p5.parse_expr()
+                  fields = fields + [(fname, v)]
+                  if self_token_eq(p6.current(), Comma) {
+                    parser = p6.skip(1)
+                  } else {
+                    parser = p6
+                  }
+                } else {
+                  parser = p4
+                }
+              }
+              _ => parser = parser.advance()
+            }
+          }
+        }
+      } else if self_token_eq(parser.current(), RBrace) {
+        parser = parser.advance()
+      }
+      (StructUpdate(base, fields), parser)
+    }
     RBrace => {
       // Empty struct literal or empty block
       let p2 = p.advance()

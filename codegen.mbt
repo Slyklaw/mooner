@@ -1665,6 +1665,7 @@ fn is_char_expr(expr : AST, var_is_char : Map[String, Bool]) -> Bool {
 fn is_struct_expr(expr : AST, var_types : Map[String, String]) -> Bool {
   match expr {
     StructLit(_type_name, _fields) => true
+    StructUpdate(_, _) => true
     Ident(name) => var_types.get(name) != None
     _ => false
   }
@@ -2693,6 +2694,14 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
                     g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
                   }
+                  StructLit(_, _) | StructUpdate(_, _) => {
+                    // Inline struct expression - just print <struct>
+                    g = g.codegen_expr(arg)
+                    let (g2, label1) = g.add_string("<struct>")
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
+                  }
                   CallExpr(Ident(fname), inner_args) =>
                     if fname == "int_to_string" {
                       g = g.codegen_expr(arg)
@@ -3535,6 +3544,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       }
       let is_struct_or_tuple = match value {
         StructLit(_, _) => true
+        StructUpdate(_, _) => true
         Tuple(_) => true
         Ident(src_name) => self.var_struct_fields.get(src_name) != None
         _ => false
@@ -3550,6 +3560,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       }
       let struct_type = match value {
         StructLit(type_name, _) => Some(type_name)
+        StructUpdate(base, _) =>
+          match base {
+            Ident(src_name) => self.var_types.get(src_name)
+            _ => None
+          }
         Ident(src_name) => self.var_types.get(src_name)
         _ => None
       }
@@ -3564,6 +3579,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           }
           Some(names)
         }
+        StructUpdate(base, _) =>
+          match base {
+            Ident(src_name) => self.var_struct_fields.get(src_name)
+            _ => None
+          }
         Ident(src_name) => self.var_struct_fields.get(src_name)
         _ => None
       }
@@ -3599,6 +3619,15 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       let num_tuple_elems = match value {
         Tuple(elems) => elems.length()
         StructLit(_, fields) => fields.length()
+        StructUpdate(base, _) =>
+          match base {
+            Ident(src_name) =>
+              match self.var_struct_fields.get(src_name) {
+                Some(fields) => fields.length()
+                None => 0
+              }
+            _ => 0
+          }
         _ => 0
       }
       let (g2, offset, is_array_val) = if is_struct_or_tuple &&
@@ -3977,10 +4006,56 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           // Store value at [rcx]
           g.emit_inst(Mov(MemIndirect("rcx"), Reg64("rax")))
         }
-        FieldExpr(obj, _field) =>
+        FieldExpr(obj, field) =>
           // Field assignment: obj.field = value
-          // For now, just evaluate the value (struct assignment not implemented)
-          self.codegen_expr(value)
+          match obj {
+            Ident(var_name) =>
+              match self.var_offsets.get(var_name) {
+                Some(base_offset) => {
+                  // Get field index
+                  let idx = match self.var_struct_fields.get(var_name) {
+                    Some(fields) => {
+                      let mut i = 0
+                      let mut found = 0
+                      while i < fields.length() {
+                        if fields[i] == field {
+                          found = i
+                        }
+                        i = i + 1
+                      }
+                      found
+                    }
+                    None =>
+                      match self.var_types.get(var_name) {
+                        Some(type_name) =>
+                          match self.struct_fields.get(type_name) {
+                            Some(fields) => {
+                              let mut i = 0
+                              let mut found = 0
+                              while i < fields.length() {
+                                if fields[i] == field {
+                                  found = i
+                                }
+                                i = i + 1
+                              }
+                              found
+                            }
+                            None => 0
+                          }
+                        None => 0
+                      }
+                  }
+                  // Calculate field offset: base_offset + idx * 8
+                  let field_offset = base_offset + idx * 8
+                  // Evaluate the new value
+                  let g = self.codegen_expr(value)
+                  // Store to field location
+                  g.emit_inst(Mov(StackBP64(field_offset), Reg64("rax")))
+                }
+                None => self.codegen_expr(value)
+              }
+            _ => self.codegen_expr(value)
+          }
         _ =>
           // Unknown assignment target
           self.codegen_expr(value)
@@ -4155,6 +4230,71 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         g
       }
     }
+    StructUpdate(base, updates) =>
+      // Functional update: { ..point, x: 20 }
+      // Copy all fields from base, then update specified fields
+      match base {
+        Ident(var_name) =>
+          match self.var_offsets.get(var_name) {
+            Some(base_offset) => {
+              let num_fields = match self.var_struct_fields.get(var_name) {
+                Some(fields) => fields.length()
+                None =>
+                  match self.var_types.get(var_name) {
+                    Some(type_name) =>
+                      match self.struct_fields.get(type_name) {
+                        Some(fields) => fields.length()
+                        None => 0
+                      }
+                    None => 0
+                  }
+              }
+              let field_names = match self.var_struct_fields.get(var_name) {
+                Some(fields) => fields
+                None =>
+                  match self.var_types.get(var_name) {
+                    Some(type_name) =>
+                      match self.struct_fields.get(type_name) {
+                        Some(fields) => fields
+                        None => []
+                      }
+                    None => []
+                  }
+              }
+              let mut g = self
+              // Push all fields from base struct (in reverse order)
+              let mut i = num_fields - 1
+              while i >= 0 {
+                let field_offset = base_offset + i * 8
+                // Check if this field is being updated
+                let mut is_updated = false
+                let mut update_val : AST = Unit
+                let mut k = 0
+                while k < updates.length() {
+                  let (fname, fval) = updates[k]
+                  if fname == field_names[i] {
+                    is_updated = true
+                    update_val = fval
+                  }
+                  k = k + 1
+                }
+                if is_updated {
+                  // Use the updated value
+                  g = g.codegen_expr(update_val)
+                  g = g.emit_inst(Push(Reg64("rax")))
+                } else {
+                  // Copy from base struct
+                  g = g.emit_inst(Mov(Reg64("rax"), StackBP64(field_offset)))
+                  g = g.emit_inst(Push(Reg64("rax")))
+                }
+                i = i - 1
+              }
+              g
+            }
+            None => self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+          }
+        _ => self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+      }
     _ => self
   }
 }
