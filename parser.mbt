@@ -225,6 +225,20 @@ fn Parser::parse_block(self : Parser) -> (AST, Parser) {
   while not(done) {
     if self_token_eq(parser.current(), RBrace) {
       parser = parser.advance()
+      // Skip optional derive annotation
+      if self_token_eq(parser.current(), Ident("derive")) {
+        parser = parser.skip(1)
+        if self_token_eq(parser.current(), LParen) {
+          parser = parser.skip(1)
+          while not(self_token_eq(parser.current(), RParen)) &&
+                not(self_token_eq(parser.current(), Eof)) {
+            parser = parser.advance()
+          }
+          if self_token_eq(parser.current(), RParen) {
+            parser = parser.skip(1)
+          }
+        }
+      }
       done = true
     } else if self_token_eq(parser.current(), Eof) {
       done = true
@@ -538,6 +552,20 @@ fn Parser::parse_type_decl(self : Parser) -> (AST, Parser) {
     while not(done) {
       if self_token_eq(parser.current(), RBrace) {
         parser = parser.advance()
+        // Skip optional derive annotation
+        if self_token_eq(parser.current(), Ident("derive")) {
+          parser = parser.skip(1)
+          if self_token_eq(parser.current(), LParen) {
+            parser = parser.skip(1)
+            while not(self_token_eq(parser.current(), RParen)) &&
+                  not(self_token_eq(parser.current(), Eof)) {
+              parser = parser.advance()
+            }
+            if self_token_eq(parser.current(), RParen) {
+              parser = parser.skip(1)
+            }
+          }
+        }
         done = true
       } else if self_token_eq(parser.current(), Eof) {
         done = true
@@ -557,6 +585,20 @@ fn Parser::parse_type_decl(self : Parser) -> (AST, Parser) {
           parser = p5.skip(1)
         } else if self_token_eq(p5.current(), RBrace) {
           parser = p5.advance()
+          // Skip optional derive annotation
+          if self_token_eq(parser.current(), Ident("derive")) {
+            parser = parser.skip(1)
+            if self_token_eq(parser.current(), LParen) {
+              parser = parser.skip(1)
+              while not(self_token_eq(parser.current(), RParen)) &&
+                    not(self_token_eq(parser.current(), Eof)) {
+                parser = parser.advance()
+              }
+              if self_token_eq(parser.current(), RParen) {
+                parser = parser.skip(1)
+              }
+            }
+          }
           done = true
         } else if self_token_eq(p5.current(), Mut) {
           parser = p5.advance()

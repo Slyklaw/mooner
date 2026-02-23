@@ -1690,6 +1690,41 @@ fn is_bool_expr(expr : AST, var_is_bool : Map[String, Bool]) -> Bool {
 }
 
 ///|
+fn get_struct_field_names(
+  expr : AST,
+  var_struct_fields : Map[String, Array[String]],
+  var_types : Map[String, String],
+  struct_fields : Map[String, Array[String]],
+) -> Array[String]? {
+  match expr {
+    Ident(var_name) =>
+      match var_struct_fields.get(var_name) {
+        Some(fields) => Some(fields)
+        None =>
+          match var_types.get(var_name) {
+            Some(type_name) => struct_fields.get(type_name)
+            None => None
+          }
+      }
+    StructLit(_, fields) => {
+      let names = fields.map(fn(pair) {
+        let (name, _) = pair
+        name
+      })
+      Some(names)
+    }
+    _ => None
+  }
+}
+
+///|
+fn CodeGen::emit_call_print(self : CodeGen) -> CodeGen {
+  let g = self.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+  let g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+  g.emit_inst(Syscall)
+}
+
+///|
 fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
   match expr {
     Int(n) => {
@@ -1734,6 +1769,15 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             g
           } else if self.var_is_tuple.get(name) == Some(true) {
             // Tuple - return address (rbp + offset)
+            let g = self.emit_inst(Mov(Reg64("rax"), Reg64("rbp")))
+            let g = if offset >= 0 {
+              g.emit_inst(Add(Reg64("rax"), Imm32(offset)))
+            } else {
+              g.emit_inst(Sub(Reg64("rax"), Imm32(-offset)))
+            }
+            g
+          } else if self.var_struct_fields.get(name) != None {
+            // Struct - return address (rbp + offset)
             let g = self.emit_inst(Mov(Reg64("rax"), Reg64("rbp")))
             let g = if offset >= 0 {
               g.emit_inst(Add(Reg64("rax"), Imm32(offset)))
@@ -2475,13 +2519,128 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
                     } else if g.var_types.get(var_name) != None ||
                       is_struct_expr(arg, g.var_types) {
-                      // Struct variable - evaluate and print as address
-                      g = g.codegen_expr(arg)
-                      // Print '<struct>'
-                      let (g2, label1) = g.add_string("<struct>")
-                      g = g2
-                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
+                      // Struct variable - print each field
+                      let field_names = get_struct_field_names(
+                        arg,
+                        g.var_struct_fields,
+                        g.var_types,
+                        g.struct_fields,
+                      )
+                      match field_names {
+                        Some(fields) => {
+                          let base_offset = match g.var_offsets.get(var_name) {
+                            Some(off) => off
+                            None => 0
+                          }
+                          // Print '{'
+                          let (g2, open_label) = g.add_string("{")
+                          g = g2
+                          g = g.emit_inst(
+                            Lea(Reg64("rsi"), RipRel32(open_label)),
+                          )
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                          g = g.emit_call_print()
+                          // Print each field
+                          let mut field_idx = 0
+                          while field_idx < fields.length() {
+                            let field_name = fields[field_idx]
+                            // Print field name
+                            let (g3, fn_label) = g.add_string("\{field_name}: ")
+                            g = g3
+                            g = g.emit_inst(
+                              Lea(Reg64("rsi"), RipRel32(fn_label)),
+                            )
+                            g = g.emit_inst(
+                              Mov(Reg64("rdx"), Imm32(field_name.length() + 2)),
+                            )
+                            g = g.emit_call_print()
+                            // Load field value from rbp + base_offset + field_idx * 8
+                            let field_offset = base_offset + field_idx * 8
+                            g = g.emit_inst(
+                              Mov(Reg64("rax"), StackBP64(field_offset)),
+                            )
+                            // Print the integer value
+                            let buf_label = ".Lint_buf"
+                            g = g.emit_inst(Push(Reg64("rbx")))
+                            g = g.emit_inst(Push(Reg64("rcx")))
+                            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                            g = g.emit_inst(
+                              Lea(Reg64("rdi"), RipRel32(buf_label)),
+                            )
+                            g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                            g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                            let (g4, digit_loop) = g.new_label()
+                            let (g5, done_label) = g4.new_label()
+                            g = g5
+                            g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                            g = g.emit_inst(Je(done_label))
+                            g = g.define_label(digit_loop)
+                            g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                            g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                            g = g.emit_inst(Idiv(Reg64("rsi")))
+                            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                            g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                            g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+                            g = g.emit_inst(
+                              Mov(MemIndirect("rdi"), Reg8("sil")),
+                            )
+                            g = g.emit_inst(Dec(Reg64("rdi")))
+                            g = g.emit_inst(Inc(Reg64("rcx")))
+                            g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                            g = g.emit_inst(Jne(digit_loop))
+                            g = g.define_label(done_label)
+                            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                            let (g6, skip_zero) = g.new_label()
+                            let (g7, skip_zero_end) = g6.new_label()
+                            g = g7
+                            g = g.emit_inst(Jne(skip_zero))
+                            g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
+                            g = g.emit_inst(
+                              Mov(MemIndirect("rdi"), Reg8("sil")),
+                            )
+                            g = g.emit_inst(Inc(Reg64("rcx")))
+                            g = g.emit_inst(Jmp(skip_zero_end))
+                            g = g.define_label(skip_zero)
+                            g = g.emit_inst(Inc(Reg64("rdi")))
+                            g = g.define_label(skip_zero_end)
+                            g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
+                            g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                            g = g.emit_call_print()
+                            g = g.emit_inst(Pop(Reg64("rcx")))
+                            g = g.emit_inst(Pop(Reg64("rbx")))
+                            // Print comma if not last field
+                            if field_idx < fields.length() - 1 {
+                              let (g8, comma_label) = g.add_string(", ")
+                              g = g8
+                              g = g.emit_inst(
+                                Lea(Reg64("rsi"), RipRel32(comma_label)),
+                              )
+                              g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                              g = g.emit_call_print()
+                            }
+                            field_idx = field_idx + 1
+                          }
+                          // Print '}'
+                          let (g9, close_label) = g.add_string("}")
+                          g = g9
+                          g = g.emit_inst(
+                            Lea(Reg64("rsi"), RipRel32(close_label)),
+                          )
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                          g = g.emit_call_print()
+                          // Skip the normal print syscall
+                          need_skip_print = true
+                          g = g.emit_inst(Jmp(skip_print_label))
+                        }
+                        None => {
+                          g = g.codegen_expr(arg)
+                          let (g2, label1) = g.add_string("<struct>")
+                          g = g2
+                          g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
+                        }
+                      }
                     } else {
                       // Not an array, treat as integer
                       g = g.codegen_expr(arg)
@@ -3377,10 +3536,21 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       let is_struct_or_tuple = match value {
         StructLit(_, _) => true
         Tuple(_) => true
+        Ident(src_name) => self.var_struct_fields.get(src_name) != None
+        _ => false
+      }
+      // Check if value is a struct variable reference (for aliasing)
+      let src_struct_offset = match value {
+        Ident(src_name) => self.var_offsets.get(src_name)
+        _ => None
+      }
+      let is_struct_alias = match value {
+        Ident(src_name) => self.var_struct_fields.get(src_name) != None
         _ => false
       }
       let struct_type = match value {
         StructLit(type_name, _) => Some(type_name)
+        Ident(src_name) => self.var_types.get(src_name)
         _ => None
       }
       let struct_field_names = match value {
@@ -3394,6 +3564,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           }
           Some(names)
         }
+        Ident(src_name) => self.var_struct_fields.get(src_name)
         _ => None
       }
       let tuple_field_types = match value {
@@ -3419,7 +3590,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           }
         _ => None
       }
-      let g = self.codegen_expr(value)
+      let g = if is_struct_alias {
+        // Don't evaluate for struct aliases - we just copy the offset
+        self
+      } else {
+        self.codegen_expr(value)
+      }
       let num_tuple_elems = match value {
         Tuple(elems) => elems.length()
         StructLit(_, fields) => fields.length()
@@ -3469,6 +3645,13 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         // For the first var (next_offset = -8, no previous pushes):
         // offset = -8 - 16 + 8 = -16 ✓
         (g, g.next_offset - num_tuple_elems * 8 + 8, false)
+      } else if is_struct_alias {
+        // Struct alias - don't push anything, just use the source's offset
+        let src_off = match src_struct_offset {
+          Some(off) => off
+          None => g.next_offset
+        }
+        (g, src_off, false)
       } else if is_struct_or_tuple {
         // Empty struct/tuple
         (g, g.next_offset, false)
