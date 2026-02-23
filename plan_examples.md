@@ -10,15 +10,22 @@
 | 004_basic_function | ✅ | ✅ | OUTPUT MATCHES official |
 | 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr.push()`, `println(arr)` work; concat (+) returns right array; spread not implemented |
 | 006_basic_string | ✅ | ⚠️ | get_char(), unwrap(), char equality, concat (+), escape sequences work; unicode shows '?'; interpolation not implemented |
-| 007_basic_tuple | ✅ | ⚠️ | **FIXED**: Int tuple field access works; Float tuple fields work; printing shows address; destructuring broken |
+| 007_basic_tuple | ✅ | ⚠️ | Int/float tuple field access works; printing shows `<tuple>`; destructuring broken |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
 | 009_basic_control_flows | ✅ | ✅ | OUTPUT MATCHES official |
-| 010_basic_struct | ✅ | ⚠️ | **FIXED**: Struct field access works; Show derive not implemented (prints `<struct>`) |
-| 011_basic_enum | ✅ | ❌ | Enums parse but constructors not implemented; match expression broken |
+| 010_basic_struct | ✅ | ⚠️ | Struct field access works; printing shows `<struct>` |
+| 011_basic_enum | ✅ | ⚠️ | **FIXED**: Match expression works for int/wildcard; enum discriminants not implemented (all are 0) |
 | 012_basic_test | ✅ | ❌ | Test blocks parse but not executed |
-| 013_pattern_matching | ✅ | ❌ | Pattern matching broken (match expression has control flow bugs) |
+| 013_pattern_matching | ✅ | ⚠️ | **FIXED**: Basic match works for int/wildcard patterns |
 
 ## Recent Fixes
+
+### 2024-02-22: Pattern Matching Implementation
+- **Issue**: Match expressions were broken (just returned scrutinee value)
+- **Root cause**: Parser expected `case` keyword but MoonBit uses `pattern => body` syntax
+- **Fix**: Updated parser to handle MoonBit match syntax, implemented match codegen
+- **Result**: Match now works for integer literals and wildcard patterns
+- **Limitation**: Enum discriminants not implemented, destructuring not supported
 
 ### 2024-02-22: Struct Field Access Fixed
 - **Issue**: Struct field access returned 0 for all fields
