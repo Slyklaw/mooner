@@ -2694,13 +2694,125 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
                     g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
                   }
-                  StructLit(_, _) | StructUpdate(_, _) => {
-                    // Inline struct expression - just print <struct>
+                  StructLit(_, _) => {
+                    // Inline struct literal - just print <struct>
                     g = g.codegen_expr(arg)
                     let (g2, label1) = g.add_string("<struct>")
                     g = g2
                     g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
                     g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
+                  }
+                  StructUpdate(base, updates) => {
+                    // Inline struct update - get field names from base and print
+                    let field_names = match base {
+                      Ident(var_name) =>
+                        match g.var_struct_fields.get(var_name) {
+                          Some(fields) => fields
+                          None =>
+                            match g.var_types.get(var_name) {
+                              Some(type_name) =>
+                                match g.struct_fields.get(type_name) {
+                                  Some(fields) => fields
+                                  None => []
+                                }
+                              None => []
+                            }
+                        }
+                      _ => []
+                    }
+                    let num_fields = field_names.length()
+                    // Evaluate the struct update (pushes fields onto stack)
+                    g = g.codegen_expr(arg)
+                    // After codegen, fields are on stack: rsp points to field 0
+                    // Save rsp
+                    g = g.emit_inst(Push(Reg64("rbx")))
+                    g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rsp")))
+                    g = g.emit_inst(Add(Reg64("rbx"), Imm32(8))) // Adjust for pushed rbx
+                    // Print '{'
+                    let (g2, open_label) = g.add_string("{")
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(open_label)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                    g = g.emit_call_print()
+                    // Print each field
+                    let mut field_idx = 0
+                    while field_idx < num_fields {
+                      let field_name = field_names[field_idx]
+                      // Print field name
+                      let (g3, fn_label) = g.add_string("\{field_name}: ")
+                      g = g3
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(fn_label)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(field_name.length() + 2)))
+                      g = g.emit_call_print()
+                      // Load field value from stack: rbx + field_idx * 8
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                      g = g.emit_inst(Add(Reg64("rax"), Imm32(field_idx * 8)))
+                      g = g.emit_inst(Push(Reg64("rax")))
+                      g = g.emit_inst(Pop(Reg64("rcx")))
+                      g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rcx")))
+                      // Print the integer value
+                      let buf_label = ".Lint_buf"
+                      g = g.emit_inst(Push(Reg64("rcx")))
+                      g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
+                      g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                      g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                      let (g4, digit_loop) = g.new_label()
+                      let (g5, done_label) = g4.new_label()
+                      g = g5
+                      g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
+                      g = g.emit_inst(Je(done_label))
+                      g = g.define_label(digit_loop)
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("r8")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                      g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                      g = g.emit_inst(Idiv(Reg64("rsi")))
+                      g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
+                      g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                      g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                      g = g.emit_inst(Dec(Reg64("rdi")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
+                      g = g.emit_inst(Jne(digit_loop))
+                      g = g.define_label(done_label)
+                      g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                      let (g6, skip_zero) = g.new_label()
+                      let (g7, skip_zero_end) = g6.new_label()
+                      g = g7
+                      g = g.emit_inst(Jne(skip_zero))
+                      g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
+                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Jmp(skip_zero_end))
+                      g = g.define_label(skip_zero)
+                      g = g.emit_inst(Inc(Reg64("rdi")))
+                      g = g.define_label(skip_zero_end)
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                      g = g.emit_call_print()
+                      g = g.emit_inst(Pop(Reg64("rcx")))
+                      // Print comma if not last field
+                      if field_idx < num_fields - 1 {
+                        let (g8, comma_label) = g.add_string(", ")
+                        g = g8
+                        g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(comma_label)))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                        g = g.emit_call_print()
+                      }
+                      field_idx = field_idx + 1
+                    }
+                    // Print '}'
+                    let (g9, close_label) = g.add_string("}")
+                    g = g9
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(close_label)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                    g = g.emit_call_print()
+                    g = g.emit_inst(Pop(Reg64("rbx")))
+                    // Clean up struct from stack
+                    g = g.emit_inst(Add(Reg64("rsp"), Imm32(num_fields * 8)))
+                    need_skip_print = true
+                    g = g.emit_inst(Jmp(skip_print_label))
                   }
                   CallExpr(Ident(fname), inner_args) =>
                     if fname == "int_to_string" {
