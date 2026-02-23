@@ -8,17 +8,22 @@
 | 002_variable | ✅ | ✅ | OUTPUT MATCHES official |
 | 003_basic_constants | ✅ | ✅ | OUTPUT MATCHES official |
 | 004_basic_function | ✅ | ✅ | OUTPUT MATCHES official |
-| 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr.push()`, `println(arr)` work; concat (+) returns right array; spread not implemented |
+| 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr[i] = val` work; `arr.push()` works; concat (+) broken; spread not implemented |
 | 006_basic_string | ✅ | ⚠️ | get_char(), unwrap(), char equality, concat (+), escape sequences work; unicode shows '?'; interpolation not implemented |
 | 007_basic_tuple | ✅ | ⚠️ | Int/float tuple field access works; printing shows `<tuple>`; destructuring broken |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
 | 009_basic_control_flows | ✅ | ✅ | OUTPUT MATCHES official |
-| 010_basic_struct | ✅ | ⚠️ | Struct field access works; printing shows `<struct>` |
-| 011_basic_enum | ✅ | ⚠️ | **FIXED**: Match expression works for int/wildcard; enum discriminants not implemented (all are 0) |
+| 010_basic_struct | ✅ | ⚠️ | Struct field access, mutation, functional update all work; inline struct prints `<struct>` |
+| 011_basic_enum | ✅ | ⚠️ | Match for simple enum discriminants (Red, Green, Blue) works; enum variants with data (RGB, RGBA) not implemented |
 | 012_basic_test | ✅ | ❌ | Test blocks parse but not executed |
-| 013_pattern_matching | ✅ | ⚠️ | **FIXED**: Basic match works for int/wildcard patterns |
+| 013_pattern_matching | ✅ | ⚠️ | Match for int/wildcard/simple enum discriminants works; destructuring, guards not supported |
 
 ## Recent Fixes
+
+### 2024-02-23: Struct Field Assignment and Functional Update
+- **Issue**: Struct field mutation (`point.x = 5`) and functional update (`{ ..point, x: 20 }`) not implemented
+- **Fix**: Added FieldExpr assignment codegen, StructUpdate parsing and codegen
+- **Result**: Mutable struct fields work correctly with aliasing; functional update syntax works
 
 ### 2024-02-22: Pattern Matching Implementation
 - **Issue**: Match expressions were broken (just returned scrutinee value)
