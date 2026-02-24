@@ -20,6 +20,7 @@ pub enum Token {
   Type
   Struct
   Enum
+  Test
   Interface
   Impl
   Pub
@@ -749,6 +750,7 @@ fn is_keyword(s : String) -> Token {
     "type" => Type
     "struct" => Struct
     "enum" => Enum
+    "test" => Test
     "interface" => Interface
     "impl" => Impl
     "pub" => Pub
@@ -786,6 +788,7 @@ fn token_eq(a : Token, b : Token) -> Bool {
     (Type, Type) => true
     (Struct, Struct) => true
     (Enum, Enum) => true
+    (Test, Test) => true
     (Interface, Interface) => true
     (Impl, Impl) => true
     (Pub, Pub) => true

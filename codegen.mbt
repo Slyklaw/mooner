@@ -3494,13 +3494,170 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g
                     }
                     None => {
-                      // Not an enum variant with that name, treat as regular function
-                      let g = self.codegen_user_func_call2(func_name, args)
+                      // Check for built-in test functions
+                      let g = if func_name == "assert_eq" && args.length() == 2 {
+                        // assert_eq(expected, actual) - compare two values
+                        let mut g = self.codegen_expr(args[0]) // rax = expected
+                        g = g.emit_inst(Push(Reg64("rax"))) // save expected
+                        g = g.codegen_expr(args[1]) // rax = actual
+                        g = g.emit_inst(Pop(Reg64("rdi"))) // rdi = expected
+                        g = g.emit_inst(Cmp(Reg64("rdi"), Reg64("rax")))
+                        let (g_ok, ok_label) = g.new_label()
+                        let (g_fail, fail_label) = g_ok.new_label()
+                        g = g_ok
+                        g = g.emit_inst(Je(fail_label)) // if equal, skip error
+                        // Not equal - print error
+                        let (g2, err_msg) = g.add_string("FAILED\n")
+                        g = g2
+                        g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(err_msg)))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                        g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                        g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                        g = g.emit_inst(Syscall)
+                        g = g.define_label(fail_label)
+                        g
+                      } else if func_name == "assert_true" && args.length() == 1 {
+                        // assert_true(condition) - fail if condition is false
+                        let mut g = self.codegen_expr(args[0]) // rax = condition
+                        g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
+                        let (g_ok, ok_label) = g.new_label()
+                        let (g_fail, fail_label) = g_ok.new_label()
+                        g = g_ok
+                        g = g.emit_inst(Je(fail_label)) // if false (0), fail
+                        // True - continue (pass), skip fail
+                        g = g.emit_inst(Jmp(ok_label))
+                        g = g.define_label(fail_label)
+                        // Failed
+                        let (g2, err_msg) = g.add_string("FAILED\n")
+                        g = g2
+                        g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(err_msg)))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                        g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                        g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                        g = g.emit_inst(Syscall)
+                        g = g.define_label(ok_label)
+                        g
+
+                      } else if func_name == "assert_false" && args.length() == 1 {
+                        // assert_false(condition) - fail if condition is true
+                        let mut g = self.codegen_expr(args[0]) // rax = condition
+                        g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
+                        let (g_ok, ok_label) = g.new_label()
+                        let (g_fail, fail_label) = g_ok.new_label()
+                        g = g_ok
+                        g = g.emit_inst(Jne(fail_label)) // if not equal to 0 (true), fail
+                        // False - continue (pass), skip fail
+                        g = g.emit_inst(Jmp(ok_label))
+                        g = g.define_label(fail_label)
+                        // Failed
+                        let (g2, err_msg) = g.add_string("FAILED\n")
+                        g = g2
+                        g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(err_msg)))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                        g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                        g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                        g = g.emit_inst(Syscall)
+                        g
+                      } else if func_name == "assert_false" && args.length() == 1 {
+                        // assert_false(condition) - fail if condition is true
+                        let mut g = self.codegen_expr(args[0]) // rax = condition
+                        g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
+                        let (g_ok, ok_label) = g.new_label()
+                        let (g_fail, fail_label) = g_ok.new_label()
+                        g = g_ok
+                        g = g.emit_inst(Jne(fail_label)) // if true (not 0), fail
+                        // False - pass, skip fail
+                        g = g.emit_inst(Jmp(ok_label))
+                        g = g.define_label(fail_label)
+                        // Failed
+                        let (g2, err_msg) = g.add_string("FAILED\n")
+                        g = g2
+                        g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(err_msg)))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                        g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                        g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                        g = g.emit_inst(Syscall)
+                        g = g.define_label(ok_label)
+                        g
+                      } else if func_name == "inspect" && args.length() >= 1 {
+                        // inspect(value) - evaluate and discard
+                        let mut g = self.codegen_expr(args[0])
+                        g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+                        g
+                      } else {
+                        // Not a built-in, treat as regular function
+                        self.codegen_user_func_call2(func_name, args)
+                      }
                       g
                     }
                   }
                 None => {
-                  let g = self.codegen_user_func_call2(func_name, args)
+                  // Check for built-in test functions
+                  let g = if func_name == "assert_eq" && args.length() == 2 {
+                    // assert_eq(expected, actual)
+                    let mut g = self.codegen_expr(args[0])
+                    g = g.emit_inst(Push(Reg64("rax")))
+                    g = g.codegen_expr(args[1])
+                    g = g.emit_inst(Pop(Reg64("rdi")))
+                    g = g.emit_inst(Cmp(Reg64("rdi"), Reg64("rax")))
+                    let (g_ok, ok_label) = g.new_label()
+                    let (g_fail, fail_label) = g_ok.new_label()
+                    g = g_ok
+                    g = g.emit_inst(Je(fail_label)) // if equal, skip error
+                    let (g2, err_msg) = g.add_string("FAILED\n")
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(err_msg)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                    g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                    g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                    g = g.emit_inst(Syscall)
+                    g = g.define_label(fail_label)
+                    g
+                  } else if func_name == "assert_true" && args.length() == 1 {
+                    let mut g = self.codegen_expr(args[0])
+                    g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
+                    let (g_ok, ok_label) = g.new_label()
+                    let (g_fail, fail_label) = g_ok.new_label()
+                    g = g_ok
+                    g = g.emit_inst(Je(fail_label)) // if false, fail
+                    // True - pass, skip fail
+                    g = g.emit_inst(Jmp(ok_label))
+                    g = g.define_label(fail_label)
+                    let (g2, err_msg) = g.add_string("FAILED\n")
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(err_msg)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                    g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                    g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                    g = g.emit_inst(Syscall)
+                    g = g.define_label(ok_label)
+                    g
+                  } else if func_name == "assert_false" && args.length() == 1 {
+                    let mut g = self.codegen_expr(args[0])
+                    g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
+                    let (g_ok, ok_label) = g.new_label()
+                    let (g_fail, fail_label) = g_ok.new_label()
+                    g = g_ok
+                    g = g.emit_inst(Jne(fail_label)) // if true, fail
+                    // False - pass, skip fail
+                    g = g.emit_inst(Jmp(ok_label))
+                    g = g.define_label(fail_label)
+                    let (g2, err_msg) = g.add_string("FAILED\n")
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(err_msg)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                    g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                    g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                    g = g.emit_inst(Syscall)
+                    g = g.define_label(ok_label)
+                    g
+                  } else if func_name == "inspect" && args.length() >= 1 {
+                    let mut g = self.codegen_expr(args[0])
+                    g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+                    g
+                  } else {
+                    self.codegen_user_func_call2(func_name, args)
+                  }
                   g
                 }
               }
@@ -4543,6 +4700,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           }
         _ => self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
       }
+    TestBlock(name, body) => {
+      let mut g = self
+      g = g.codegen_expr(body)
+      g
+    }
     _ => self
   }
 }

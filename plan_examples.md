@@ -163,7 +163,7 @@ These are foundational issues blocking multiple examples.
 
 ### 5.2 Testing
 - [x] Parse `test {}` blocks
-- [ ] Execute test blocks or properly ignore them
+- [x] Execute test blocks (assert_eq, assert_true, assert_false, inspect work)
 
 ### 5.3 Derives
 - [ ] Implement `derive(Show)` for auto toString
@@ -204,7 +204,7 @@ Update this section as tasks are completed:
 - [ ] 008_basic_map working
 - [ ] 010_basic_struct working
 - [ ] 011_basic_enum working (simple enums work, data variants partial)
-- [ ] 012_basic_test working
+- [ ] 012_basic_test working (test blocks execute, but first test intentionally fails)
 - [ ] 013_pattern_matching working
 
 ## Summary
@@ -212,6 +212,7 @@ Update this section as tasks are completed:
 **Working examples: 6/13** (001, 002, 003, 004, 006, 009)
 
 **Most recent fixes:**
-1. Unicode escape sequences now properly encode to UTF-8
-2. Enum constructor creation for variants with data
-3. Pattern matching for simple enum variants
+1. Test blocks now execute (assert_eq, assert_true, assert_false, inspect built-in functions)
+2. Unicode escape sequences now properly encode to UTF-8
+3. Enum constructor creation for variants with data
+4. Pattern matching for simple enum variants

@@ -32,6 +32,7 @@ pub enum AST {
   StructLit(String, Array[(String, AST)])
   StructUpdate(AST, Array[(String, AST)])
   StringConcat(Array[AST])
+  TestBlock(String?, AST) // optional name, body
 } derive(Show)
 
 ///|
@@ -256,6 +257,7 @@ fn Parser::parse_primary(self : Parser) -> (AST, Parser) {
     Type => self.parse_type_decl()
     Struct => self.parse_type_decl()
     Enum => self.parse_enum()
+    Test => self.parse_test()
     LBrace => self.parse_struct_or_block()
     Return => {
       let p = self.advance()
@@ -634,6 +636,27 @@ fn Parser::parse_function(self : Parser) -> (AST, Parser) {
     } else {
       (Func(name, [], None, Unit), p3)
     }
+  }
+}
+
+///|
+fn Parser::parse_test(self : Parser) -> (AST, Parser) {
+  // test { ... } or test "name" { ... }
+  let p = self.skip(1)
+  let test_name : String? = match p.current() {
+    String(s) => Some(s)
+    _ => None
+  }
+  let p2 = if test_name != None {
+    p.advance()
+  } else {
+    p
+  }
+  if self_token_eq(p2.current(), LBrace) {
+    let (body, p3) = p2.parse_block()
+    (TestBlock(test_name, body), p3)
+  } else {
+    (TestBlock(test_name, Unit), p2)
   }
 }
 

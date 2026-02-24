@@ -627,6 +627,7 @@ fn TypeChecker::check_expr(
       (checker, base_type)
     }
     EnumDef(_, _) => (self, TUnit)
+    TestBlock(_, body) => self.check_expr(body)
   }
 }
 
