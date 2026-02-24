@@ -4117,6 +4117,66 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               None => if is_last { g = g.codegen_expr(body) }
             }
           }
+          CallExpr(Ident(var_name), bindings) => {
+            let disc_val = match g.enum_discriminants.get(var_name) {
+              Some(disc) => Some(disc)
+              None => {
+                let parts = var_name.split("::").to_array()
+                if parts.length() == 2 {
+                  g.enum_discriminants.get(parts[1].to_string())
+                } else {
+                  None
+                }
+              }
+            }
+            match disc_val {
+              Some(disc) => {
+                // Check if this variant has data (bindings)
+                // If so, the scrutinee is a pointer to the enum structure
+                // If not, the scrutinee IS the discriminant directly
+                let has_data = bindings.length() > 0
+                if has_data {
+                  // Load the address from stack, then load discriminant from that address
+                  g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
+                  g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rcx")))
+                } else {
+                  g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
+                }
+                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(disc)))
+                if is_last {
+                  // Last case - if doesn't match, fall through (do nothing)
+                  // If matches, execute body
+                  let skip_bind = ".Lmatch_skip_bind\{g.label_counter}"
+                  g = { ..g, label_counter: g.label_counter + 1 }
+                  g = g.emit_inst(Jne(skip_bind))
+                  // Bind fields - simplified: just skip for now
+                  // let num_bindings = bindings.length()
+                  // let mut bind_idx = 0
+                  // while bind_idx < num_bindings {
+                  //   match bindings[bind_idx] {
+                  //     Ident(bind_name) => {
+                  //       // Skip binding for now
+                  //     }
+                  //     _ => ()
+                  //   }
+                  //   bind_idx = bind_idx + 1
+                  // }
+                  g = g.codegen_expr(body)
+                  g = g.define_label(skip_bind)
+                } else {
+                  let next_case = ".Lmatch_next\{g.label_counter}"
+                  g = { ..g, label_counter: g.label_counter + 1 }
+                  g = g.emit_inst(Jne(next_case))
+                  // Bind fields - simplified: just skip for now
+                  g = g.codegen_expr(body)
+                  g = g.emit_inst(Jmp(end_label))
+                  need_end_label = true
+                  g = g.define_label(next_case)
+                }
+              }
+              None => if is_last { g = g.codegen_expr(body) }
+            }
+          }
           _ => if is_last { g = g.codegen_expr(body) }
         }
         case_idx = case_idx + 1
