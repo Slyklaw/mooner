@@ -45,6 +45,7 @@ pub enum AST {
   EnumDef(String, Array[String])
   StructLit(String, Array[(String, AST)])
   StructUpdate(AST, Array[(String, AST)])
+  StringConcat(Array[AST])
 }
 pub impl Show for AST
 
@@ -135,6 +136,7 @@ pub enum Token {
   UInt(UInt)
   Float(Double)
   String(String)
+  InterpolatedString(Array[(Bool, String)])
   Char(Char)
   Plus
   Minus
@@ -181,6 +183,8 @@ pub enum Token {
   RBracket
   LBrace
   RBrace
+  InterpolateStart
+  InterpolateEnd
   Arrow
   At
   Eof

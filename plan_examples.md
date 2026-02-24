@@ -9,7 +9,7 @@
 | 003_basic_constants | ✅ | ✅ | OUTPUT MATCHES official |
 | 004_basic_function | ✅ | ✅ | OUTPUT MATCHES official |
 | 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr[i] = val` work; `arr.push()` works; concat (+) broken; spread not implemented |
-| 006_basic_string | ✅ | ⚠️ | get_char(), unwrap(), char equality, concat (+), escape sequences work; unicode shows '?'; interpolation not implemented |
+| 006_basic_string | ✅ | ⚠️ | get_char(), unwrap(), char equality, concat (+), escape sequences work; unicode shows '?'; interpolation now works |
 | 007_basic_tuple | ✅ | ⚠️ | Int/float tuple field access works; printing shows `<tuple>`; destructuring broken |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
 | 009_basic_control_flows | ✅ | ✅ | OUTPUT MATCHES official |

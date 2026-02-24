@@ -170,6 +170,16 @@ fn TypeChecker::check_expr(
     Int(_) => (self, TInt)
     Float(_) => (self, TFloat)
     String(_) => (self, TString)
+    StringConcat(parts) => {
+      let mut checker = self
+      let mut i = 0
+      while i < parts.length() {
+        let (c, _) = checker.check_expr(parts[i])
+        checker = c
+        i = i + 1
+      }
+      (checker, TString)
+    }
     Char(_) => (self, TChar)
     Ident(name) => {
       let ty = self.env.get_var(name)
@@ -331,14 +341,16 @@ fn TypeChecker::check_expr(
       let (c2, left_ty) = self.check_expr(left)
       let (c3, right_ty) = c2.check_expr(right)
       let (checker, ty) = match op {
-        "+" | "-" | "*" | "/" | "%" =>
+        "+" =>
           if left_ty.eq(TInt) && right_ty.eq(TInt) {
             (c3, TInt)
           } else if left_ty.eq(TFloat) || right_ty.eq(TFloat) {
             (c3, TFloat)
+          } else if left_ty.eq(TString) && right_ty.eq(TString) {
+            (c3, TString)
           } else {
             let c_err = c3.add_error(
-              TypeError::new("Operator \{op} requires numeric types"),
+              TypeError::new("Operator \{op} requires numeric or string types"),
             )
             (c_err, TUnknown)
           }

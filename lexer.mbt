@@ -34,6 +34,7 @@ pub enum Token {
   UInt(UInt)
   Float(Double)
   String(String)
+  InterpolatedString(Array[(Bool, String)]) // (is_expression, text)
   Char(Char)
   Plus
   Minus
@@ -80,6 +81,8 @@ pub enum Token {
   RBracket
   LBrace
   RBrace
+  InterpolateStart
+  InterpolateEnd
   Arrow
   At
   Eof
@@ -524,19 +527,34 @@ fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
 }
 
 ///|
-fn Lexer::read_string(self : Lexer) -> (String, Lexer) {
+fn Lexer::read_string(self : Lexer) -> (Token, Lexer) {
   let mut lexer = self.advance()
   let mut s = ""
+  let mut parts : Array[(Bool, String)] = []
+  let mut in_interpolation = false
+  let mut current_expr = ""
   let mut done = false
   while not(done) {
     match char_at(lexer.input, lexer.pos) {
       Some('"') => {
         lexer = lexer.advance()
+        if s != "" {
+          parts = parts + [(false, s)]
+          s = ""
+        }
         done = true
       }
       Some('\\') => {
         lexer = lexer.advance()
         match char_at(lexer.input, lexer.pos) {
+          Some('{') => {
+            if s != "" {
+              parts = parts + [(false, s)]
+            }
+            s = ""
+            in_interpolation = true
+            lexer = lexer.advance()
+          }
           Some('n') => {
             s = s + "\n"
             lexer = lexer.advance()
@@ -558,7 +576,6 @@ fn Lexer::read_string(self : Lexer) -> (String, Lexer) {
             lexer = lexer.advance()
           }
           Some('u') => {
-            // Unicode escape \u{XXXX}
             lexer = lexer.advance()
             match char_at(lexer.input, lexer.pos) {
               Some('{') => {
@@ -583,10 +600,7 @@ fn Lexer::read_string(self : Lexer) -> (String, Lexer) {
                     None => reading = false
                   }
                 }
-                // Convert hex to unicode and encode as UTF-8
                 let code = parse_hex(hex)
-                // Just append as single char - our runtime doesn't fully support UTF-8 but at least shows something
-                // For display purposes, use a placeholder
                 s = s + "?"
               }
               Some(c) => {
@@ -607,6 +621,17 @@ fn Lexer::read_string(self : Lexer) -> (String, Lexer) {
           None => done = true
         }
       }
+      Some('}') if in_interpolation => {
+        lexer = lexer.advance()
+        parts = parts + [(true, current_expr)]
+        current_expr = ""
+        in_interpolation = false
+        s = ""
+      }
+      Some(c) if in_interpolation => {
+        current_expr = current_expr + c.to_string()
+        lexer = lexer.advance()
+      }
       Some('\n') => done = true
       Some(c) => {
         s = s + c.to_string()
@@ -615,7 +640,14 @@ fn Lexer::read_string(self : Lexer) -> (String, Lexer) {
       None => done = true
     }
   }
-  (s, lexer)
+  if parts.is_empty() {
+    (String(s), lexer)
+  } else {
+    if s != "" {
+      parts = parts + [(false, s)]
+    }
+    (InterpolatedString(parts), lexer)
+  }
 }
 
 ///|
@@ -810,8 +842,8 @@ pub fn Lexer::next_token(self : Lexer) -> (Token, Lexer) {
           (Int(parse_int(num_str)), lexer2)
         }
       } else if c == '"' {
-        let (s, lexer2) = lexer.read_string()
-        (String(s), lexer2)
+        let (tok, lexer2) = lexer.read_string()
+        (tok, lexer2)
       } else if c == '\'' {
         let (ch, lexer2) = lexer.read_char()
         (Char(ch), lexer2)

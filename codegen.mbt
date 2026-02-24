@@ -1638,6 +1638,7 @@ fn is_array_expr(expr : AST, var_array_len : Map[String, Int]) -> Bool {
 fn is_string_expr(expr : AST, var_is_string : Map[String, Bool]) -> Bool {
   match expr {
     String(_) => true
+    StringConcat(_) => true
     Ident(name) => var_is_string.get(name) == Some(true)
     Binary("+", left, right) =>
       is_string_expr(left, var_is_string) ||
@@ -1746,6 +1747,24 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       let g = g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
       g
     }
+    StringConcat(parts) =>
+      // Build concatenation from left to right: "a" + "b" + "c" becomes ((a + b) + c)
+      // Use Binary("+", ...) to leverage existing string concatenation codegen
+      if parts.length() == 0 {
+        let (g2, label) = self.add_string("")
+        g2.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
+      } else if parts.length() == 1 {
+        self.codegen_expr(parts[0])
+      } else {
+        // Start with first part, then chain with Binary("+", left, right)
+        let mut result_expr = parts[0]
+        let mut i = 1
+        while i < parts.length() {
+          result_expr = Binary("+", result_expr, parts[i])
+          i = i + 1
+        }
+        self.codegen_expr(result_expr)
+      }
     Float(f) => {
       let (g, label) = self.add_float(f)
       let g = g.emit_inst(Movsd(Xmm("xmm0"), RipRel32(label)))
@@ -2742,7 +2761,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       let (g3, fn_label) = g.add_string("\{field_name}: ")
                       g = g3
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(fn_label)))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(field_name.length() + 2)))
+                      g = g.emit_inst(
+                        Mov(Reg64("rdx"), Imm32(field_name.length() + 2)),
+                      )
                       g = g.emit_call_print()
                       // Load field value from stack: rbx + field_idx * 8
                       g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
@@ -2796,7 +2817,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       if field_idx < num_fields - 1 {
                         let (g8, comma_label) = g.add_string(", ")
                         g = g8
-                        g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(comma_label)))
+                        g = g.emit_inst(
+                          Lea(Reg64("rsi"), RipRel32(comma_label)),
+                        )
                         g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
                         g = g.emit_call_print()
                       }
