@@ -3,14 +3,14 @@
 ## Status Summary
 
 | Example | Compile | Run | Priority Issues |
-|---------|---------|-----|-----------------|
+|---------|---------|-----|----------------|
 | 001_hello | ✅ | ✅ | OUTPUT MATCHES official |
 | 002_variable | ✅ | ✅ | OUTPUT MATCHES official |
 | 003_basic_constants | ✅ | ✅ | OUTPUT MATCHES official |
 | 004_basic_function | ✅ | ✅ | OUTPUT MATCHES official |
 | 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr[i] = val` work; `arr.push()` works; concat (+) broken; spread not implemented |
 | 006_basic_string | ✅ | ⚠️ | get_char(), unwrap(), char equality, concat (+), escape sequences work; unicode shows '?'; interpolation now works |
-| 007_basic_tuple | ✅ | ⚠️ | Int/float tuple field access works; printing shows `<tuple>`; destructuring broken |
+| 007_basic_tuple | ✅ | ⚠️ | Int/float tuple field access works; printing shows `<tuple>`; runtime float-to-string prints integer + ".0" only |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
 | 009_basic_control_flows | ✅ | ✅ | OUTPUT MATCHES official |
 | 010_basic_struct | ✅ | ⚠️ | Struct field access, mutation, functional update all work; inline struct prints `<struct>` |
@@ -19,6 +19,16 @@
 | 013_pattern_matching | ✅ | ⚠️ | Match for int/wildcard/simple enum discriminants works; destructuring, guards not supported |
 
 ## Recent Fixes
+
+### 2024-02-23: Float Variable Tracking Verified Working
+- **Investigation**: Was investigating "float variable bug" where `let x = 3.14; println(x)` showed "3.0" instead of "3.14"
+- **Finding**: Float variable tracking (`var_is_float`) IS working correctly! The issue is the **runtime float-to-string conversion** which only prints integer part + ".0" suffix
+- **Test results**:
+  - `println(3.14)` → "3.14" (literal, pre-computed at compile time)
+  - `let x = 3.14; println(x)` → "3.0" (variable, runtime conversion)
+  - `let y = 99.5; println(y)` → "99.0" (variable)
+- **Root cause**: The runtime float conversion code explicitly prints "0" then "." (lines 2482-2490 in codegen.mbt) regardless of actual fractional part, then extracts and prints integer digits. Comment says "Just print integer part for now with '.0' suffix"
+- **Conclusion**: Float variable storage/loading works. To fully fix, need to implement proper fractional part extraction in runtime float-to-string conversion
 
 ### 2024-02-23: Struct Field Assignment and Functional Update
 - **Issue**: Struct field mutation (`point.x = 5`) and functional update (`{ ..point, x: 20 }`) not implemented
