@@ -3486,6 +3486,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                         arg_idx = arg_idx + 1
                       }
                       g = g.emit_inst(Lea(Reg64("rax"), Reg64("rsp")))
+                      // Restore stack pointer BEFORE returning the pointer
+                      // The pointer is in rax, so we need to use a different register for the restore
+                      g = g.emit_inst(Mov(Reg64("rcx"), Reg64("rax"))) // rcx = pointer
+                      g = g.emit_inst(Add(Reg64("rsp"), Imm32(total_size))) // restore rsp
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx"))) // rax = pointer
                       g
                     }
                     None => {
@@ -4065,7 +4070,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g = g.emit_inst(Push(Reg64("rax")))
       let end_label = ".Lmatch_end\{g.label_counter}"
       g = { ..g, label_counter: g.label_counter + 1 }
-      let mut need_end_label = false
+      // Always need end_label for cleanup
+      let mut need_end_label = true
       let mut case_idx = 0
       while case_idx < cases.length() {
         let (pattern, body) = cases[case_idx]
@@ -4075,18 +4081,27 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
             g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(n)))
             if is_last {
+              // For last case, need to skip body if no match
+              let skip_body = ".Lmatch_skip_int\{g.label_counter}"
+              g = { ..g, label_counter: g.label_counter + 1 }
+              g = g.emit_inst(Jne(skip_body))
               g = g.codegen_expr(body)
+              g = g.emit_inst(Jmp(end_label))
+              g = g.define_label(skip_body)
             } else {
               let next_case = ".Lmatch_next\{g.label_counter}"
               g = { ..g, label_counter: g.label_counter + 1 }
               g = g.emit_inst(Jne(next_case))
               g = g.codegen_expr(body)
               g = g.emit_inst(Jmp(end_label))
-              need_end_label = true
               g = g.define_label(next_case)
             }
           }
           Ident(var_name) => {
+            // For enum pattern matching, the value might be:
+            // - A direct discriminant (for simple enums without data, typically small numbers like 0, 1, 2)
+            // - A pointer to enum structure (for enums with data, always non-zero)
+            // We check if the value is zero - if so, it's a direct discriminant
             let disc_val = match g.enum_discriminants.get(var_name) {
               Some(disc) => Some(disc)
               None => {
@@ -4100,17 +4115,34 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             }
             match disc_val {
               Some(disc) => {
+                // Load the value from stack into rcx
                 g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
+                // If rcx is zero, use it directly. Otherwise, load from rcx (pointer)
+                // First: test if rcx == 0
+                g = g.emit_inst(Test(Reg64("rcx"), Reg64("rcx")))
+                let (g2, is_direct_label) = g.new_label()
+                let (g3, load_ptr_label) = g2.new_label()
+                g = g3
+                g = g.emit_inst(Je(is_direct_label)) // if zero, use direct
+                // Non-zero: treat as pointer, load discriminant from pointer
+                g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rcx")))
+                g = g.define_label(is_direct_label)
+                // Now rcx has the discriminant
                 g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(disc)))
                 if is_last {
+                  // For last case, need to skip body if no match
+                  let skip_body = ".Lmatch_skip_body\{g.label_counter}"
+                  g = { ..g, label_counter: g.label_counter + 1 }
+                  g = g.emit_inst(Jne(skip_body))
                   g = g.codegen_expr(body)
+                  g = g.emit_inst(Jmp(end_label))
+                  g = g.define_label(skip_body)
                 } else {
                   let next_case = ".Lmatch_next\{g.label_counter}"
                   g = { ..g, label_counter: g.label_counter + 1 }
                   g = g.emit_inst(Jne(next_case))
                   g = g.codegen_expr(body)
                   g = g.emit_inst(Jmp(end_label))
-                  need_end_label = true
                   g = g.define_label(next_case)
                 }
               }
@@ -4162,6 +4194,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   //   bind_idx = bind_idx + 1
                   // }
                   g = g.codegen_expr(body)
+                  g = g.emit_inst(Jmp(end_label))
                   g = g.define_label(skip_bind)
                 } else {
                   let next_case = ".Lmatch_next\{g.label_counter}"
@@ -4170,7 +4203,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   // Bind fields - simplified: just skip for now
                   g = g.codegen_expr(body)
                   g = g.emit_inst(Jmp(end_label))
-                  need_end_label = true
                   g = g.define_label(next_case)
                 }
               }
@@ -4181,9 +4213,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         }
         case_idx = case_idx + 1
       }
-      if need_end_label {
-        g = g.define_label(end_label)
-      }
+      // Always define end_label for cleanup
+      g = g.define_label(end_label)
       g = g.emit_inst(Add(Reg64("rsp"), Imm32(8)))
       g
     }
