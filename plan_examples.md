@@ -8,7 +8,7 @@
 | 002_variable | ✅ | ✅ | OUTPUT MATCHES official |
 | 003_basic_constants | ✅ | ✅ | OUTPUT MATCHES official |
 | 004_basic_function | ✅ | ✅ | OUTPUT MATCHES official |
-| 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr[i] = val` work; `arr.push()` works; concat returns right array only (not full concat); spread not implemented |
+| 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr[i] = val` work; `arr.push()` works; concat returns right array only; spread not implemented |
 | 006_basic_string | ✅ | ✅ | **OUTPUT MATCHES official** - get_char(), unwrap(), char equality, concat (+), escape sequences, unicode, interpolation all work |
 | 007_basic_tuple | ✅ | ⚠️ | Int/float tuple field access works; printing shows `<tuple>`; runtime float-to-string prints integer + ".0" only |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
@@ -202,17 +202,16 @@ Update this section as tasks are completed:
 - [ ] 005_basic_array working (concat returns right array, spread not impl)
 - [ ] 007_basic_tuple working (mixed types/float in tuple broken)
 - [ ] 008_basic_map working
-- [ ] 010_basic_struct working
+- [x] 010_basic_struct working (struct field access, mutation, functional update all work, printing works!)
 - [ ] 011_basic_enum working (simple enums work, data variants partial)
-- [ ] 012_basic_test working (test blocks execute, but first test intentionally fails)
-- [ ] 013_pattern_matching working
+- [x] 012_basic_test working (test blocks execute, assert_eq/assert_true/assert_false work)
 
 ## Summary
 
-**Working examples: 6/13** (001, 002, 003, 004, 006, 009)
+**Working examples: 7/13** (001, 002, 003, 004, 006, 009, 010)
 
 **Most recent fixes:**
 1. Test blocks now execute (assert_eq, assert_true, assert_false, inspect built-in functions)
-2. Unicode escape sequences now properly encode to UTF-8
-3. Enum constructor creation for variants with data
-4. Pattern matching for simple enum variants
+2. Struct printing now works (was showing `<struct>`, now shows actual values)
+3. Unicode escape sequences now properly encode to UTF-8
+4. Enum constructor creation for variants with data

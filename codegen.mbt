@@ -69,6 +69,7 @@ pub enum X86Inst {
   Ucomisd(X86Operand, X86Operand)
   Cvtsi2sd(X86Operand, X86Operand)
   Cvttsd2si(X86Operand, X86Operand)
+  RepMovsq
 } derive(Show)
 
 ///|
@@ -365,6 +366,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     Nop => self.emit_byte(0x90)
     Ret => self.emit_byte(0xC3)
     Syscall => self.emit_bytes([0x0F, 0x05])
+    RepMovsq => self.emit_bytes([0x48, 0xA5])
     Push(Reg64("rax")) => self.emit_byte(0x50)
     Push(Reg64("rcx")) => self.emit_byte(0x51)
     Push(Reg64("rdx")) => self.emit_byte(0x52)
@@ -1908,8 +1910,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       } else if op == "+" &&
         is_array_expr(left, self.var_array_len) &&
         is_array_expr(right, self.var_array_len) {
-        // Array concatenation - simplified: just return right array for now
-        // This avoids the complexity of heap allocation
+        // Array concatenation - simplified version returning right array for now
+        // The mmap approach has issues
         let g = self.codegen_expr(right)
         g
       } else if op == "+" && is_string {
