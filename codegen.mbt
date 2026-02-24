@@ -1910,16 +1910,19 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         g = g.emit_inst(Mov(Reg64("rdi"), Reg64("rax")))
         g = g.emit_inst(Mov(Reg64("rax"), Imm32(9))) // brk syscall
         g = g.emit_inst(Syscall)
-        // rax = new buffer, save to r15
+        // rax = new buffer address
+        // Store total length at offset 0 of new buffer
+        g = g.emit_inst(Mov(MemIndirect("rax"), Reg64("r15")))
+        // r15 = new buffer pointer (dest for copying)
         g = g.emit_inst(Mov(Reg64("r15"), Reg64("rax")))
-        // Store total length at offset 0
-        g = g.emit_inst(Mov(Reg64("r13"), MemIndirect("r15")))
         // Copy left array (8 bytes each, from offset 8)
         // r13 = left_len counter
         g = g.emit_inst(Mov(Reg64("r13"), MemIndirect("rbx")))
         // r14 = dest ptr = r15 + 8
         g = g.emit_inst(Mov(Reg64("r14"), Reg64("r15")))
         g = g.emit_inst(Add(Reg64("r14"), Imm32(8)))
+        // Skip length field in source (advance by 8 before first load)
+        g = g.emit_inst(Add(Reg64("rbx"), Imm32(8)))
         let (g2_left, label_left_end) = g.new_label()
         g = g2_left.emit_inst(Cmp(Reg64("r13"), Imm32(0)))
         g = g2_left.emit_inst(Je(label_left_end))
@@ -1935,6 +1938,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         g = g3_left.define_label(label_left_end)
         // Copy right array
         g = g3_left.emit_inst(Mov(Reg64("r13"), MemIndirect("r12"))) // right_len
+        // Skip length field in source
+        g = g3_left.emit_inst(Add(Reg64("r12"), Imm32(8)))
         let (g4_right, label_right_end) = g3_left.new_label()
         g = g4_right.emit_inst(Cmp(Reg64("r13"), Imm32(0)))
         g = g4_right.emit_inst(Je(label_right_end))
