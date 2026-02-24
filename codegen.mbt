@@ -1728,6 +1728,32 @@ fn CodeGen::emit_call_print(self : CodeGen) -> CodeGen {
 }
 
 ///|
+fn CodeGen::codegen_user_func_call2(self : CodeGen, func_name : String, args : Array[AST]) -> CodeGen {
+  let arg_regs = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
+  let mut g = self
+  let num_args = args.length()
+  let mut i = num_args - 1
+  while i >= 0 {
+    g = g.codegen_expr(args[i])
+    g = g.emit_inst(Push(Reg64("rax")))
+    i = i - 1
+  }
+  let mut j = 0
+  while j < num_args {
+    if j < 6 {
+      g = g.emit_inst(Pop(Reg64(arg_regs[j])))
+    }
+    j = j + 1
+  }
+  g = g.emit_inst(Call(func_name))
+  if num_args > 6 {
+    let cleanup = (num_args - 6) * 8
+    g = g.emit_inst(Add(Reg64("rsp"), Imm32(cleanup)))
+  }
+  g
+}
+
+///|
 fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
   match expr {
     Int(n) => {
@@ -3431,35 +3457,48 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
               }
             _ => {
-              // User-defined function call
-              // System V AMD64 ABI: rdi, rsi, rdx, rcx, r8, r9 for first 6 args
-              let arg_regs = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
-              let mut g = self
-              // Evaluate args and push to stack (in reverse for stack args)
-              // First pass: evaluate all args, store results on stack
-              let num_args = args.length()
-              let mut i = num_args - 1
-              while i >= 0 {
-                g = g.codegen_expr(args[i])
-                g = g.emit_inst(Push(Reg64("rax")))
-                i = i - 1
-              }
-              // Pop args into registers (first 6) and leave rest on stack
-              let mut j = 0
-              while j < num_args {
-                if j < 6 {
-                  g = g.emit_inst(Pop(Reg64(arg_regs[j])))
+              // Check if this is an enum constructor
+              let variant_name = {
+                let parts = func_name.split("::").to_array()
+                if parts.length() == 2 {
+                  Some(parts[1].to_string())
+                } else if self.enum_discriminants.get(func_name) != None {
+                  Some(func_name.to_string())
+                } else {
+                  None
                 }
-                j = j + 1
               }
-              // Call the function
-              g = g.emit_inst(Call(func_name))
-              // Clean up stack args if any (args beyond 6)
-              if num_args > 6 {
-                let cleanup = (num_args - 6) * 8
-                g = g.emit_inst(Add(Reg64("rsp"), Imm32(cleanup)))
+              match variant_name {
+                Some(vname) =>
+                  match self.enum_discriminants.get(vname) {
+                    Some(disc) => {
+                      let num_args = args.length()
+                      let total_size = (num_args + 1) * 8
+                      let mut g = self
+                      g = g.emit_inst(Sub(Reg64("rsp"), Imm32(total_size)))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(disc)))
+                      g = g.emit_inst(Mov(MemIndirect("rsp"), Reg64("rax")))
+                      let mut arg_idx = 0
+                      while arg_idx < num_args {
+                        g = g.codegen_expr(args[arg_idx])
+                        let offset = (arg_idx + 1) * 8
+                        g = g.emit_inst(Mov(MemOffset("rsp", offset), Reg64("rax")))
+                        arg_idx = arg_idx + 1
+                      }
+                      g = g.emit_inst(Lea(Reg64("rax"), Reg64("rsp")))
+                      g
+                    }
+                    None => {
+                      // Not an enum variant with that name, treat as regular function
+                      let g = self.codegen_user_func_call2(func_name, args)
+                      g
+                    }
+                  }
+                None => {
+                  let g = self.codegen_user_func_call2(func_name, args)
+                  g
+                }
               }
-              g
             }
           }
         }
