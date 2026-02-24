@@ -9,16 +9,31 @@
 | 003_basic_constants | ✅ | ✅ | OUTPUT MATCHES official |
 | 004_basic_function | ✅ | ✅ | OUTPUT MATCHES official |
 | 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr[i] = val` work; `arr.push()` works; concat returns right array only (not full concat); spread not implemented |
-| 006_basic_string | ✅ | ⚠️ | get_char(), unwrap(), char equality, concat (+), escape sequences work; unicode shows '?'; interpolation now works |
+| 006_basic_string | ✅ | ✅ | **OUTPUT MATCHES official** - get_char(), unwrap(), char equality, concat (+), escape sequences, unicode, interpolation all work |
 | 007_basic_tuple | ✅ | ⚠️ | Int/float tuple field access works; printing shows `<tuple>`; runtime float-to-string prints integer + ".0" only |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
 | 009_basic_control_flows | ✅ | ✅ | OUTPUT MATCHES official |
 | 010_basic_struct | ✅ | ⚠️ | Struct field access, mutation, functional update all work; inline struct prints `<struct>` |
-| 011_basic_enum | ✅ | ⚠️ | Match for simple enum discriminants (Red, Green, Blue) works; enum variants with data (RGB, RGBA) not implemented |
+| 011_basic_enum | ✅ | ⚠️ | Simple enum variants (Red, Green, Blue) work for creation and pattern matching; enum variants with data (RGB, RGBA) creation works, but pattern matching is incomplete |
 | 012_basic_test | ✅ | ❌ | Test blocks parse but not executed |
 | 013_pattern_matching | ✅ | ⚠️ | Match for int/wildcard/simple enum discriminants works; destructuring, guards not supported |
 
 ## Recent Fixes
+
+### 2024-02-24: Unicode Escape Sequences Fixed
+- **Issue**: Unicode escape sequences like `\u{1F407}` (rabbit emoji) showed as "?"
+- **Root cause**: Lexer was parsing hex but just outputting "?" placeholder
+- **Fix**: Added UTF-8 encoding in lexer - converts code point to proper 1-4 byte UTF-8 sequence
+- **Result**: Example 006 now OUTPUTS MATCH official compiler
+
+### 2024-02-24: Enum Constructor Implementation
+- **Issue**: Enum variants with data (RGB(0, 0, 255)) not properly created
+- **Fix**: 
+  1. Added enum constructor detection in CallExpr handler
+  2. Creates stack-allocated structure: [discriminant][arg0][arg1]...
+  3. Returns pointer to structure
+  4. Added pattern matching logic to detect direct discriminant (0) vs pointer
+- **Result**: Simple enum variants work; variants with data creation works but pattern matching still has edge cases
 
 ### 2024-02-23: Float Variable Tracking Verified Working
 - **Investigation**: Was investigating "float variable bug" where `let x = 3.14; println(x)` showed "3.0" instead of "3.14"
@@ -77,8 +92,8 @@ These are foundational issues blocking multiple examples.
 - [x] Fix multiple top-level function declarations
 
 ### 1.4 Control Flow - Conditionals
-- [ ] Fix if/else to execute correct branch
-- [ ] Implement if/else as expressions (return values)
+- [x] Fix if/else to execute correct branch
+- [x] Implement if/else as expressions (return values)
 
 ## Phase 2: Data Types (HIGH-MEDIUM PRIORITY)
 
@@ -95,19 +110,19 @@ These are foundational issues blocking multiple examples.
 - [x] Implement array element assignment `arr[i] = value`
 - [x] Implement array printing in `println` (loop-based printing with comma separators)
 - [x] Array layout: `[length][elem0][elem1]...` (length at offset 0, elements at offset 8)
-- [ ] Implement `array.push()` mutation
-- [ ] Implement array concatenation `arr1 + arr2`
+- [x] Implement `array.push()` mutation
+- [ ] Implement array concatenation `arr1 + arr2` (returns right array only)
 - [ ] Implement spread operator `[..arr1, 1000, ..arr2]`
 
 ### 2.3 Strings
-- [ ] Implement String concatenation `str1 + str2`
-- [ ] Implement `string.get_char(index)`
-- [ ] Implement escape sequences `\n`, `\t`, `\u{}`
-- [ ] Implement string interpolation `"\{lang}"`
+- [x] Implement String concatenation `str1 + str2`
+- [x] Implement `string.get_char(index)`
+- [x] Implement escape sequences `\n`, `\t`, `\u{}`
+- [x] Implement string interpolation `"\{lang}"`
 
 ### 2.4 Tuples
-- [ ] Implement Tuple type `(a, b, c)`
-- [ ] Implement tuple element access `tuple.0`
+- [x] Implement Tuple type `(a, b, c)`
+- [x] Implement tuple element access `tuple.0`
 
 ## Phase 3: Control Flow (MEDIUM PRIORITY)
 
@@ -115,27 +130,27 @@ These are foundational issues blocking multiple examples.
 - [x] Implement C-style for loop `for i=0; i<n; i=i+1`
 - [x] Implement for-in loop `for x in arr` ✅
 - [x] Implement while loop
-- [ ] Implement break statement
-- [ ] Implement continue statement
+- [x] Implement break statement
+- [x] Implement continue statement
 
 ## Phase 4: Structured Data (MEDIUM-LOW PRIORITY)
 
 ### 4.1 Structs
-- [ ] Parse struct definitions
-- [ ] Implement struct construction `{ x: 3, y: 4 }`
-- [ ] Implement struct field access `point.x`
-- [ ] Implement mutable fields `mut x`
-- [ ] Implement functional update `{ ..point, x: 20 }`
+- [x] Parse struct definitions
+- [x] Implement struct construction `{ x: 3, y: 4 }`
+- [x] Implement struct field access `point.x`
+- [x] Implement mutable fields `mut x`
+- [x] Implement functional update `{ ..point, x: 20 }`
 
 ### 4.2 Enums
-- [ ] Parse enum definitions
-- [ ] Implement simple enum constructors `Red`, `Green`, `Blue`
-- [ ] Implement enum constructors with data `RGB(Int, Int, Int)`
+- [x] Parse enum definitions
+- [x] Implement simple enum constructors `Red`, `Green`, `Blue`
+- [x] Implement enum constructors with data `RGB(Int, Int, Int)` (partial)
 
 ### 4.3 Pattern Matching
-- [ ] Implement basic match expressions
-- [ ] Implement constructor patterns `RGB(r, g, b)`
-- [ ] Implement wildcard pattern `_`
+- [x] Implement basic match expressions
+- [ ] Implement constructor patterns `RGB(r, g, b)` with data binding
+- [x] Implement wildcard pattern `_`
 - [ ] Implement guard expressions `guard x is pattern`
 
 ## Phase 5: Advanced Features (LOW PRIORITY)
@@ -147,8 +162,8 @@ These are foundational issues blocking multiple examples.
 - [ ] Fix segfault in map operations
 
 ### 5.2 Testing
-- [ ] Parse `test {}` blocks
-- [ ] Either execute or properly ignore test blocks
+- [x] Parse `test {}` blocks
+- [ ] Execute test blocks or properly ignore them
 
 ### 5.3 Derives
 - [ ] Implement `derive(Show)` for auto toString
@@ -182,12 +197,21 @@ Update this section as tasks are completed:
 - [x] 002_variable working (OUTPUT MATCHES official)
 - [x] 003_basic_constants working (OUTPUT MATCHES official)
 - [x] 004_basic_function working (OUTPUT MATCHES official)
+- [x] 006_basic_string working (OUTPUT MATCHES official) - **NEW!**
+- [x] 009_basic_control_flows working (OUTPUT MATCHES official)
 - [ ] 005_basic_array working (concat returns right array, spread not impl)
-- [ ] 006_basic_string working (unicode/interpolation not impl)
 - [ ] 007_basic_tuple working (mixed types/float in tuple broken)
 - [ ] 008_basic_map working
-- [x] 009_basic_control_flows working (OUTPUT MATCHES official)
 - [ ] 010_basic_struct working
-- [ ] 011_basic_enum working
+- [ ] 011_basic_enum working (simple enums work, data variants partial)
 - [ ] 012_basic_test working
 - [ ] 013_pattern_matching working
+
+## Summary
+
+**Working examples: 6/13** (001, 002, 003, 004, 006, 009)
+
+**Most recent fixes:**
+1. Unicode escape sequences now properly encode to UTF-8
+2. Enum constructor creation for variants with data
+3. Pattern matching for simple enum variants
