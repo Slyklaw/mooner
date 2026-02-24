@@ -1548,7 +1548,8 @@ fn is_float_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
     Float(_) => true
     Ident(name) => var_is_float.get(name) == Some(true)
     Binary(_, left, right) =>
-      is_float_expr(left, var_is_float) || is_float_expr(right, var_is_float)
+      is_float_expr(left, var_is_float) ||
+      is_float_expr(right, var_is_float)
     Unary(_, e) => is_float_expr(e, var_is_float)
     CallExpr(Ident(fname), _) => fname == "string_to_float"
     _ => false
