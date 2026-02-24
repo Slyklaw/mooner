@@ -601,7 +601,35 @@ fn Lexer::read_string(self : Lexer) -> (Token, Lexer) {
                   }
                 }
                 let code = parse_hex(hex)
-                s = s + "?"
+                // Convert code point to UTF-8 bytes
+                if code < 0x80 {
+                  // 1-byte sequence
+                  s = s + Char::from_int(code).to_string()
+                } else if code < 0x800 {
+                  // 2-byte sequence
+                  let b1 = 0xC0 | (code >> 6)
+                  let b2 = 0x80 | (code & 0x3F)
+                  s = s + Char::from_int(b1).to_string()
+                  s = s + Char::from_int(b2).to_string()
+                } else if code < 0x10000 {
+                  // 3-byte sequence
+                  let b1 = 0xE0 | (code >> 12)
+                  let b2 = 0x80 | ((code >> 6) & 0x3F)
+                  let b3 = 0x80 | (code & 0x3F)
+                  s = s + Char::from_int(b1).to_string()
+                  s = s + Char::from_int(b2).to_string()
+                  s = s + Char::from_int(b3).to_string()
+                } else {
+                  // 4-byte sequence
+                  let b1 = 0xF0 | (code >> 18)
+                  let b2 = 0x80 | ((code >> 12) & 0x3F)
+                  let b3 = 0x80 | ((code >> 6) & 0x3F)
+                  let b4 = 0x80 | (code & 0x3F)
+                  s = s + Char::from_int(b1).to_string()
+                  s = s + Char::from_int(b2).to_string()
+                  s = s + Char::from_int(b3).to_string()
+                  s = s + Char::from_int(b4).to_string()
+                }
               }
               Some(c) => {
                 s = s + "u"
