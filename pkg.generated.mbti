@@ -85,6 +85,7 @@ pub struct CodeGen {
   needs_arrcat_buf : Bool
   needs_map_buf : Bool
   map_buf_offset : Int
+  enum_buf_offset : Int
 }
 
 pub struct Lexer {

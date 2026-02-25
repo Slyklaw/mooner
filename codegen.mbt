@@ -126,6 +126,7 @@ pub struct CodeGen {
   needs_arrcat_buf : Bool
   needs_map_buf : Bool
   map_buf_offset : Int
+  enum_buf_offset : Int
 }
 
 ///|
@@ -163,6 +164,7 @@ fn CodeGen::new() -> CodeGen {
     needs_arrcat_buf: false,
     needs_map_buf: false,
     map_buf_offset: 0,
+    enum_buf_offset: 0,
   }
 }
 
@@ -3587,28 +3589,45 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                         // Simple enum (no data) - just return the discriminant directly
                         self.emit_inst(Mov(Reg64("rax"), Imm32(disc)))
                       } else {
-                        // Enum with data - allocate on stack
-                        // NOTE: We don't restore rsp, so the data stays valid
-                        // This causes a "stack leak" but works for simple programs
+                        // Enum with data - use global buffer
+                        // Each enum takes (1 + num_args) * 8 bytes
                         let total_size = (num_args + 1) * 8
                         let mut g = self
-                        // Allocate space on stack
-                        g = g.emit_inst(Sub(Reg64("rsp"), Imm32(total_size)))
-                        // Store discriminant at [rsp]
+                        // Get current offset
+                        let offset = g.enum_buf_offset
+                        // Update offset for next enum
+                        g = { ..g, enum_buf_offset: offset + total_size }
+                        // Store discriminant at buffer offset
                         g = g.emit_inst(Mov(Reg64("rax"), Imm32(disc)))
-                        g = g.emit_inst(Mov(MemIndirect("rsp"), Reg64("rax")))
-                        // Store arguments at [rsp+8], [rsp+16], etc.
+                        g = g.emit_inst(
+                          Mov(RipRel32(".Lenum_buf"), Reg64("rax")),
+                        ) // temp
+                        // Actually we need to use RipRel with offset
+                        // Store at .Lenum_buf + offset
+                        // Use rdx as temp
+                        g = g.emit_inst(
+                          Lea(Reg64("rdx"), RipRel32(".Lenum_buf")),
+                        )
+                        g = g.emit_inst(Add(Reg64("rdx"), Imm32(offset)))
+                        g = g.emit_inst(Mov(MemIndirect("rdx"), Reg64("rax")))
+                        // Store arguments at buffer + offset + 8, +16, etc.
                         let mut arg_idx = 0
                         while arg_idx < num_args {
                           g = g.codegen_expr(args[arg_idx])
-                          let offset = (arg_idx + 1) * 8
                           g = g.emit_inst(
-                            Mov(MemOffset("rsp", offset), Reg64("rax")),
+                            Lea(Reg64("rdx"), RipRel32(".Lenum_buf")),
                           )
+                          g = g.emit_inst(
+                            Add(Reg64("rdx"), Imm32(offset + (arg_idx + 1) * 8)),
+                          )
+                          g = g.emit_inst(Mov(MemIndirect("rdx"), Reg64("rax")))
                           arg_idx = arg_idx + 1
                         }
-                        // Return pointer to the enum data (don't restore rsp!)
-                        g = g.emit_inst(Lea(Reg64("rax"), Reg64("rsp")))
+                        // Return pointer to buffer + offset
+                        g = g.emit_inst(
+                          Lea(Reg64("rax"), RipRel32(".Lenum_buf")),
+                        )
+                        g = g.emit_inst(Add(Reg64("rax"), Imm32(offset)))
                         g
                       }
                     }
@@ -5108,6 +5127,10 @@ pub fn codegen(ast : AST) -> Bytes {
   // Support up to 64 entries (1KB total)
   g = g.define_label(".Lmap_buf")
   g = g.emit_bytes(Array::make(1024, 0x00))
+  // Enum buffer: stores enum data (discriminant + fields)
+  // 64KB total, each RGB takes 32 bytes (1 + 3 args), ~2000 enums max
+  g = g.define_label(".Lenum_buf")
+  g = g.emit_bytes(Array::make(65536, 0x00))
   let code = g.code
   let mut i = 0
   while i < g.pending_labels.length() {
