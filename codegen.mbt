@@ -3583,27 +3583,34 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   match self.enum_discriminants.get(vname) {
                     Some(disc) => {
                       let num_args = args.length()
-                      let total_size = (num_args + 1) * 8
-                      let mut g = self
-                      g = g.emit_inst(Sub(Reg64("rsp"), Imm32(total_size)))
-                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(disc)))
-                      g = g.emit_inst(Mov(MemIndirect("rsp"), Reg64("rax")))
-                      let mut arg_idx = 0
-                      while arg_idx < num_args {
-                        g = g.codegen_expr(args[arg_idx])
-                        let offset = (arg_idx + 1) * 8
-                        g = g.emit_inst(
-                          Mov(MemOffset("rsp", offset), Reg64("rax")),
-                        )
-                        arg_idx = arg_idx + 1
+                      if num_args == 0 {
+                        // Simple enum (no data) - just return the discriminant directly
+                        self.emit_inst(Mov(Reg64("rax"), Imm32(disc)))
+                      } else {
+                        // Enum with data - allocate on stack
+                        // NOTE: We don't restore rsp, so the data stays valid
+                        // This causes a "stack leak" but works for simple programs
+                        let total_size = (num_args + 1) * 8
+                        let mut g = self
+                        // Allocate space on stack
+                        g = g.emit_inst(Sub(Reg64("rsp"), Imm32(total_size)))
+                        // Store discriminant at [rsp]
+                        g = g.emit_inst(Mov(Reg64("rax"), Imm32(disc)))
+                        g = g.emit_inst(Mov(MemIndirect("rsp"), Reg64("rax")))
+                        // Store arguments at [rsp+8], [rsp+16], etc.
+                        let mut arg_idx = 0
+                        while arg_idx < num_args {
+                          g = g.codegen_expr(args[arg_idx])
+                          let offset = (arg_idx + 1) * 8
+                          g = g.emit_inst(
+                            Mov(MemOffset("rsp", offset), Reg64("rax")),
+                          )
+                          arg_idx = arg_idx + 1
+                        }
+                        // Return pointer to the enum data (don't restore rsp!)
+                        g = g.emit_inst(Lea(Reg64("rax"), Reg64("rsp")))
+                        g
                       }
-                      g = g.emit_inst(Lea(Reg64("rax"), Reg64("rsp")))
-                      // Restore stack pointer BEFORE returning the pointer
-                      // The pointer is in rax, so we need to use a different register for the restore
-                      g = g.emit_inst(Mov(Reg64("rcx"), Reg64("rax"))) // rcx = pointer
-                      g = g.emit_inst(Add(Reg64("rsp"), Imm32(total_size))) // restore rsp
-                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx"))) // rax = pointer
-                      g
                     }
                     None => {
                       // Check for built-in test functions
@@ -4444,8 +4451,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           Ident(var_name) => {
             // For enum pattern matching, the value might be:
             // - A direct discriminant (for simple enums without data, typically small numbers like 0, 1, 2)
-            // - A pointer to enum structure (for enums with data, always non-zero)
-            // We check if the value is zero - if so, it's a direct discriminant
+            // - A pointer to enum structure (for enums with data, always non-zero and typically large)
+            // We use a threshold to distinguish: small values (<4096) are discriminants, large values are pointers
             let disc_val = match g.enum_discriminants.get(var_name) {
               Some(disc) => Some(disc)
               None => {
@@ -4459,11 +4466,19 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             }
             match disc_val {
               Some(disc) => {
-                // For simple enum patterns (Red, Green, Blue without data),
-                // the scrutinee IS the discriminant directly (not a pointer).
-                // Just load from stack and compare.
+                // Load the value from stack into rcx
                 g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
-                // Compare directly
+                // Check if value is small (< 4096) - likely a direct discriminant
+                // If large - treat as pointer and dereference
+                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(4096)))
+                let (g2, is_small_label) = g.new_label()
+                let (g3, is_pointer_label) = g2.new_label()
+                g = g3
+                g = g.emit_inst(Jb(is_small_label)) // if < 4096, treat as direct
+                // Large value - treat as pointer, load discriminant from pointer
+                g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rcx")))
+                g = g.define_label(is_small_label)
+                // Now rcx has the discriminant (either direct or dereferenced)
                 g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(disc)))
                 if is_last {
                   // For last case, need to skip body if no match

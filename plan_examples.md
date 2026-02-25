@@ -14,7 +14,7 @@
 | 008_basic_map | ✅ | ❌ | **Segfault** |
 | 009_basic_control_flows | ✅ | ✅ | OUTPUT MATCHES official |
 | 010_basic_struct | ✅ | ✅ | **OUTPUT MATCHES official** |
-| 011_basic_enum | ✅ | ⚠️ | Simple enum variants work; enum constructors with data (RGB, RGBA) crash due to stack allocation bug |
+| 011_basic_enum | ✅ | ⚠️ | Simple enum variants work; enum constructors with data (RGB, RGBA) have stack corruption issues |
 | 012_basic_test | ⚠️ | ❌ | Official compiler fails on this file |
 | 013_pattern_matching | ✅ | ❌ | Compiles but segfaults at runtime (parser infinite loop fixed) |
 
