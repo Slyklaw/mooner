@@ -708,11 +708,7 @@ fn Parser::parse_test(self : Parser) -> (AST, Parser) {
     String(s) => Some(s)
     _ => None
   }
-  let p2 = if test_name != None {
-    p.advance()
-  } else {
-    p
-  }
+  let p2 = if test_name != None { p.advance() } else { p }
   if self_token_eq(p2.current(), LBrace) {
     let (body, p3) = p2.parse_block()
     (TestBlock(test_name, body), p3)

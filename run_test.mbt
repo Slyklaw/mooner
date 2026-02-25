@@ -1,3 +1,4 @@
+///|
 fn main {
   let tuple = (3.14, false, [1, 2, 3])
   let tuple2 : (Float, Bool, Int) = (2.1, true, 20)

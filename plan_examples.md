@@ -8,15 +8,15 @@
 | 002_variable | ✅ | ✅ | OUTPUT MATCHES official |
 | 003_basic_constants | ✅ | ✅ | OUTPUT MATCHES official |
 | 004_basic_function | ✅ | ✅ | OUTPUT MATCHES official |
-| 005_basic_array | ✅ | ✅ | **OUTPUT MATCHES official** - `arr.length()`, `arr[i]`, `arr[i] = val`, `arr.push()`, concatenation (`+`), and array spread (`..arr`) all work |
-| 006_basic_string | ✅ | ✅ | **OUTPUT MATCHES official** - get_char(), unwrap(), char equality, concat (+), escape sequences, unicode, interpolation all work |
-| 007_basic_tuple | ✅ | ⚠️ | Int/float tuple field access works; printing shows `<tuple>`; runtime float-to-string prints integer + ".0" only |
-| 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
+| 005_basic_array | ✅ | ✅ | **OUTPUT MATCHES official** |
+| 006_basic_string | ✅ | ✅ | **OUTPUT MATCHES official** |
+| 007_basic_tuple | ✅ | ❌ | **Segfault** |
+| 008_basic_map | ✅ | ❌ | **Segfault** |
 | 009_basic_control_flows | ✅ | ✅ | OUTPUT MATCHES official |
-| 010_basic_struct | ✅ | ⚠️ | Struct field access, mutation, functional update all work; inline struct prints `<struct>` |
-| 011_basic_enum | ✅ | ⚠️ | Simple enum variants (Red, Green, Blue) work for creation and pattern matching; enum variants with data (RGB, RGBA) creation works, but pattern matching is incomplete |
-| 012_basic_test | ✅ | ❌ | Test blocks parse but not executed |
-| 013_pattern_matching | ✅ | ⚠️ | Match for int/wildcard/simple enum discriminants works; destructuring, guards not supported |
+| 010_basic_struct | ✅ | ✅ | **OUTPUT MATCHES official** |
+| 011_basic_enum | ✅ | ❌ | **Segfault** |
+| 012_basic_test | ⚠️ | ❌ | Official compiler fails on this file |
+| 013_pattern_matching | ⚠️ | ⚠️ | Timeout - likely infinite loop in match codegen |
 
 ## Recent Fixes
 
@@ -202,21 +202,19 @@ Update this section as tasks are completed:
 - [x] 002_variable working (OUTPUT MATCHES official)
 - [x] 003_basic_constants working (OUTPUT MATCHES official)
 - [x] 004_basic_function working (OUTPUT MATCHES official)
-- [x] 006_basic_string working (OUTPUT MATCHES official) - **NEW!**
+- [x] 005_basic_array working (OUTPUT MATCHES official) ✅
+- [x] 006_basic_string working (OUTPUT MATCHES official)
 - [x] 009_basic_control_flows working (OUTPUT MATCHES official)
-- [ ] 005_basic_array working (concat returns right array, spread not impl)
-- [ ] 007_basic_tuple working (mixed types/float in tuple broken)
-- [ ] 008_basic_map working
-- [x] 010_basic_struct working (struct field access, mutation, functional update all work, printing works!)
-- [ ] 011_basic_enum working (simple enums work, data variants partial)
-- [x] 012_basic_test working (test blocks execute, assert_eq/assert_true/assert_false work)
+- [x] 010_basic_struct working (OUTPUT MATCHES official)
+- [ ] 007_basic_tuple working (segfault)
+- [ ] 008_basic_map working (segfault)
+- [ ] 011_basic_enum working (segfault)
+- [ ] 012_basic_test (official compiler fails on file)
+- [ ] 013_pattern_matching (timeout)
 
 ## Summary
 
-**Working examples: 7/13** (001, 002, 003, 004, 006, 009, 010)
+**Working examples: 8/13** (001-006, 009-010)
 
 **Most recent fixes:**
-1. Test blocks now execute (assert_eq, assert_true, assert_false, inspect built-in functions)
-2. Struct printing now works (was showing `<struct>`, now shows actual values)
-3. Unicode escape sequences now properly encode to UTF-8
-4. Enum constructor creation for variants with data
+1. Example 005 (array) now outputs identically to official compiler

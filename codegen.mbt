@@ -1563,8 +1563,7 @@ fn is_float_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
     Float(_) => true
     Ident(name) => var_is_float.get(name) == Some(true)
     Binary(_, left, right) =>
-      is_float_expr(left, var_is_float) ||
-      is_float_expr(right, var_is_float)
+      is_float_expr(left, var_is_float) || is_float_expr(right, var_is_float)
     Unary(_, e) => is_float_expr(e, var_is_float)
     CallExpr(Ident(fname), _) => fname == "string_to_float"
     _ => false
@@ -1757,7 +1756,11 @@ fn CodeGen::emit_call_print(self : CodeGen) -> CodeGen {
 }
 
 ///|
-fn CodeGen::codegen_user_func_call2(self : CodeGen, func_name : String, args : Array[AST]) -> CodeGen {
+fn CodeGen::codegen_user_func_call2(
+  self : CodeGen,
+  func_name : String,
+  args : Array[AST],
+) -> CodeGen {
   let arg_regs = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
   let mut g = self
   let num_args = args.length()
@@ -3589,7 +3592,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       while arg_idx < num_args {
                         g = g.codegen_expr(args[arg_idx])
                         let offset = (arg_idx + 1) * 8
-                        g = g.emit_inst(Mov(MemOffset("rsp", offset), Reg64("rax")))
+                        g = g.emit_inst(
+                          Mov(MemOffset("rsp", offset), Reg64("rax")),
+                        )
                         arg_idx = arg_idx + 1
                       }
                       g = g.emit_inst(Lea(Reg64("rax"), Reg64("rsp")))
@@ -3644,8 +3649,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                         g = g.emit_inst(Syscall)
                         g = g.define_label(ok_label)
                         g
-
-                      } else if func_name == "assert_false" && args.length() == 1 {
+                      } else if func_name == "assert_false" &&
+                        args.length() == 1 {
                         // assert_false(condition) - fail if condition is true
                         let mut g = self.codegen_expr(args[0]) // rax = condition
                         g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
@@ -3665,7 +3670,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                         g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
                         g = g.emit_inst(Syscall)
                         g
-                      } else if func_name == "assert_false" && args.length() == 1 {
+                      } else if func_name == "assert_false" &&
+                        args.length() == 1 {
                         // assert_false(condition) - fail if condition is true
                         let mut g = self.codegen_expr(args[0]) // rax = condition
                         g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))

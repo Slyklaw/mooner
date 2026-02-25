@@ -481,14 +481,18 @@ fn TypeChecker::check_expr(
       let (c3, idx_ty) = c2.check_expr(index)
       match arr_ty {
         TArray(elem_ty) => (c3, elem_ty)
-        TMap(_, val_ty) => {
+        TMap(_, val_ty) =>
           // For map access, verify the index is String type
           if not(idx_ty.eq(TString)) {
-            (c3.add_error(TypeError::new("Map key must be String, got: \{idx_ty}")), TUnknown)
+            (
+              c3.add_error(
+                TypeError::new("Map key must be String, got: \{idx_ty}"),
+              ),
+              TUnknown,
+            )
           } else {
             (c3, val_ty)
           }
-        }
         _ =>
           (
             c3.add_error(TypeError::new("Cannot index non-array/map type")),
@@ -568,17 +572,17 @@ fn TypeChecker::check_expr(
       while i < elems.length() {
         let ty = match elems[i] {
           Spread(arr) => {
-             let (c2, t) = checker.check_expr(arr)
-             checker = c2
-             match t {
-               TArray(inner) => inner
-               _ => TUnknown
-             }
+            let (c2, t) = checker.check_expr(arr)
+            checker = c2
+            match t {
+              TArray(inner) => inner
+              _ => TUnknown
+            }
           }
           _ => {
-             let (c2, t) = checker.check_expr(elems[i])
-             checker = c2
-             t
+            let (c2, t) = checker.check_expr(elems[i])
+            checker = c2
+            t
           }
         }
         if elem_ty.eq(TUnknown) {
