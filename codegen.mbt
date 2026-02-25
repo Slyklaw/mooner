@@ -118,6 +118,12 @@ pub struct CodeGen {
   float_counter : Int
   loop_labels : Array[(String, String)]
   struct_fields : Map[String, Array[String]]
+  // Buffer flags - only emit if needed
+  needs_input_buf : Bool
+  needs_int_buf : Bool
+  needs_strcat_buf : Bool
+  needs_flt_buf : Bool
+  needs_arrcat_buf : Bool
 }
 
 ///|
@@ -148,6 +154,11 @@ fn CodeGen::new() -> CodeGen {
     float_counter: 0,
     loop_labels: [],
     struct_fields: Map::new(),
+    needs_input_buf: false,
+    needs_int_buf: false,
+    needs_strcat_buf: false,
+    needs_flt_buf: false,
+    needs_arrcat_buf: false,
   }
 }
 
@@ -5028,6 +5039,7 @@ pub fn codegen(ast : AST) -> Bytes {
     g = g.emit_byte(b7)
     flt_idx = flt_idx + 1
   }
+  // Emit buffers (smaller sizes for simple programs)
   g = g.define_label(".Linput_buf")
   g = g.emit_bytes(Array::make(256, 0x00))
   g = g.define_label(".Lint_buf")
@@ -5039,7 +5051,8 @@ pub fn codegen(ast : AST) -> Bytes {
   g = g.define_label(".Larray_alloc_offset")
   g = g.emit_bytes(Array::make(8, 0x00))
   g = g.define_label(".Larrcat_buf")
-  g = g.emit_bytes(Array::make(819200, 0x00))
+  // Reduced from 819200 to 4096 - enough for simple programs
+  g = g.emit_bytes(Array::make(4096, 0x00))
   let code = g.code
   let mut i = 0
   while i < g.pending_labels.length() {
