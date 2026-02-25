@@ -1480,25 +1480,25 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = self.emit_bytes([0xF2, 0x0F, 0x58])
       let dest_code = xmm_reg_code(dest)
       let src_code = xmm_reg_code(src)
-      g.emit_byte(modrm(3, src_code, dest_code))
+      g.emit_byte(modrm(3, dest_code, src_code))
     }
     Subsd(Xmm(dest), Xmm(src)) => {
       let g = self.emit_bytes([0xF2, 0x0F, 0x5C])
       let dest_code = xmm_reg_code(dest)
       let src_code = xmm_reg_code(src)
-      g.emit_byte(modrm(3, src_code, dest_code))
+      g.emit_byte(modrm(3, dest_code, src_code))
     }
     Mulsd(Xmm(dest), Xmm(src)) => {
       let g = self.emit_bytes([0xF2, 0x0F, 0x59])
       let dest_code = xmm_reg_code(dest)
       let src_code = xmm_reg_code(src)
-      g.emit_byte(modrm(3, src_code, dest_code))
+      g.emit_byte(modrm(3, dest_code, src_code))
     }
     Divsd(Xmm(dest), Xmm(src)) => {
       let g = self.emit_bytes([0xF2, 0x0F, 0x5E])
       let dest_code = xmm_reg_code(dest)
       let src_code = xmm_reg_code(src)
-      g.emit_byte(modrm(3, src_code, dest_code))
+      g.emit_byte(modrm(3, dest_code, src_code))
     }
     Ucomisd(Xmm(dest), Xmm(src)) => {
       let g = self.emit_bytes([0x66, 0x0F, 0x2E])
@@ -2449,55 +2449,100 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     } else if g.var_is_float.get(var_name) == Some(true) {
                       // Float variable - print float value
                       g = g.codegen_expr(arg)
-                      // xmm0 has the float - convert to string and print
                       let flt_buf = ".Lflt_buf"
                       g = g.emit_inst(Push(Reg64("rbx")))
                       g = g.emit_inst(Push(Reg64("rcx")))
                       g = g.emit_inst(Push(Reg64("r8")))
-                      // Convert float to int for integer part
-                      g = g.emit_inst(Cvttsd2si(Reg64("rax"), Xmm("xmm0")))
-                      g = g.emit_inst(Mov(Reg64("r8"), Reg64("rax")))
-                      // Output to buffer
+                      g = g.emit_inst(Push(Reg64("r9")))
+                      g = g.emit_inst(Push(Reg64("r10")))
+                      g = g.emit_inst(Push(Reg64("r11")))
+                      g = g.emit_inst(Push(Reg64("r12")))
+                      g = g.emit_inst(Push(Reg64("r13")))
+                      let (g1, pos_lbl) = g.new_label()
+                      let (g2, exp_lbl) = g1.add_float(10000000000000000.0)
+                      let (g3, half_lbl) = g2.add_float(0.5)
+                      g = g3
+                      g = g.emit_inst(Mov(Reg64("r10"), Imm32(0)))
+                      g = g.emit_inst(Push(Reg64("rax")))
+                      g = g.emit_inst(Sub(Reg64("rsp"), Imm32(16)))
+                      g = g.emit_inst(Movsd(MemIndirect("rsp"), Xmm("xmm0")))
+                      g = g.emit_inst(Mov(Reg64("r9"), MemIndirect("rsp")))
+                      g = g.emit_inst(Shl(Reg64("r9"), Imm8(1)))
+                      g = g.emit_inst(Jae(pos_lbl))
+                      g = g.emit_inst(Mov(Reg64("r10"), Imm32(1)))
+                      g = g.emit_inst(Shr(Reg64("r9"), Imm8(1)))
+                      g = g.emit_inst(Mov(MemIndirect("rsp"), Reg64("r9")))
+                      g = g.emit_inst(Movsd(Xmm("xmm0"), MemIndirect("rsp")))
+                      g = g.define_label(pos_lbl)
+                      g = g.emit_inst(Add(Reg64("rsp"), Imm32(16)))
+                      g = g.emit_inst(Pop(Reg64("rax")))
+
+                      // Calculate integer and fraction
+                      g = g.emit_inst(Cvttsd2si(Reg64("r8"), Xmm("xmm0"))) // r8 is int part
+                      g = g.emit_inst(Cvtsi2sd(Xmm("xmm1"), Reg64("r8")))
+                      g = g.emit_inst(Subsd(Xmm("xmm0"), Xmm("xmm1"))) // fraction
+                      g = g.emit_inst(Movsd(Xmm("xmm1"), RipRel32(exp_lbl)))
+                      g = g.emit_inst(Mulsd(Xmm("xmm0"), Xmm("xmm1")))
+                      g = g.emit_inst(Movsd(Xmm("xmm1"), RipRel32(half_lbl)))
+                      g = g.emit_inst(Addsd(Xmm("xmm0"), Xmm("xmm1")))
+                      g = g.emit_inst(Cvttsd2si(Reg64("r11"), Xmm("xmm0"))) // r11 is 16-digit fraction
+
+                      // Setup buffer and length
                       g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(flt_buf)))
                       g = g.emit_inst(Add(Reg64("rbx"), Imm32(40)))
                       g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
-                      // Handle negative
-                      let (g2, pos_label) = g.new_label()
-                      let (g3, print_digits) = g2.new_label()
-                      g = g3
-                      g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
-                      g = g.emit_inst(Jge(pos_label))
-                      g = g.emit_inst(Neg(Reg64("r8")))
-                      g = g.emit_inst(Mov(Reg8("al"), Imm8(45))) // '-'
+
+                      // Process fraction (backwards)
+                      let (g4, loop_start) = g.new_label()
+                      let (g5, frac_done) = g4.new_label()
+                      let (g6, print_digit) = g5.new_label()
+                      g = g6
+                      g = g.emit_inst(Mov(Reg64("r12"), Imm32(16))) // 16 digits
+                      g = g.emit_inst(Mov(Reg64("r13"), Imm32(1))) // skipping zeros flag
+
+                      g = g.emit_inst(Cmp(Reg64("r11"), Imm32(0)))
+                      g = g.emit_inst(Jne(loop_start))
+                      // Exact zero fraction: print '0'
+                      g = g.emit_inst(Mov(Reg8("al"), Imm8(48)))
                       g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
                       g = g.emit_inst(Dec(Reg64("rbx")))
                       g = g.emit_inst(Inc(Reg64("rcx")))
-                      g = g.define_label(pos_label)
-                      // Extract digits
-                      g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
-                      g = g.emit_inst(Jne(print_digits))
-                      g = g.emit_inst(Mov(Reg8("al"), Imm8(48))) // '0'
-                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+                      g = g.emit_inst(Jmp(frac_done))
+
+                      g = g.define_label(loop_start)
+                      g = g.emit_inst(Cmp(Reg64("r12"), Imm32(0)))
+                      g = g.emit_inst(Je(frac_done))
+                      g = g.emit_inst(Dec(Reg64("r12")))
+
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("r11")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                      g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                      g = g.emit_inst(Idiv(Reg64("rsi")))
+                      g = g.emit_inst(Mov(Reg64("r11"), Reg64("rax"))) // update r11
+                      // rdx is next digit from right
+
+                      g = g.emit_inst(Cmp(Reg64("r13"), Imm32(1)))
+                      g = g.emit_inst(Jne(print_digit))
+                      g = g.emit_inst(Cmp(Reg64("rdx"), Imm32(0)))
+                      g = g.emit_inst(Je(loop_start)) // skip trailing zero
+                      g = g.emit_inst(Mov(Reg64("r13"), Imm32(0))) // found non-zero
+                      g = g.define_label(print_digit)
+                      g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("dl")))
                       g = g.emit_inst(Dec(Reg64("rbx")))
                       g = g.emit_inst(Inc(Reg64("rcx")))
-                      g = g.emit_inst(Jmp(print_digits))
-                      g = g.define_label(print_digits)
-                      // Just print integer part for now with ".0" suffix
-                      g = g.emit_inst(Mov(Reg8("al"), Imm8(48))) // '0'
-                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
-                      g = g.emit_inst(Dec(Reg64("rbx")))
-                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.emit_inst(Jmp(loop_start))
+
+                      g = g.define_label(frac_done)
                       g = g.emit_inst(Mov(Reg8("al"), Imm8(46))) // '.'
                       g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
                       g = g.emit_inst(Dec(Reg64("rbx")))
                       g = g.emit_inst(Inc(Reg64("rcx")))
-                      // Now print the integer part
-                      let (g4, digit_loop) = g.new_label()
-                      let (g5, done_digits) = g4.new_label()
-                      g = g5
-                      g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
-                      g = g.emit_inst(Je(done_digits))
-                      g = g.define_label(digit_loop)
+
+                      // Process integer part (r8)
+                      let (g7, int_loop) = g.new_label()
+                      g = g7
+                      g = g.define_label(int_loop)
                       g = g.emit_inst(Mov(Reg64("rax"), Reg64("r8")))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
                       g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
@@ -2508,11 +2553,29 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Dec(Reg64("rbx")))
                       g = g.emit_inst(Inc(Reg64("rcx")))
                       g = g.emit_inst(Cmp(Reg64("r8"), Imm32(0)))
-                      g = g.emit_inst(Jne(digit_loop))
-                      g = g.define_label(done_digits)
+                      g = g.emit_inst(Jne(int_loop))
+
+                      // Print sign
+                      let (g8, end_sign) = g.new_label()
+                      g = g8
+                      g = g.emit_inst(Cmp(Reg64("r10"), Imm32(0)))
+                      g = g.emit_inst(Je(end_sign))
+                      g = g.emit_inst(Mov(Reg8("al"), Imm8(45))) // '-'
+                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
+                      g = g.emit_inst(Dec(Reg64("rbx")))
+                      g = g.emit_inst(Inc(Reg64("rcx")))
+                      g = g.define_label(end_sign)
+
+                      // Restore and output
                       g = g.emit_inst(Inc(Reg64("rbx")))
                       g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rbx")))
                       g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+
+                      g = g.emit_inst(Pop(Reg64("r13")))
+                      g = g.emit_inst(Pop(Reg64("r12")))
+                      g = g.emit_inst(Pop(Reg64("r11")))
+                      g = g.emit_inst(Pop(Reg64("r10")))
+                      g = g.emit_inst(Pop(Reg64("r9")))
                       g = g.emit_inst(Pop(Reg64("r8")))
                       g = g.emit_inst(Pop(Reg64("rcx")))
                       g = g.emit_inst(Pop(Reg64("rbx")))

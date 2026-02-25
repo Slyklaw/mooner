@@ -116,8 +116,8 @@ These are foundational issues blocking multiple examples.
 - [x] Implement array printing in `println` (loop-based printing with comma separators)
 - [x] Array layout: `[length][elem0][elem1]...` (length at offset 0, elements at offset 8)
 - [x] Implement `array.push()` mutation
-- [ ] Implement array concatenation `arr1 + arr2` (returns right array only)
-- [ ] Implement spread operator `[..arr1, 1000, ..arr2]`
+- [x] Implement array concatenation `arr1 + arr2`
+- [x] Implement spread operator `[..arr1, 1000, ..arr2]`
 
 ### 2.3 Strings
 - [x] Implement String concatenation `str1 + str2`
