@@ -7,10 +7,10 @@
 
 ### Map Support
 
-- [ ] **MAP-01**: User can create map with literal syntax `{"key": value}`
-- [ ] **MAP-02**: User can access map value via key `map["key"]`
-- [ ] **MAP-03**: User can update map value `map["key"] = value`
-- [ ] **MAP-04**: Map operations don't segfault
+- [x] **MAP-01**: User can create map with literal syntax `{"key": value}`
+- [x] **MAP-02**: User can access map value via key `map["key"]`
+- [x] **MAP-03**: User can update map value `map["key"] = value`
+- [x] **MAP-04**: Map operations don't segfault
 
 ### Tuple Improvements
 
@@ -65,10 +65,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MAP-01 | Phase 1 | Pending |
-| MAP-02 | Phase 1 | Pending |
-| MAP-03 | Phase 1 | Pending |
-| MAP-04 | Phase 1 | Pending |
+| MAP-01 | Phase 1 | Complete |
+| MAP-02 | Phase 1 | Complete |
+| MAP-03 | Phase 1 | Complete |
+| MAP-04 | Phase 1 | Complete |
 | TUP-01 | Phase 2 | Pending |
 | TUP-02 | Phase 2 | Pending |
 | TUP-03 | Phase 2 | Pending |
