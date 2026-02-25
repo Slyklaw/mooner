@@ -36,7 +36,10 @@
 3. User can update map value using assignment `map["key"] = new_value`
 4. Map operations (creation, access, update) don't cause segfaults at runtime
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+**Plan list:**
+- [ ] 01-01-PLAN.md — Map literal syntax, access, and update implementation
 
 ---
 
@@ -104,7 +107,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Map Support | 0/1 | Not started | - |
+| 1. Map Support | 1/1 | In progress | - |
 | 2. Tuple & Float Improvements | 0/1 | Not started | - |
 | 3. Enum & Pattern Matching | 0/1 | Not started | - |
 | 4. Derive(Show) Macro | 0/1 | Not started | - |
