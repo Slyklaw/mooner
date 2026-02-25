@@ -539,7 +539,7 @@ fn Lexer::read_string(self : Lexer) -> (Token, Lexer) {
     match char_at(lexer.input, lexer.pos) {
       Some('"') => {
         lexer = lexer.advance()
-        if s != "" {
+        if in_interpolation && s != "" {
           parts = parts + [(false, s)]
           s = ""
         }

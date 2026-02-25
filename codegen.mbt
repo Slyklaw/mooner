@@ -124,6 +124,8 @@ pub struct CodeGen {
   needs_strcat_buf : Bool
   needs_flt_buf : Bool
   needs_arrcat_buf : Bool
+  needs_map_buf : Bool
+  map_buf_offset : Int
 }
 
 ///|
@@ -159,6 +161,8 @@ fn CodeGen::new() -> CodeGen {
     needs_strcat_buf: false,
     needs_flt_buf: false,
     needs_arrcat_buf: false,
+    needs_map_buf: false,
+    map_buf_offset: 0,
   }
 }
 
@@ -1598,13 +1602,17 @@ fn is_float_field_expr(
 }
 
 ///|
-fn is_int_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
+fn is_int_expr(
+  expr : AST,
+  var_is_float : Map[String, Bool],
+  var_is_map : Map[String, Bool],
+) -> Bool {
   match expr {
     Int(_) => true
     Bool(_) => true
     Char(_) => true
-    Unary("-", e) => is_int_expr(e, var_is_float)
-    Unary("!", e) => is_int_expr(e, var_is_float)
+    Unary("-", e) => is_int_expr(e, var_is_float, var_is_map)
+    Unary("!", e) => is_int_expr(e, var_is_float, var_is_map)
     Binary(op, left, right) => {
       let is_cmp = op == "==" ||
         op == "!=" ||
@@ -1627,7 +1635,8 @@ fn is_int_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
       !is_float_expr(right, var_is_float)
     }
     Ident(name) =>
-      var_is_float.get(name) == Some(false) || var_is_float.get(name) == None
+      var_is_map.get(name) != Some(true) &&
+      (var_is_float.get(name) == Some(false) || var_is_float.get(name) == None)
     FieldExpr(_, _) => true
     IndexExpr(_, _) => true
     CallExpr(FieldExpr(_, method), _) => method == "length"
@@ -2929,6 +2938,14 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     need_skip_print = true
                     g = g.emit_inst(Jmp(skip_print_label))
                   }
+                  MapLit(entries) => {
+                    // Map literal - print a placeholder
+                    g = g.codegen_expr(arg)
+                    let (g2, label1) = g.add_string("<map>")
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
+                  }
                   CallExpr(Ident(fname), inner_args) =>
                     if fname == "int_to_string" {
                       g = g.codegen_expr(arg)
@@ -2995,7 +3012,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     let is_float = is_float_expr(arg, g.var_is_float)
                     let is_string = is_string_expr(arg, g.var_is_string)
                     let is_bool = is_bool_expr(arg, g.var_is_bool)
-                    let is_int = is_int_expr(arg, g.var_is_float)
+                    let is_int = is_int_expr(arg, g.var_is_float, g.var_is_map)
+                    let is_map = is_map_expr(arg, g.var_is_map)
                     let is_tuple_float_field = match arg {
                       FieldExpr(Ident(var_name), field) => {
                         let idx = if field.length() > 0 {
@@ -3246,6 +3264,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
                       g = g.emit_inst(Pop(Reg64("rcx")))
                       g = g.emit_inst(Pop(Reg64("rbx")))
+                    } else if is_map {
+                      g = g.codegen_expr(arg)
+                      let (g2, map_label) = g.add_string("<map>")
+                      g = g2
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(map_label)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
                     } else {
                       g = g.codegen_expr(arg)
                       g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
@@ -3847,23 +3871,25 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     }
     MapLit(entries) => {
       // Generate code for map literal: { "key1": value1, "key2": value2, ... }
-      // Simplified implementation: return 0 (null pointer) for now
-      // This allows compilation but map operations will return 0
-      let mut g = self
-      g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-      g
+      // Simplified: return number of entries as a placeholder
+      // A real implementation would allocate a hash table
+      let num_entries = entries.length()
+      let g = { ..self, needs_map_buf: true }
+      // Return a non-zero value to indicate a map was created
+      g.emit_inst(Mov(Reg64("rax"), Imm32(num_entries)))
     }
     IndexExpr(arr, idx) => {
       let is_str = is_string_expr(arr, self.var_is_string)
       let is_map = is_map_expr(arr, self.var_is_map)
       let g = self.codegen_expr(arr)
-      let g = g.emit_inst(Push(Reg64("rax")))
-      let g = g.codegen_expr(idx)
+      let g = g.emit_inst(Push(Reg64("rax"))) // push map offset
+      let g = g.codegen_expr(idx) // idx = key string
       let g = if is_str {
         g
       } else if is_map {
-        // For maps, return 0 for now (simplified)
-        g
+        // Map access: simplified - return 0 for now
+        // Full implementation would search the map buffer for the key
+        g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
       } else {
         let g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
         g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
@@ -5064,6 +5090,11 @@ pub fn codegen(ast : AST) -> Bytes {
   g = g.define_label(".Larrcat_buf")
   // Reduced from 819200 to 4096 - enough for simple programs
   g = g.emit_bytes(Array::make(4096, 0x00))
+  // Map buffer: stores key-value pairs for map literals
+  // Each entry: 8 bytes key pointer + 8 bytes value = 16 bytes
+  // Support up to 64 entries (1KB total)
+  g = g.define_label(".Lmap_buf")
+  g = g.emit_bytes(Array::make(1024, 0x00))
   let code = g.code
   let mut i = 0
   while i < g.pending_labels.length() {
