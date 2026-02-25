@@ -158,11 +158,7 @@ fn CodeGen::emit_byte(self : CodeGen, b : Byte) -> CodeGen {
 
 ///|
 fn CodeGen::emit_bytes(self : CodeGen, bytes : Array[Byte]) -> CodeGen {
-  let mut g = self
-  for b in bytes {
-    g = g.emit_byte(b)
-  }
-  g
+  { ..self, code: self.code + bytes }
 }
 
 ///|
@@ -5033,41 +5029,17 @@ pub fn codegen(ast : AST) -> Bytes {
     flt_idx = flt_idx + 1
   }
   g = g.define_label(".Linput_buf")
-  let mut buf_idx = 0
-  while buf_idx < 256 {
-    g = g.emit_byte(0x00)
-    buf_idx = buf_idx + 1
-  }
+  g = g.emit_bytes(Array::make(256, 0x00))
   g = g.define_label(".Lint_buf")
-  buf_idx = 0
-  while buf_idx < 32 {
-    g = g.emit_byte(0x00)
-    buf_idx = buf_idx + 1
-  }
+  g = g.emit_bytes(Array::make(32, 0x00))
   g = g.define_label(".Lstrcat_buf")
-  buf_idx = 0
-  while buf_idx < 512 {
-    g = g.emit_byte(0x00)
-    buf_idx = buf_idx + 1
-  }
+  g = g.emit_bytes(Array::make(512, 0x00))
   g = g.define_label(".Lflt_buf")
-  buf_idx = 0
-  while buf_idx < 64 {
-    g = g.emit_byte(0x00)
-    buf_idx = buf_idx + 1
-  }
+  g = g.emit_bytes(Array::make(64, 0x00))
   g = g.define_label(".Larray_alloc_offset")
-  buf_idx = 0
-  while buf_idx < 8 {
-    g = g.emit_byte(0x00)
-    buf_idx = buf_idx + 1
-  }
+  g = g.emit_bytes(Array::make(8, 0x00))
   g = g.define_label(".Larrcat_buf")
-  buf_idx = 0
-  while buf_idx < 819200 {
-    g = g.emit_byte(0x00)
-    buf_idx = buf_idx + 1
-  }
+  g = g.emit_bytes(Array::make(819200, 0x00))
   let code = g.code
   let mut i = 0
   while i < g.pending_labels.length() {
