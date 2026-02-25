@@ -1243,8 +1243,13 @@ pub fn Parser::parse(self : Parser) -> AST {
       done = true
     } else {
       let (expr, p2) = parser.parse_expr()
-      stmts = stmts + [expr]
-      parser = p2
+      // If parser didn't advance, skip current token to avoid infinite loop
+      if p2.pos == parser.pos {
+        parser = parser.advance()
+      } else {
+        stmts = stmts + [expr]
+        parser = p2
+      }
     }
   }
   if stmts.length() == 1 {

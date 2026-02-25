@@ -39,6 +39,7 @@ pub enum AST {
   FieldExpr(AST, String)
   Tuple(Array[AST])
   ArrayLit(Array[AST])
+  MapLit(Array[(AST, AST)])
   Assign(AST, AST)
   AssignOp(String, AST, AST)
   TypeDecl(String, Array[(String, String)])
@@ -46,6 +47,8 @@ pub enum AST {
   StructLit(String, Array[(String, AST)])
   StructUpdate(AST, Array[(String, AST)])
   StringConcat(Array[AST])
+  Spread(AST)
+  TestBlock(String?, AST)
 }
 pub impl Show for AST
 
@@ -60,6 +63,7 @@ pub struct CodeGen {
   var_is_char : Map[String, Bool]
   var_is_bool : Map[String, Bool]
   var_is_tuple : Map[String, Bool]
+  var_is_map : Map[String, Bool]
   var_tuple_field_types : Map[String, Array[Bool]]
   var_array_len : Map[String, Int]
   var_types : Map[String, String]
@@ -74,6 +78,13 @@ pub struct CodeGen {
   float_counter : Int
   loop_labels : Array[(String, String)]
   struct_fields : Map[String, Array[String]]
+  needs_input_buf : Bool
+  needs_int_buf : Bool
+  needs_strcat_buf : Bool
+  needs_flt_buf : Bool
+  needs_arrcat_buf : Bool
+  needs_map_buf : Bool
+  map_buf_offset : Int
 }
 
 pub struct Lexer {
@@ -122,6 +133,7 @@ pub enum Token {
   Type
   Struct
   Enum
+  Test
   Interface
   Impl
   Pub
@@ -201,6 +213,7 @@ pub enum Type {
   TFun(Array[Type], Type)
   TTuple(Array[Type])
   TArray(Type)
+  TMap(Type, Type)
   TStruct(String, Array[(String, Type)])
   TUnknown
 }
@@ -288,6 +301,7 @@ pub enum X86Inst {
   Ucomisd(X86Operand, X86Operand)
   Cvtsi2sd(X86Operand, X86Operand)
   Cvttsd2si(X86Operand, X86Operand)
+  RepMovsq
 }
 pub impl Show for X86Inst
 

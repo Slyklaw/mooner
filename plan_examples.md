@@ -16,9 +16,15 @@
 | 010_basic_struct | ✅ | ✅ | **OUTPUT MATCHES official** |
 | 011_basic_enum | ✅ | ❌ | **Segfault** |
 | 012_basic_test | ⚠️ | ❌ | Official compiler fails on this file |
-| 013_pattern_matching | ⚠️ | ⚠️ | Timeout - likely infinite loop in match codegen |
+| 013_pattern_matching | ✅ | ❌ | Compiles but segfaults at runtime (parser infinite loop fixed) |
 
 ## Recent Fixes
+
+### 2025-02-25: Parser Infinite Loop Fixed
+- **Issue**: Example 013 pattern matching caused infinite loop during parsing (timeout)
+- **Root cause**: In `parser.mbt`, when the parser encountered RBrace (or similar tokens) at the start of an expression, it returned `(Unit, self)` without advancing the parser position, causing an infinite loop in the main parse loop
+- **Fix**: Added check in `Parser::parse()` to detect when the parser position doesn't advance after parsing an expression, and skip the current token to prevent infinite loop
+- **Result**: Example 013 now compiles (no timeout), but has a runtime segfault
 
 ### 2024-02-24: Array Concatenation and Spread Syntax Fixed
 - **Issue**: Array concatenation (`arr1 + arr2`) only returned the right array. Spread syntax (`[..arr]`) caused a partial match error in the type checker and was not implemented in codegen.
