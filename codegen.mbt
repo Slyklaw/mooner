@@ -4459,19 +4459,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             }
             match disc_val {
               Some(disc) => {
-                // Load the value from stack into rcx
+                // For simple enum patterns (Red, Green, Blue without data),
+                // the scrutinee IS the discriminant directly (not a pointer).
+                // Just load from stack and compare.
                 g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
-                // If rcx is zero, use it directly. Otherwise, load from rcx (pointer)
-                // First: test if rcx == 0
-                g = g.emit_inst(Test(Reg64("rcx"), Reg64("rcx")))
-                let (g2, is_direct_label) = g.new_label()
-                let (g3, load_ptr_label) = g2.new_label()
-                g = g3
-                g = g.emit_inst(Je(is_direct_label)) // if zero, use direct
-                // Non-zero: treat as pointer, load discriminant from pointer
-                g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rcx")))
-                g = g.define_label(is_direct_label)
-                // Now rcx has the discriminant
+                // Compare directly
                 g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(disc)))
                 if is_last {
                   // For last case, need to skip body if no match

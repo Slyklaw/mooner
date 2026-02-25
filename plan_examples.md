@@ -14,7 +14,7 @@
 | 008_basic_map | ✅ | ❌ | **Segfault** |
 | 009_basic_control_flows | ✅ | ✅ | OUTPUT MATCHES official |
 | 010_basic_struct | ✅ | ✅ | **OUTPUT MATCHES official** |
-| 011_basic_enum | ✅ | ❌ | **Segfault** |
+| 011_basic_enum | ✅ | ⚠️ | Simple enum variants work; enum constructors with data (RGB, RGBA) crash due to stack allocation bug |
 | 012_basic_test | ⚠️ | ❌ | Official compiler fails on this file |
 | 013_pattern_matching | ✅ | ❌ | Compiles but segfaults at runtime (parser infinite loop fixed) |
 
@@ -25,6 +25,12 @@
 - **Root cause**: In `parser.mbt`, when the parser encountered RBrace (or similar tokens) at the start of an expression, it returned `(Unit, self)` without advancing the parser position, causing an infinite loop in the main parse loop
 - **Fix**: Added check in `Parser::parse()` to detect when the parser position doesn't advance after parsing an expression, and skip the current token to prevent infinite loop
 - **Result**: Example 013 now compiles (no timeout), but has a runtime segfault
+
+### 2025-02-25: Simple Enum Pattern Matching Fixed
+- **Issue**: Example 011 crashed on simple enum variants (Green, Blue) after printing "Red"
+- **Root cause**: In `codegen.mbt`, the match expression code for Ident patterns (simple enums like Red, Green, Blue) incorrectly tried to treat non-zero discriminant values as pointers and dereference them
+- **Fix**: Simplified the Ident pattern matching to directly compare the scrutinee value with the expected discriminant (no pointer dereference for simple enums)
+- **Result**: Simple enum variants (without data) now work correctly
 
 ### 2024-02-24: Array Concatenation and Spread Syntax Fixed
 - **Issue**: Array concatenation (`arr1 + arr2`) only returned the right array. Spread syntax (`[..arr]`) caused a partial match error in the type checker and was not implemented in codegen.
