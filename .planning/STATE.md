@@ -11,8 +11,8 @@
 | Attribute | Value |
 |-----------|-------|
 | **Phase** | 1 - Map Support |
-| **Plan** | 02 (gap closure - implementing runtime) |
-| **Status** | In Progress |
+| **Plan** | 02 (gap closure - completed with issues) |
+| **Status** | Blocked - compilation issues |
 | **Progress** | [-----] 50% |
 
 ### Phase Context
@@ -91,7 +91,13 @@
 
 ### Blockers
 
-- Map code generation: 01-02-PLAN.md is implementing runtime functions
+- Map code generation: Compilation hangs when trying to compile map examples
+- Need to investigate: Possibly infinite loop in generated code or runtime function issues
+
+## Issues Encountered in 01-02
+
+- **Compilation hangs**: Added map runtime data buffers and stub functions, but compilation hangs when testing with 008_basic_map.mbt
+- **Root cause unknown**: May be related to complex runtime function implementation or code generation issues
 
 ---
 
