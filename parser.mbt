@@ -25,6 +25,7 @@ pub enum AST {
   FieldExpr(AST, String)
   Tuple(Array[AST])
   ArrayLit(Array[AST])
+  MapLit(Array[(AST, AST)]) // map[key] = value
   Assign(AST, AST)
   AssignOp(String, AST, AST)
   TypeDecl(String, Array[(String, String)])
@@ -331,7 +332,54 @@ fn Parser::parse_struct_or_block(self : Parser) -> (AST, Parser) {
   // Try to detect struct literal: { field: value, ... }
   // Struct literals have identifiers followed by colons
   // Blocks have expressions (not field: value pairs)
+  // Map literals have string keys: { "key": value, ... }
   match p.current() {
+    String(key_str) => {
+      // This is a map literal: { "key": value, ... }
+      let p2 = p.advance()
+      if self_token_eq(p2.current(), Colon) {
+        // This is a map literal: { "key": value, ... }
+        let p3 = p2.skip(1)
+        let (field_val, p4) = p3.parse_expr()
+        let mut entries : Array[(AST, AST)] = [(String(key_str), field_val)]
+        let mut parser = p4
+        let mut done = false
+        while not(done) {
+          if self_token_eq(parser.current(), Comma) {
+            let p5 = parser.skip(1)
+            if self_token_eq(p5.current(), RBrace) {
+              parser = p5.advance()
+              done = true
+            } else {
+              match p5.current() {
+                String(key) => {
+                  let p6 = p5.advance()
+                  if self_token_eq(p6.current(), Colon) {
+                    let p7 = p6.skip(1)
+                    let (v, p8) = p7.parse_expr()
+                    entries = entries + [(String(key), v)]
+                    parser = p8
+                  } else {
+                    // Not a map literal, fallback to block
+                    return p.parse_block()
+                  }
+                }
+                _ => parser = p5
+              }
+            }
+          } else if self_token_eq(parser.current(), RBrace) {
+            parser = parser.advance()
+            done = true
+          } else {
+            done = true
+          }
+        }
+        (MapLit(entries), parser)
+      } else {
+        // Not a map literal, parse as block
+        p.parse_block()
+      }
+    }
     Ident(field_name) => {
       // Look ahead to check if this is field: value
       let p2 = p.advance()

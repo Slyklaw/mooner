@@ -9,6 +9,7 @@ pub enum Type {
   TFun(Array[Type], Type)
   TTuple(Array[Type])
   TArray(Type)
+  TMap(Type, Type) // Map[key_type, value_type]
   TStruct(String, Array[(String, Type)])
   TUnknown
 } derive(Show)
@@ -47,6 +48,7 @@ pub fn Type::eq(self : Type, other : Type) -> Bool {
         eq
       }
     (TArray(t1), TArray(t2)) => t1.eq(t2)
+    (TMap(k1, v1), TMap(k2, v2)) => k1.eq(k2) && v1.eq(v2)
     (TStruct(n1, fs1), TStruct(n2, fs2)) =>
       if n1 != n2 {
         false
@@ -476,12 +478,20 @@ fn TypeChecker::check_expr(
     }
     IndexExpr(arr, index) => {
       let (c2, arr_ty) = self.check_expr(arr)
-      let (c3, _idx_ty) = c2.check_expr(index)
+      let (c3, idx_ty) = c2.check_expr(index)
       match arr_ty {
         TArray(elem_ty) => (c3, elem_ty)
+        TMap(_, val_ty) => {
+          // For map access, verify the index is String type
+          if not(idx_ty.eq(TString)) {
+            (c3.add_error(TypeError::new("Map key must be String, got: \{idx_ty}")), TUnknown)
+          } else {
+            (c3, val_ty)
+          }
+        }
         _ =>
           (
-            c3.add_error(TypeError::new("Cannot index non-array type")),
+            c3.add_error(TypeError::new("Cannot index non-array/map type")),
             TUnknown,
           )
       }
@@ -577,6 +587,25 @@ fn TypeChecker::check_expr(
         i = i + 1
       }
       (checker, TArray(elem_ty))
+    }
+    MapLit(entries) => {
+      let mut checker = self
+      let mut key_ty = TUnknown
+      let mut val_ty = TUnknown
+      let mut i = 0
+      while i < entries.length() {
+        let (key_expr, val_expr) = entries[i]
+        let (c2, kty) = checker.check_expr(key_expr)
+        checker = c2
+        let (c3, vty) = checker.check_expr(val_expr)
+        checker = c3
+        if key_ty.eq(TUnknown) {
+          key_ty = kty
+          val_ty = vty
+        }
+        i = i + 1
+      }
+      (checker, TMap(key_ty, val_ty))
     }
     Spread(_) => (self, TUnknown)
     Assign(lhs, rhs) => {

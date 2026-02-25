@@ -103,6 +103,7 @@ pub struct CodeGen {
   var_is_char : Map[String, Bool]
   var_is_bool : Map[String, Bool]
   var_is_tuple : Map[String, Bool]
+  var_is_map : Map[String, Bool]
   var_tuple_field_types : Map[String, Array[Bool]]
   var_array_len : Map[String, Int]
   var_types : Map[String, String]
@@ -132,6 +133,7 @@ fn CodeGen::new() -> CodeGen {
     var_is_char: Map::new(),
     var_is_bool: Map::new(),
     var_is_tuple: Map::new(),
+    var_is_map: Map::new(),
     var_tuple_field_types: Map::new(),
     var_array_len: Map::new(),
     var_types: Map::new(),
@@ -1666,6 +1668,15 @@ fn is_char_expr(expr : AST, var_is_char : Map[String, Bool]) -> Bool {
 }
 
 ///|
+fn is_map_expr(expr : AST, var_is_map : Map[String, Bool]) -> Bool {
+  match expr {
+    MapLit(_) => true
+    Ident(name) => var_is_map.get(name) == Some(true)
+    _ => false
+  }
+}
+
+///|
 fn is_struct_expr(expr : AST, var_types : Map[String, String]) -> Bool {
   match expr {
     StructLit(_type_name, _fields) => true
@@ -2604,6 +2615,13 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g2
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
+                    } else if g.var_is_map.get(var_name) == Some(true) {
+                      // Map variable - print a placeholder for now
+                      g = g.codegen_expr(arg)
+                      let (g2, label1) = g.add_string("<map>")
+                      g = g2
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
                     } else if g.var_types.get(var_name) != None ||
                       is_struct_expr(arg, g.var_types) {
                       // Struct variable - print each field
@@ -3820,12 +3838,24 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g = g.emit_inst(Pop(Reg64("rbx")))
       g
     }
+    MapLit(entries) => {
+      // Generate code for map literal: { "key1": value1, "key2": value2, ... }
+      // Simplified implementation: return 0 (null pointer) for now
+      // This allows compilation but map operations will return 0
+      let mut g = self
+      g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+      g
+    }
     IndexExpr(arr, idx) => {
       let is_str = is_string_expr(arr, self.var_is_string)
+      let is_map = is_map_expr(arr, self.var_is_map)
       let g = self.codegen_expr(arr)
       let g = g.emit_inst(Push(Reg64("rax")))
       let g = g.codegen_expr(idx)
       let g = if is_str {
+        g
+      } else if is_map {
+        // For maps, return 0 for now (simplified)
         g
       } else {
         let g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
@@ -3835,11 +3865,20 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       // For arrays, add 8 to skip the length field (offset 0 is length, elements start at offset 8)
       let g = if is_str {
         g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+      } else if is_map {
+        // For map access, just return 0
+        g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
       } else {
         let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
         g.emit_inst(Add(Reg64("rcx"), Imm32(8)))
       }
-      let g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rcx")))
+      // For strings/maps, rax already contains the value directly (after Add)
+      // For arrays, we need to load from memory
+      let g = if is_str || is_map {
+        g
+      } else {
+        g.emit_inst(Mov(Reg64("rax"), MemIndirect("rcx")))
+      }
       g
     }
     Tuple(elems) => {
@@ -3963,6 +4002,10 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       let is_bool = is_bool_expr(value, self.var_is_bool)
       let is_tuple = match value {
         Tuple(_) => true
+        _ => false
+      }
+      let is_map = match value {
+        MapLit(_) => true
         _ => false
       }
       let is_struct_or_tuple = match value {
@@ -4127,6 +4170,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         new_bools[name] = is_bool
         let new_tuples = g2.var_is_tuple
         new_tuples[name] = is_tuple
+        let new_maps = g2.var_is_map
+        new_maps[name] = is_map
         let new_array_lens = g2.var_array_len
         match array_len {
           Some(len) => new_array_lens[name] = len
@@ -4156,6 +4201,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_is_char: new_chars,
           var_is_bool: new_bools,
           var_is_tuple: new_tuples,
+          var_is_map: new_maps,
           var_tuple_field_types: new_tuple_field_types,
           var_array_len: new_array_lens,
           var_types: new_types,
