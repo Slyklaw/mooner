@@ -32,6 +32,7 @@ pub enum AST {
   StructLit(String, Array[(String, AST)])
   StructUpdate(AST, Array[(String, AST)])
   StringConcat(Array[AST])
+  Spread(AST)
   TestBlock(String?, AST) // optional name, body
 } derive(Show)
 
@@ -206,7 +207,13 @@ fn Parser::parse_array(self : Parser) -> (AST, Parser) {
   if self_token_eq(p.current(), RBracket) {
     (ArrayLit([]), p.advance())
   } else {
-    let (first, p2) = p.parse_expr()
+    let (first, p2) = if self_token_eq(p.current(), DotDot) {
+      let p_skip = p.skip(1)
+      let (inner, p_after) = p_skip.parse_expr()
+      (Spread(inner), p_after)
+    } else {
+      p.parse_expr()
+    }
     if self_token_eq(p2.current(), RBracket) {
       (ArrayLit([first]), p2.advance())
     } else if self_token_eq(p2.current(), Comma) {
@@ -215,7 +222,13 @@ fn Parser::parse_array(self : Parser) -> (AST, Parser) {
       let mut parser = p3
       let mut done = false
       while not(done) {
-        let (expr, p2) = parser.parse_expr()
+        let (expr, p2) = if self_token_eq(parser.current(), DotDot) {
+          let p_skip = parser.skip(1)
+          let (inner, p_after) = p_skip.parse_expr()
+          (Spread(inner), p_after)
+        } else {
+          parser.parse_expr()
+        }
         elems = elems + [expr]
         if self_token_eq(p2.current(), Comma) {
           parser = p2.skip(1)

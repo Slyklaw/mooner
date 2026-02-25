@@ -8,7 +8,7 @@
 | 002_variable | ✅ | ✅ | OUTPUT MATCHES official |
 | 003_basic_constants | ✅ | ✅ | OUTPUT MATCHES official |
 | 004_basic_function | ✅ | ✅ | OUTPUT MATCHES official |
-| 005_basic_array | ✅ | ⚠️ | `arr.length()`, `arr[i]`, `arr[i] = val` work; `arr.push()` works; concat returns right array only; spread not implemented |
+| 005_basic_array | ✅ | ✅ | **OUTPUT MATCHES official** - `arr.length()`, `arr[i]`, `arr[i] = val`, `arr.push()`, concatenation (`+`), and array spread (`..arr`) all work |
 | 006_basic_string | ✅ | ✅ | **OUTPUT MATCHES official** - get_char(), unwrap(), char equality, concat (+), escape sequences, unicode, interpolation all work |
 | 007_basic_tuple | ✅ | ⚠️ | Int/float tuple field access works; printing shows `<tuple>`; runtime float-to-string prints integer + ".0" only |
 | 008_basic_map | ✅ | ❌ | **Segfault** - maps unsupported |
@@ -19,6 +19,11 @@
 | 013_pattern_matching | ✅ | ⚠️ | Match for int/wildcard/simple enum discriminants works; destructuring, guards not supported |
 
 ## Recent Fixes
+
+### 2024-02-24: Array Concatenation and Spread Syntax Fixed
+- **Issue**: Array concatenation (`arr1 + arr2`) only returned the right array. Spread syntax (`[..arr]`) caused a partial match error in the type checker and was not implemented in codegen.
+- **Fix**: Added `Spread` variant to `type_checker.mbt` to fix type checker errors. Rewrote array concatenation and ArrayLit allocation to support dynamically pushing spread array items onto the heap buffer using precise x86-64 assembly in `codegen.mbt`.
+- **Result**: `[..arr]` syntax and `arr1 + arr2` produce correct exact array combinations matching the official compiler. Example 005 now passes.
 
 ### 2024-02-24: Unicode Escape Sequences Fixed
 - **Issue**: Unicode escape sequences like `\u{1F407}` (rabbit emoji) showed as "?"

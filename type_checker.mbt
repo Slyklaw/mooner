@@ -556,8 +556,21 @@ fn TypeChecker::check_expr(
       let mut elem_ty = TUnknown
       let mut i = 0
       while i < elems.length() {
-        let (c2, ty) = checker.check_expr(elems[i])
-        checker = c2
+        let ty = match elems[i] {
+          Spread(arr) => {
+             let (c2, t) = checker.check_expr(arr)
+             checker = c2
+             match t {
+               TArray(inner) => inner
+               _ => TUnknown
+             }
+          }
+          _ => {
+             let (c2, t) = checker.check_expr(elems[i])
+             checker = c2
+             t
+          }
+        }
         if elem_ty.eq(TUnknown) {
           elem_ty = ty
         }
@@ -565,6 +578,7 @@ fn TypeChecker::check_expr(
       }
       (checker, TArray(elem_ty))
     }
+    Spread(_) => (self, TUnknown)
     Assign(lhs, rhs) => {
       let (c2, _lhs_ty) = self.check_expr(lhs)
       let (c3, rhs_ty) = c2.check_expr(rhs)

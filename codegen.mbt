@@ -1776,6 +1776,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       let g = g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
       g
     }
+    Spread(_) => self
     StringConcat(parts) =>
       // Build concatenation from left to right: "a" + "b" + "c" becomes ((a + b) + c)
       // Use Binary("+", ...) to leverage existing string concatenation codegen
@@ -1808,13 +1809,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
             g
           } else if self.var_array_len.get(name) != None {
-            // Array - return address (rbp + offset)
-            let g = self.emit_inst(Mov(Reg64("rax"), Reg64("rbp")))
-            let g = if offset >= 0 {
-              g.emit_inst(Add(Reg64("rax"), Imm32(offset)))
-            } else {
-              g.emit_inst(Sub(Reg64("rax"), Imm32(-offset)))
-            }
+            // Array - load the address from stack (rbp + offset)
+            let g = self.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
             g
           } else if self.var_is_tuple.get(name) == Some(true) {
             // Tuple - return address (rbp + offset)
@@ -1910,10 +1906,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       } else if op == "+" &&
         is_array_expr(left, self.var_array_len) &&
         is_array_expr(right, self.var_array_len) {
-        // Array concatenation - simplified version returning right array for now
-        // The mmap approach has issues
-        let g = self.codegen_expr(right)
-        g
+        self.codegen_expr(ArrayLit([Spread(left), Spread(right)]))
       } else if op == "+" && is_string {
         // String concatenation
         let mut g = self
@@ -3694,29 +3687,75 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     }
     ArrayLit(elems) => {
       let num_elems = elems.length()
-      if num_elems == 0 {
-        self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-      } else {
-        // Total size: elements + length header
-        let total_size = (num_elems + 1) * 8
-        // Calculate where the length field will be (top of array)
-        let array_offset = self.next_offset - total_size
-        let mut g = { ..self, next_offset: array_offset }
-        // Store elements in reverse order (last element pushed first, at lowest address)
-        let mut i = num_elems - 1
-        while i >= 0 {
-          g = g.codegen_expr(elems[i])
-          g = g.emit_inst(Push(Reg64("rax")))
-          i = i - 1
+      let mut g = self
+      g = g.emit_inst(Push(Reg64("rbx")))
+      g = g.emit_inst(Mov(Reg64("rbx"), Imm32(0)))
+      let mut i = num_elems - 1
+      while i >= 0 {
+        match elems[i] {
+          Spread(arr_expr) => {
+            g = g.codegen_expr(arr_expr)
+            let (g2, skip_label) = g.new_label()
+            let (g3, loop_label) = g2.new_label()
+            g = g3
+            g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
+            g = g.emit_inst(Je(skip_label))
+            g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rax")))
+            g = g.emit_inst(Add(Reg64("rbx"), Reg64("rcx")))
+            g = g.emit_inst(Mov(Reg64("rsi"), Imm32(0)))
+            g = g.emit_inst(Mov(Reg64("rdi"), Imm32(8)))
+            g = g.emit_inst(Imul(Reg64("rdi"), Reg64("rcx")))
+            g = g.emit_inst(Add(Reg64("rdi"), Reg64("rax")))
+            g = g.define_label(loop_label)
+            g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rax")))
+            g = g.emit_inst(Cmp(Reg64("rsi"), Reg64("rcx")))
+            g = g.emit_inst(Je(skip_label))
+            g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rdi")))
+            g = g.emit_inst(Push(Reg64("rcx")))
+            g = g.emit_inst(Sub(Reg64("rdi"), Imm32(8)))
+            g = g.emit_inst(Inc(Reg64("rsi")))
+            g = g.emit_inst(Jmp(loop_label))
+            g = g.define_label(skip_label)
+          }
+          _ => {
+            g = g.codegen_expr(elems[i])
+            g = g.emit_inst(Push(Reg64("rax")))
+            g = g.emit_inst(Inc(Reg64("rbx")))
+          }
         }
-        // Now push length last so it's at rsp (lowest address)
-        g = g.emit_inst(Mov(Reg64("rax"), Imm32(num_elems)))
-        g = g.emit_inst(Push(Reg64("rax")))
-        // rax = address of length field (rsp)
-        // Layout: [length][elem0][elem1]...
-        g = g.emit_inst(Mov(Reg64("rax"), Reg64("rsp")))
-        g
+        i = i - 1
       }
+      let alloc_lbl = ".Larray_alloc_offset"
+      let buf_lbl = ".Larrcat_buf"
+      g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(alloc_lbl)))
+      g = g.emit_inst(Mov(Reg64("rsi"), MemIndirect("rdi")))
+      g = g.emit_inst(Mov(Reg64("rcx"), Reg64("rbx")))
+      g = g.emit_inst(Inc(Reg64("rcx")))
+      g = g.emit_inst(Shl(Reg64("rcx"), Imm8(3)))
+      g = g.emit_inst(Lea(Reg64("rdx"), RipRel32(buf_lbl)))
+      g = g.emit_inst(Add(Reg64("rdx"), Reg64("rsi")))
+      g = g.emit_inst(Add(Reg64("rsi"), Reg64("rcx")))
+      g = g.emit_inst(Add(Reg64("rsi"), Imm32(1024)))
+      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg64("rsi")))
+      g = g.emit_inst(Mov(MemIndirect("rdx"), Reg64("rbx")))
+      let (g2, pop_loop) = g.new_label()
+      let (g3, pop_done) = g2.new_label()
+      g = g3
+      g = g.emit_inst(Mov(Reg64("rdi"), Reg64("rdx")))
+      g = g.emit_inst(Add(Reg64("rdi"), Imm32(8)))
+      g = g.emit_inst(Mov(Reg64("rsi"), Imm32(0)))
+      g = g.define_label(pop_loop)
+      g = g.emit_inst(Cmp(Reg64("rsi"), Reg64("rbx")))
+      g = g.emit_inst(Je(pop_done))
+      g = g.emit_inst(Pop(Reg64("rax")))
+      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg64("rax")))
+      g = g.emit_inst(Add(Reg64("rdi"), Imm32(8)))
+      g = g.emit_inst(Inc(Reg64("rsi")))
+      g = g.emit_inst(Jmp(pop_loop))
+      g = g.define_label(pop_done)
+      g = g.emit_inst(Mov(Reg64("rax"), Reg64("rdx")))
+      g = g.emit_inst(Pop(Reg64("rbx")))
+      g
     }
     IndexExpr(arr, idx) => {
       let is_str = is_string_expr(arr, self.var_is_string)
@@ -4008,8 +4047,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       } else if is_float {
         let g = g.emit_inst(PushXmm("xmm0"))
         (g, g.next_offset, false)
-      } else if array_len != None {
-        (g, g.next_offset + 8, true)
       } else {
         let g = g.emit_inst(Push(Reg64("rax")))
         (g, g.next_offset, false)
@@ -4910,9 +4947,15 @@ pub fn codegen(ast : AST) -> Bytes {
     g = g.emit_byte(0x00)
     buf_idx = buf_idx + 1
   }
+  g = g.define_label(".Larray_alloc_offset")
+  buf_idx = 0
+  while buf_idx < 8 {
+    g = g.emit_byte(0x00)
+    buf_idx = buf_idx + 1
+  }
   g = g.define_label(".Larrcat_buf")
   buf_idx = 0
-  while buf_idx < 2048 {
+  while buf_idx < 819200 {
     g = g.emit_byte(0x00)
     buf_idx = buf_idx + 1
   }
