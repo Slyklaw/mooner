@@ -1,55 +1,50 @@
 # Plan: Fix Enum Constructors with Data (Example 011)
 
-## Problem Analysis
-
-When creating enum variants with data (e.g., `RGB(1, 2, 3)`), the current implementation:
-1. Allocates space on the stack for the enum data
-2. Stores discriminant at [rsp], args at [rsp+8], [rsp+16], etc.
-3. Returns a pointer to this stack memory
-4. **Does NOT restore rsp**, causing stack corruption
-5. Even if we restored rsp, the data would become invalid after function returns
-
-## Current Status (After Implementation)
+## Current Status
 
 - ✅ Simple enums (Red, Green, Blue) work
-- ✅ Enum constructors with data work (RGB, RGBA) 
-- ✅ Pattern matching works for basic cases
-- ⚠️ Field binding in patterns not implemented (causes crash when accessing r, g, b)
+- ✅ Enum constructors with data work (RGB, RGBA) - stored in global buffer
+- ✅ Pattern matching works with underscore patterns (RGB(_))
+- ❌ Field binding not implemented (RGB(r, g, b) crashes)
 
-## What Was Implemented
+## Implementation Details
 
-### 1. Global Enum Buffer
-- Added 64KB static buffer `.Lenum_buf` in codegen
-- Added `enum_buf_offset` field in CodeGen state to track next available offset
+### Global Enum Buffer
+- 64KB static buffer `.Lenum_buf` 
+- `enum_buf_offset` tracks next available offset
+- Enum constructors store data in buffer instead of stack
 
-### 2. Constructor Uses Buffer
-- Enum constructors with data now store data in static buffer instead of stack
-- Returns pointer to buffer location
-- Offset increments for each new enum
+### Pattern Matching
+- Works with underscore patterns: `RGB(_)`, `RGBA(_)`
 
-### 3. Pattern Matching
-- CallExpr patterns (RGB(r,g,b)) work when fields aren't accessed
-- Ident patterns (simple enums) work correctly
+## Field Binding Complexity
 
-## Remaining Issue: Field Binding
+Implementing `RGB(r, g, b)` requires:
+1. Tracking bound variable names when matching
+2. Loading field values from enum buffer when those variables are used
 
-When pattern matching with `RGB(r, g, b)`, the code should:
-1. Load discriminant from enum buffer to check variant type
-2. Load field values from buffer and bind to local variables (r, g, b)
-3. Execute match body with bound variables
+**Challenge:** MoonBit's nested match expressions and variable scoping make this complex.
 
-Currently, step 2 is not implemented - the binding is skipped. When the match body tries to use r, g, b, it accesses uninitialized stack memory causing the crash.
+## Workaround
 
-### Fix for Field Binding (Future Task)
-
+Use underscore patterns:
 ```moonbit
-// In CallExpr pattern matching:
-// After matching discriminant, need to:
-// 1. Load pointer to enum data from stack
-// 2. For each binding (r, g, b):
-//    - Calculate offset = 8 + bind_idx * 8
-//    - Load value from [pointer + offset]
-//    - Store in new local variable at current stack offset
+RGB(_) => println("RGB")   // ✅ Works
+```
+
+Not:
+```moonbit
+RGB(r, g, b) => println("\{r}")  // ❌ Crashes
+```
+
+## Test Results
+
+All examples 001-006, 009-010: IDENTICAL to official compiler
+Example 011: Works with underscore patterns
+
+Not working (field binding needed):
+```moonbit
+RGB(r, g, b) => println("\{r}, \{g}, \{b}")  // Crashes
 ```
 
 This requires:
