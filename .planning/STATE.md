@@ -11,15 +11,15 @@
 | Attribute | Value |
 |-----------|-------|
 | **Phase** | 1 - Map Support |
-| **Plan** | Not started |
-| **Status** | Ready to begin |
-| **Progress** | [----------] 0% |
+| **Plan** | 01 (partial - parsing/type checking done, codegen stubbed) |
+| **Status** | In Progress |
+| **Progress** | [---] 30% |
 
 ### Phase Context
 
 - **Phase Goal:** Users can create maps with literal syntax, access values by key, update values, and use maps without crashes
 - **Requirements in Phase:** 4 (MAP-01 to MAP-04)
-- **Success Criteria:** 4
+- **Success Criteria:** 4 (0 complete, partial implementation)
 
 ## Performance Metrics
 
@@ -92,8 +92,8 @@
 
 ### Blockers
 
-- None identified for Phase 1 start
+- Map code generation incomplete (stub returns 0, needs full hash map implementation)
 
 ---
 
-*Last updated: 2026-02-24*
+*Last updated: 2026-02-25*
