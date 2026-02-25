@@ -11,9 +11,9 @@
 | Attribute | Value |
 |-----------|-------|
 | **Phase** | 1 - Map Support |
-| **Plan** | 01 (partial - parsing/type checking done, codegen stubbed) |
+| **Plan** | 02 (gap closure - implementing runtime) |
 | **Status** | In Progress |
-| **Progress** | [---] 30% |
+| **Progress** | [-----] 50% |
 
 ### Phase Context
 
@@ -84,15 +84,14 @@
 
 ### Next Steps
 
-1. Begin Phase 1 implementation: Map literal syntax in parser
-2. Add Map type to type checker
-3. Implement map code generation in codegen.mbt
-4. Test with 008_basic_map example
-5. Fix any segfaults
+1. Execute gap closure plan 01-02: Implement map runtime functions
+2. Test with 008_basic_map example
+3. Fix any remaining compilation issues
+4. Verify all 4 map requirements work
 
 ### Blockers
 
-- Map code generation incomplete (stub returns 0, needs full hash map implementation)
+- Map code generation: 01-02-PLAN.md is implementing runtime functions
 
 ---
 

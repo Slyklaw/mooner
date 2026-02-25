@@ -12,7 +12,7 @@
 
 ## Phases
 
-- [x] **Phase 1: Map Support** - Implement map type with literal syntax, access, and update operations (4 requirements) (completed 2026-02-25)
+- [ ] **Phase 1: Map Support** - Implement map type with literal syntax, access, and update operations (4 requirements) (gap closure in progress)
 - [ ] **Phase 2: Tuple & Float Improvements** - Fix float runtime conversion and tuple printing (5 requirements)
 - [ ] **Phase 3: Enum & Pattern Matching** - Implement advanced pattern matching with data constructors, guards, and destructuring (6 requirements)
 - [ ] **Phase 4: Derive(Show) Macro** - Implement derive macro to generate toString for types (1 requirement)
@@ -36,10 +36,11 @@
 3. User can update map value using assignment `map["key"] = new_value`
 4. Map operations (creation, access, update) don't cause segfaults at runtime
 
-**Plans:** 1/1 plans complete
+**Plans:** 2/2 plans (1 original + 1 gap closure)
 
 **Plan list:**
-- [ ] 01-01-PLAN.md — Map literal syntax, access, and update implementation
+- [x] 01-01-PLAN.md — Map literal syntax, access, and update implementation
+- [ ] 01-02-PLAN.md — Gap closure: implement working map runtime
 
 ---
 
@@ -107,7 +108,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Map Support | 1/1 | Complete    | 2026-02-25 |
+| 1. Map Support | 1/2 | In Progress (gap closure) | - |
 | 2. Tuple & Float Improvements | 0/1 | Not started | - |
 | 3. Enum & Pattern Matching | 0/1 | Not started | - |
 | 4. Derive(Show) Macro | 0/1 | Not started | - |
