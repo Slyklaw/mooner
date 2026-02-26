@@ -2657,6 +2657,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
                       g = g.define_label(end_label)
                     } else if g.var_is_tuple.get(var_name) == Some(true) {
+                      // Tuple variable - print placeholder for now
                       g = g.codegen_expr(arg)
                       let (g2, label1) = g.add_string("<tuple>")
                       g = g2
@@ -2966,6 +2967,165 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     g = g.emit_inst(Pop(Reg64("rbx")))
                     // Clean up struct from stack
                     g = g.emit_inst(Add(Reg64("rsp"), Imm32(num_fields * 8)))
+                    need_skip_print = true
+                    g = g.emit_inst(Jmp(skip_print_label))
+                  }
+                  Tuple(elems) => {
+                    // Tuple literal - evaluate each element and print
+                    // Push callee-saved registers
+                    g = g.emit_inst(Push(Reg64("rbx")))
+                    g = g.emit_inst(Push(Reg64("r12")))
+                    g = g.emit_inst(Push(Reg64("r13")))
+                    g = g.emit_inst(Push(Reg64("r14")))
+                    g = g.emit_inst(Push(Reg64("r15")))
+                    // Print opening paren
+                    let (g2, open_label) = g.add_string("(")
+                    g = g2
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(open_label)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                    g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                    g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                    g = g.emit_inst(Syscall)
+                    // Print each element
+                    let num_elems = elems.length()
+                    let mut elem_idx = 0
+                    while elem_idx < num_elems {
+                      // Evaluate element
+                      g = g.codegen_expr(elems[elem_idx])
+                      // Save rax (the element value) in r15
+                      g = g.emit_inst(Mov(Reg64("r15"), Reg64("rax")))
+                      // Determine type and print accordingly
+                      let elem_is_float = is_float_expr(
+                        elems[elem_idx],
+                        g.var_is_float,
+                      )
+                      let elem_is_string = is_string_expr(
+                        elems[elem_idx],
+                        g.var_is_string,
+                      )
+                      let elem_is_array = is_array_expr(
+                        elems[elem_idx],
+                        g.var_array_len,
+                      )
+                      if elem_is_float {
+                        // Float - print using float-to-string
+                        let buf_label = ".Lflt_buf"
+                        g = g.emit_inst(Sub(Reg64("rsp"), Imm32(8)))
+                        g = g.emit_inst(Movsd(MemIndirect("rsp"), Xmm("xmm0")))
+                        g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                        g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+                        g = g.emit_inst(Sub(Reg64("rsp"), Imm32(8)))
+                        g = g.emit_inst(Movsd(MemIndirect("rsp"), Xmm("xmm0")))
+                        g = g.emit_inst(Call(".Lfloat_to_string"))
+                        g = g.emit_inst(Add(Reg64("rsp"), Imm32(8)))
+                        g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                        // Calculate length
+                        g = g.emit_inst(Push(Reg64("rax")))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                        let len_loop = ".Ltuple_float_len\{g.label_counter}"
+                        let len_done = ".Ltuple_float_done\{g.label_counter}"
+                        g = { ..g, label_counter: g.label_counter + 2 }
+                        g = g.define_label(len_loop)
+                        g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("rax")))
+                        g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                        g = g.emit_inst(Je(len_done))
+                        g = g.emit_inst(Inc(Reg64("rax")))
+                        g = g.emit_inst(Inc(Reg64("rdx")))
+                        g = g.emit_inst(Jmp(len_loop))
+                        g = g.define_label(len_done)
+                        g = g.emit_inst(Pop(Reg64("rax")))
+                      } else if elem_is_string {
+                        // String - already in rsi
+                        g = g.emit_inst(Push(Reg64("r15")))
+                        g = g.emit_inst(Mov(Reg64("rsi"), Reg64("r15")))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                        // Calculate length
+                        g = g.emit_inst(Push(Reg64("rax")))
+                        g = g.emit_inst(Mov(Reg64("r15"), Reg64("rax")))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                        let str_len_loop = ".Ltuple_str_len\{g.label_counter}"
+                        let str_len_done = ".Ltuple_str_done\{g.label_counter}"
+                        g = { ..g, label_counter: g.label_counter + 2 }
+                        g = g.define_label(str_len_loop)
+                        g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("r15")))
+                        g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                        g = g.emit_inst(Je(str_len_done))
+                        g = g.emit_inst(Inc(Reg64("r15")))
+                        g = g.emit_inst(Inc(Reg64("rdx")))
+                        g = g.emit_inst(Jmp(str_len_loop))
+                        g = g.define_label(str_len_done)
+                        g = g.emit_inst(Pop(Reg64("rax")))
+                        g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                      } else if elem_is_array {
+                        // Array - print placeholder for now
+                        let (g3, arr_label) = g.add_string("<array>")
+                        g = g3
+                        g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(arr_label)))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                      } else {
+                        // Integer or other - print using integer-to-string
+                        g = g.emit_inst(Push(Reg64("r15")))
+                        let buf_label = ".Lint_buf"
+                        g = g.emit_inst(Mov(Reg64("rbx"), Reg64("r15")))
+                        g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                        g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                        g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                        let (g3, digit_loop) = g.new_label()
+                        let (g4, done_label) = g3.new_label()
+                        g = g4
+                        g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                        g = g.emit_inst(Je(done_label))
+                        g = g.define_label(digit_loop)
+                        g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                        g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                        g = g.emit_inst(Idiv(Reg64("rsi")))
+                        g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                        g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                        g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+                        g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                        g = g.emit_inst(Dec(Reg64("rdi")))
+                        g = g.emit_inst(Inc(Reg64("rcx")))
+                        g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                        g = g.emit_inst(Jne(digit_loop))
+                        g = g.define_label(done_label)
+                        g = g.emit_inst(Inc(Reg64("rdi")))
+                        g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                        g = g.emit_inst(Pop(Reg64("rax")))
+                      }
+                      // Print the element
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      // Print comma and space if not last
+                      if elem_idx < num_elems - 1 {
+                        let (g5, comma_label) = g.add_string(", ")
+                        g = g5
+                        g = g.emit_inst(
+                          Lea(Reg64("rsi"), RipRel32(comma_label)),
+                        )
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                        g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                        g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                        g = g.emit_inst(Syscall)
+                      }
+                      elem_idx = elem_idx + 1
+                    }
+                    // Print closing paren
+                    let (g6, close_label) = g.add_string(")")
+                    g = g6
+                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(close_label)))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                    g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                    g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                    g = g.emit_inst(Syscall)
+                    // Restore callee-saved registers
+                    g = g.emit_inst(Pop(Reg64("r15")))
+                    g = g.emit_inst(Pop(Reg64("r14")))
+                    g = g.emit_inst(Pop(Reg64("r13")))
+                    g = g.emit_inst(Pop(Reg64("r12")))
+                    g = g.emit_inst(Pop(Reg64("rbx")))
                     need_skip_print = true
                     g = g.emit_inst(Jmp(skip_print_label))
                   }

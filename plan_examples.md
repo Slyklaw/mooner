@@ -10,27 +10,32 @@
 | 004_basic_function | ✅ | ✅ | OUTPUT MATCHES official |
 | 005_basic_array | ✅ | ✅ | **OUTPUT MATCHES official** |
 | 006_basic_string | ✅ | ✅ | **OUTPUT MATCHES official** |
-| 007_basic_tuple | ✅ | ❌ | **Tuple not implemented** - outputs garbage instead of tuple values |
-| 008_basic_map | ✅ | ❌ | **Map not implemented** - outputs placeholder instead of map contents |
+| 007_basic_tuple | ✅ | ❌ | **Partial** - prints `<tuple>` for variables; literals partially implemented |
+| 008_basic_map | ✅ | ❌ | **Map not implemented** - outputs `<map>` placeholder |
 | 009_basic_control_flows | ✅ | ✅ | OUTPUT MATCHES official |
 | 010_basic_struct | ✅ | ✅ | **OUTPUT MATCHES official** |
 | 011_basic_enum | ✅ | ✅ | **OUTPUT MATCHES official** |
 | 012_basic_test | ⚠️ | ❌ | Official compiler fails on this file |
-| 013_pattern_matching | ✅ | ❌ | Compiles but produces incorrect output (pattern matching incomplete) |
+| 013_pattern_matching | ✅ | ❌ | **Partial** - guard, array/struct patterns, destructuring not implemented |
 
 ## Recent Fixes
 
-### 2025-02-25: Parser Infinite Loop Fixed
-- **Issue**: Example 013 pattern matching caused infinite loop during parsing (timeout)
-- **Root cause**: In `parser.mbt`, when the parser encountered RBrace (or similar tokens) at the start of an expression, it returned `(Unit, self)` without advancing the parser position, causing an infinite loop in the main parse loop
-- **Fix**: Added check in `Parser::parse()` to detect when the parser position doesn't advance after parsing an expression, and skip the current token to prevent infinite loop
-- **Result**: Example 013 now compiles (no timeout), but produces incorrect output
+### 2025-02-26: Tuple and Pattern Matching Investigation
+- **Issue**: Examples 007 (tuple) and 013 (pattern matching) produce incorrect output
+- **Investigation**:
+  - 007: Tuple printing - added code for tuple literals in println handler, but tuple variables still print `<tuple>` placeholder due to missing element type tracking
+  - 013: Multiple features not implemented:
+    - Guard expressions (`guard x is pattern`)
+    - Array patterns (`[d, e, f]`, `[..rest]`)
+    - Struct patterns (`{x, y}`, `{x: pos_x, ..}`)
+    - Tuple destructuring in guards
+    - `derive(Show)` for enums/structs
+- **Result**: Examples still differ from official compiler
 
-### 2025-02-25: Simple Enum Pattern Matching Fixed
-- **Issue**: Example 011 crashed on simple enum variants (Green, Blue) after printing "Red"
-- **Root cause**: In `codegen.mbt`, the match expression code for Ident patterns (simple enums like Red, Green, Blue) incorrectly tried to treat non-zero discriminant values as pointers and dereference them
-- **Fix**: Simplified the Ident pattern matching to directly compare the scrutinee value with the expected discriminant (no pointer dereference for simple enums)
-- **Result**: Simple enum variants (without data) now work correctly
+### 2025-02-26: Map Investigation
+- **Issue**: Example 008 (map) outputs `<map>` placeholder instead of map contents
+- **Investigation**: Map data structure completely unimplemented - needs full hash map implementation in x86-64
+- **Result**: Example differs from official compiler
 
 ### 2024-02-24: Array Concatenation and Spread Syntax Fixed
 - **Issue**: Array concatenation (`arr1 + arr2`) only returned the right array. Spread syntax (`[..arr]`) caused a partial match error in the type checker and was not implemented in codegen.
@@ -169,6 +174,9 @@ These are foundational issues blocking multiple examples.
 - [ ] Implement constructor patterns `RGB(r, g, b)` with data binding
 - [x] Implement wildcard pattern `_`
 - [ ] Implement guard expressions `guard x is pattern`
+- [ ] Implement array patterns `[d, e, f]`, `[..rest]`
+- [ ] Implement struct patterns `{x, y}`, `{x: pos_x, ..}`
+- [ ] Implement tuple destructuring
 
 ## Phase 5: Advanced Features (LOW PRIORITY)
 
@@ -176,7 +184,7 @@ These are foundational issues blocking multiple examples.
 - [ ] Implement Map type with literal `{"key": val}`
 - [ ] Implement map access `map["key"]`
 - [ ] Implement map update `map["key"] = val`
-- [ ] Fix segfault in map operations
+- [ ] Implement map equality `==`
 
 ### 5.2 Testing
 - [x] Parse `test {}` blocks
@@ -218,11 +226,11 @@ Update this section as tasks are completed:
 - [x] 006_basic_string working (OUTPUT MATCHES official)
 - [x] 009_basic_control_flows working (OUTPUT MATCHES official)
 - [x] 010_basic_struct working (OUTPUT MATCHES official)
-- [ ] 007_basic_tuple working (segfault)
-- [ ] 008_basic_map working (map not implemented)
 - [x] 011_basic_enum working (OUTPUT MATCHES official)
+- [ ] 007_basic_tuple working (partially implemented - prints `<tuple>` for variables)
+- [ ] 008_basic_map working (map data structure not implemented)
 - [ ] 012_basic_test (official compiler fails on file - outputs error message)
-- [ ] 013_pattern_matching (compiles but produces wrong output)
+- [ ] 013_pattern_matching (guard, array/struct patterns, destructuring not implemented)
 
 ## Summary
 
@@ -230,3 +238,6 @@ Update this section as tasks are completed:
 
 **Most recent fixes:**
 1. Example 011 (enum) now outputs identically to official compiler
+2. Investigated tuple printing - partial implementation added for literals
+3. Investigated map - requires full hash map implementation
+4. Investigated pattern matching - guard, array/struct patterns, destructuring not implemented
