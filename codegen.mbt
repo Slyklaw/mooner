@@ -1993,13 +1993,19 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         g = g.emit_inst(Pop(Reg64("rbx")))
         g
       } else if op == "+" && is_string {
-        // String + non-string concatenation: for now just evaluate and return the string side
-        // This is a placeholder - full implementation would convert int to string
+        // String + non-string concatenation: convert non-string to string first
         let left_is_string = is_string_expr(left, self.var_is_string)
         if left_is_string {
-          self.codegen_expr(left)
+          // string + expr: convert expr to string, then do string + string concat
+          // Convert right to int_to_string(right)
+          let right_as_string = CallExpr(Ident("int_to_string"), [right])
+          let concat_expr = Binary("+", left, right_as_string)
+          self.codegen_expr(concat_expr)
         } else {
-          self.codegen_expr(right)
+          // expr + string: convert expr to string, then do string + string concat
+          let left_as_string = CallExpr(Ident("int_to_string"), [left])
+          let concat_expr = Binary("+", left_as_string, right)
+          self.codegen_expr(concat_expr)
         }
       } else if is_float {
         let g = self.codegen_expr(left)
