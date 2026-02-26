@@ -8,42 +8,31 @@
 2. ✅ Passing enum values to functions works
 3. ✅ Pattern matching with underscore works (`RGB(_) => ...`)
 4. ❌ Pattern matching with enum constructors crashes or returns wrong value
+5. ❌ Field binding in patterns doesn't work in all cases
 
 ### Root Causes Identified
 
-1. **Missing pointer/direct discriminant check**: The CallExpr pattern matching code assumed all values are pointers, but simple enums store discriminants directly. Fixed by adding 4096 threshold check.
+1. **Debug code left in**: There was errant debug code (lines 3610-3612) that was MOVing to a RIP-relative address incorrectly. This has been removed.
 
-2. **Potential issue with enum buffer addressing**: The enum buffer is defined in the code section, and RipRel32 addressing may not be computing addresses correctly, resulting in pointer value 0.
+2. **Missing pointer/direct discriminant check**: The CallExpr pattern matching code assumed all values are pointers, but simple enums store discriminants directly. Fixed by adding 4096 threshold check.
 
-### Debugging Notes
+3. **Pattern matching on function parameters**: There's an issue with matching on enum values that are passed as function parameters or returned from functions. The scrutinee evaluation and push appears to work, but the pattern matching doesn't match correctly in some cases.
 
-- Creating `RGB(10)` and returning it directly returns 0 instead of a valid pointer
-- This suggests the enum buffer address computation is broken
-- The issue is NOT in the pattern matching code itself, but in how the enum constructor stores/returns the buffer address
+### What Works
 
-### Test Results
+- `RGB(10)` constructor returns valid pointer (verified: 4204667)
+- Direct matching on literal enums works: `match RGB(10) { RGB(n) => ... }`
+- Passing enum directly to function works: `print_color(RGB(10))`
+- Using underscore pattern works: `match c { _ => 100 }`
 
-Working:
-```moonbit
-enum Color { Red, Green, RGB(Int) }
-let c = RGB(10)
-match c {
-  _ => 999  // Returns 999 - underscore works
-}
-```
+### What Doesn't Work
 
-Not working:
-```moonbit
-enum Color { Red, RGB(Int) }
-let c = RGB(10)
-match c {
-  RGB(_) => 111  // Should return 111, but returns 0
-  Red => 0
-}
-```
+- Matching on enum returned from function: `let c = foo(); match c { ... }`
+- Matching on enum stored in variable first, then passed to function
+- Field binding in certain contexts
 
-## Next Steps
+### Next Steps
 
-1. Debug the enum buffer address computation - verify RipRel32 is computing correct addresses
-2. Consider storing enum buffer in a known location (e.g., at fixed address)
-3. Once enum constructor returns correct pointer, field binding should work
+1. Debug the function parameter/return value matching issue - likely related to how the scrutinee value is being loaded or compared
+2. Test field binding (`RGB(r, g, b) => ...`) in contexts that work
+3. Run full test suite to verify all enum functionality works

@@ -3607,10 +3607,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                         g = { ..g, enum_buf_offset: offset + total_size }
                         // Store discriminant at buffer offset
                         g = g.emit_inst(Mov(Reg64("rax"), Imm32(disc)))
-                        g = g.emit_inst(
-                          Mov(RipRel32(".Lenum_buf"), Reg64("rax")),
-                        ) // temp
-                        // Actually we need to use RipRel with offset
                         // Store at .Lenum_buf + offset
                         // Use rdx as temp
                         g = g.emit_inst(
@@ -4585,7 +4581,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                           g = { ..g, var_offsets: new_offsets }
                           // Load from enum buffer: [r12 + (bind_idx + 1) * 8]
                           g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
-                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32((bind_idx + 1) * 8)))
+                          g = g.emit_inst(
+                            Mov(Reg64("rdx"), Imm32((bind_idx + 1) * 8)),
+                          )
                           g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
                           g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
                           // Store at rbp + offset
@@ -4622,7 +4620,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                           g = { ..g, var_offsets: new_offsets }
                           // Load from enum buffer: [r12 + (bind_idx + 1) * 8]
                           g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
-                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32((bind_idx + 1) * 8)))
+                          g = g.emit_inst(
+                            Mov(Reg64("rdx"), Imm32((bind_idx + 1) * 8)),
+                          )
                           g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
                           g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
                           // Store at rbp + offset
