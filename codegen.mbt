@@ -4491,13 +4491,13 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               Some(disc) => {
                 // Load the value from stack into rcx
                 g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
-                // Check if value is small (< 4096) - likely a direct discriminant
+                // Check if value is small (< 256) - likely a direct discriminant
                 // If large - treat as pointer and dereference
-                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(4096)))
+                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(256)))
                 let (g2, is_small_label) = g.new_label()
                 let (g3, is_pointer_label) = g2.new_label()
                 g = g3
-                g = g.emit_inst(Jb(is_small_label)) // if < 4096, treat as direct
+                g = g.emit_inst(Jb(is_small_label)) // if < 256, treat as direct
                 // Large value - treat as pointer, load discriminant from pointer
                 g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rcx")))
                 g = g.define_label(is_small_label)
@@ -4540,16 +4540,17 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 // For CallExpr patterns (enum constructors like RGB), the scrutinee could be:
                 // - A direct discriminant (for simple enums without data, typically small numbers)
                 // - A pointer to enum structure (for enums with data, always non-zero and typically large)
-                // We use a threshold to distinguish: small values (<4096) are discriminants, large values are pointers
+                // We use a threshold to distinguish: small values (<256) are discriminants, large values are pointers
+                // Note: Code section typically starts at 0x400000, so any value < 0x10000 is definitely not a pointer
                 // Load the value from stack into rcx
                 g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
-                // Check if value is small (< 4096) - likely a direct discriminant
+                // Check if value is small (< 256) - likely a direct discriminant
                 // If large - treat as pointer and dereference
-                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(4096)))
+                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(256)))
                 let (g2, is_small_label) = g.new_label()
                 g = g2
-                g = g.emit_inst(Jb(is_small_label)) // if < 4096, treat as direct discriminant
-                // Large value (>= 4096) - treat as pointer, load discriminant from pointer
+                g = g.emit_inst(Jb(is_small_label)) // if < 256, treat as direct discriminant
+                // Large value (>= 256) - treat as pointer, load discriminant from pointer
                 g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rcx")))
                 g = g.define_label(is_small_label)
                 // Now rcx has the discriminant (either direct or dereferenced)
