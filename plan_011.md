@@ -1,70 +1,49 @@
-# Plan: Fix Enum Constructors with Data (Example 011)
+# Plan 011: Fix Enum Constructors with Data
 
-## Current Status
+## Summary
 
-- ✅ Simple enums (Red, Green, Blue) work
-- ✅ Enum constructors with data work (RGB, RGBA) - stored in global buffer
-- ✅ Pattern matching works with underscore patterns (RGB(_))
-- ❌ Field binding not implemented (RGB(r, g, b) crashes)
+### Current Status
 
-## Implementation Details
+1. ✅ Simple enums (Red, Green) work when NOT mixed with enums with data
+2. ✅ Passing enum values to functions works
+3. ✅ Pattern matching with underscore works (`RGB(_) => ...`)
+4. ❌ Pattern matching with enum constructors crashes or returns wrong value
 
-### Global Enum Buffer
-- 64KB static buffer `.Lenum_buf` 
-- `enum_buf_offset` tracks next available offset
-- Enum constructors store data in buffer instead of stack
+### Root Causes Identified
 
-### Pattern Matching
-- Works with underscore patterns: `RGB(_)`, `RGBA(_)`
+1. **Missing pointer/direct discriminant check**: The CallExpr pattern matching code assumed all values are pointers, but simple enums store discriminants directly. Fixed by adding 4096 threshold check.
 
-## Field Binding Complexity
+2. **Potential issue with enum buffer addressing**: The enum buffer is defined in the code section, and RipRel32 addressing may not be computing addresses correctly, resulting in pointer value 0.
 
-Implementing `RGB(r, g, b)` requires:
-1. Tracking bound variable names when matching
-2. Loading field values from enum buffer when those variables are used
+### Debugging Notes
 
-**Challenge:** MoonBit's nested match expressions and variable scoping make this complex.
+- Creating `RGB(10)` and returning it directly returns 0 instead of a valid pointer
+- This suggests the enum buffer address computation is broken
+- The issue is NOT in the pattern matching code itself, but in how the enum constructor stores/returns the buffer address
 
-## Workaround
-
-Use underscore patterns:
-```moonbit
-RGB(_) => println("RGB")   // ✅ Works
-```
-
-Not:
-```moonbit
-RGB(r, g, b) => println("\{r}")  // ❌ Crashes
-```
-
-## Test Results
-
-All examples 001-006, 009-010: IDENTICAL to official compiler
-Example 011: Works with underscore patterns
-
-Not working (field binding needed):
-```moonbit
-RGB(r, g, b) => println("\{r}, \{g}, \{b}")  // Crashes
-```
-
-This requires:
-- Tracking the match body's local variable scope
-- Allocating new stack slots for bound variables  
-- Loading from enum buffer with correct offsets
-
-## Test Results
+### Test Results
 
 Working:
 ```moonbit
 enum Color { Red, Green, RGB(Int) }
 let c = RGB(10)
 match c {
-  Red => println("Red")
-  RGB(_) => println("RGB")  // Works!
+  _ => 999  // Returns 999 - underscore works
 }
 ```
 
-Not working (field binding needed):
+Not working:
 ```moonbit
-RGB(r, g, b) => println("\{r}, \{g}, \{b}")  // Crashes
+enum Color { Red, RGB(Int) }
+let c = RGB(10)
+match c {
+  RGB(_) => 111  // Should return 111, but returns 0
+  Red => 0
+}
 ```
+
+## Next Steps
+
+1. Debug the enum buffer address computation - verify RipRel32 is computing correct addresses
+2. Consider storing enum buffer in a known location (e.g., at fixed address)
+3. Once enum constructor returns correct pointer, field binding should work
