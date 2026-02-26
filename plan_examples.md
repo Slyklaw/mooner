@@ -11,13 +11,14 @@
 | 005_basic_array | ✅ | ✅ | **OUTPUT MATCHES official** |
 | 006_basic_string | ✅ | ✅ | **OUTPUT MATCHES official** |
 | 007_basic_tuple | ✅ | ❌ | **Partial** - prints `<tuple>` for variables; literals partially implemented |
-| 008_basic_map | ✅ | ❌ | **Partial** - MapLit stores entries in buffer, index lookup implemented but not working due to LetBind parsing issue |
+| 008_basic_map | ✅ | ❌ | **Partial** - MapLit stores entries in buffer, var_is_map tracking works (detected correctly), index lookup implemented but returns wrong values, map printing shows `<map>` placeholder |
 
 ### 2025-02-26: Map Implementation
 - Added MapLit code generation to store key-value pairs in map buffer
 - Added IndexExpr handler for map key lookup (linear search implementation)
+- Verified var_is_map tracking works correctly (detects map variables)
 - Map printing shows placeholder `<map>`
-- Issue: LetBind parsing problem (same as tuple) prevents proper map detection
+- Issue: Complex map printing code crashes at runtime; index lookup not returning correct values
 | 009_basic_control_flows | ✅ | ✅ | OUTPUT MATCHES official |
 | 010_basic_struct | ✅ | ✅ | **OUTPUT MATCHES official** |
 | 011_basic_enum | ✅ | ✅ | **OUTPUT MATCHES official** |
