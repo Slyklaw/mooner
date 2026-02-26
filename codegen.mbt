@@ -4085,12 +4085,51 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     }
     MapLit(entries) => {
       // Generate code for map literal: { "key1": value1, "key2": value2, ... }
-      // Simplified: return number of entries as a placeholder
-      // A real implementation would allocate a hash table
+      // Store entries in map buffer: [num_entries: 4][key_ptr: 8][value: 8]...
+      // Returns offset into map buffer
       let num_entries = entries.length()
       let g = { ..self, needs_map_buf: true }
-      // Return a non-zero value to indicate a map was created
-      g.emit_inst(Mov(Reg64("rax"), Imm32(num_entries)))
+      // First, evaluate all keys and values and push them onto stack
+      let mut g2 = g
+      let mut i = num_entries - 1
+      while i >= 0 {
+        let (key_expr, val_expr) = entries[i]
+        // Evaluate value first
+        g2 = g2.codegen_expr(val_expr)
+        g2 = g2.emit_inst(Push(Reg64("rax")))
+        // Then evaluate key
+        g2 = g2.codegen_expr(key_expr)
+        g2 = g2.emit_inst(Push(Reg64("rax")))
+        i = i - 1
+      }
+      // Now store entries to map buffer
+      // Calculate offset: map_buf_offset (starts at 0)
+      let entry_size = 16 // 8 bytes key + 8 bytes value
+      let map_size = 4 + num_entries * entry_size
+      // Load map buffer address into rdi
+      let buf_label = ".Lmap_buf"
+      g2 = g2.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+      // Add current offset
+      g2 = g2.emit_inst(Add(Reg64("rdi"), Imm32(g2.map_buf_offset)))
+      // Store num_entries (4 bytes)
+      g2 = g2.emit_inst(Mov(MemOffset("rdi", 0), Imm32(num_entries)))
+      // Store each entry
+      let mut j = 0
+      while j < num_entries {
+        let key_offset = 4 + j * entry_size
+        let val_offset = 4 + j * entry_size + 8
+        // Pop value (last pushed = first to pop)
+        g2 = g2.emit_inst(Pop(Reg64("rax")))
+        g2 = g2.emit_inst(Mov(MemOffset("rdi", val_offset), Reg64("rax")))
+        // Pop key
+        g2 = g2.emit_inst(Pop(Reg64("rax")))
+        g2 = g2.emit_inst(Mov(MemOffset("rdi", key_offset), Reg64("rax")))
+        j = j + 1
+      }
+      // Return the offset as the map handle
+      g2 = g2.emit_inst(Mov(Reg64("rax"), Imm32(g2.map_buf_offset)))
+      // Update map buffer offset for next map
+      { ..g2, map_buf_offset: g2.map_buf_offset + map_size }
     }
     IndexExpr(arr, idx) => {
       let is_str = is_string_expr(arr, self.var_is_string)
@@ -4102,7 +4141,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         g
       } else if is_map {
         // Map access: simplified - return 0 for now
-        // Full implementation would search the map buffer for the key
         g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
       } else {
         let g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
