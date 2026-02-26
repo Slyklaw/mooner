@@ -31,18 +31,35 @@ true
 The test `println(map1["key1"])` should print `1`, not `0` or wrong value.
 
 **Task 1.1: Debug why IndexExpr returns wrong value**
-- [ ] Add debug output in IndexExpr handler to see what's being searched
-- [ ] Verify map offset is being passed correctly
-- [ ] Verify key comparison is working
+- [x] Added debug output in IndexExpr handler to see what's being searched
+- [x] Verified map offset is being passed correctly
+- [x] Added string deduplication in add_string() so same string literals get same pointer
+- [x] Added Mov(MemOffset, Imm32) instruction handler (was missing!)
+- [x] Verified var_is_map tracking correctly identifies map variables
 
 **Task 1.2: Fix map key lookup**
 - [ ] Current implementation searches linear through buffer
-- [ ] Keys are stored as integers (not string pointers)
-- [ ] Need to verify the key being searched matches stored key
-- [ ] Need to return the correct value offset when found
+- [x] Keys are stored as string pointers
+- [x] With string deduplication, same string should produce same pointer
+- [ ] Need to verify key comparison works
 
 **Task 1.3: Test index access**
 - [ ] Create test: `let m = { "a": 5 }; println(m["a"])` → should print `5`
+
+---
+
+### What We Learned (2025-02-26)
+
+1. **String deduplication needed**: Each string literal was getting a NEW label (`.Lstr0`, `.Lstr1`, etc.), so keys didn't match. Fixed by checking if string already exists in `add_string()`.
+
+2. **Missing instruction handler**: `Mov(MemOffset, Imm32)` was not implemented - added it to codegen.mbt around line 709.
+
+3. **Map variable tracking works**: Debug confirmed `var_is_map` correctly identifies when a variable holds a map.
+
+4. **Current state**: Map index access crashes with segfault. The exact cause is unclear but likely related to:
+   - Data section addressing (RIP-relative to data labels may not work as expected)
+   - Map buffer layout/storage mechanism
+   - Need to investigate alternative approach for storing/looking up map data
 
 ---
 
