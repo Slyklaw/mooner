@@ -4549,29 +4549,28 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   // Bind fields if there are any bindings
                   let num_bindings = bindings.length()
                   if num_bindings > 0 {
-                    // Load enum pointer from stack into r12
+                    // Store bound variables at specific stack locations
+                    // Use negative offsets that won't conflict with LetBind
+                    // LetBind starts from next_offset which is typically around -8 to -16
+                    // We'll use -128, -136, -144, etc. to be far away
+                    // Load enum pointer from stack
                     g = g.emit_inst(Mov(Reg64("r12"), MemIndirect("rsp")))
                     // Bind each field
                     let mut bind_idx = 0
                     while bind_idx < num_bindings {
                       match bindings[bind_idx] {
                         Ident(bind_name) => {
-                          // Allocate stack slot for this bound variable
-                          let offset = g.next_offset - 8
+                          // Use very low stack offsets to avoid LetBind
+                          let offset = -128 - bind_idx * 8
                           let new_offsets = g.var_offsets
                           new_offsets[bind_name] = offset
-                          g = {
-                            ..g,
-                            next_offset: offset,
-                            var_offsets: new_offsets,
-                          }
+                          g = { ..g, var_offsets: new_offsets }
                           // Load from enum buffer: [r12 + (bind_idx + 1) * 8]
                           g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
-                          g = g.emit_inst(
-                            Mov(Reg64("rdx"), Imm32((bind_idx + 1) * 8)),
-                          )
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32((bind_idx + 1) * 8)))
                           g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
                           g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+                          // Store at rbp + offset
                           g = g.emit_inst(Mov(StackBP64(offset), Reg64("rax")))
                         }
                         _ => ()
@@ -4591,29 +4590,24 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   // Bind fields if there are any bindings
                   let num_bindings = bindings.length()
                   if num_bindings > 0 {
-                    // Load enum pointer from stack into r12
+                    // Store bound variables at specific stack locations
+                    // Load enum pointer from stack
                     g = g.emit_inst(Mov(Reg64("r12"), MemIndirect("rsp")))
                     // Bind each field
                     let mut bind_idx = 0
                     while bind_idx < num_bindings {
                       match bindings[bind_idx] {
                         Ident(bind_name) => {
-                          // Allocate stack slot for this bound variable
-                          let offset = g.next_offset - 8
+                          let offset = -128 - bind_idx * 8
                           let new_offsets = g.var_offsets
                           new_offsets[bind_name] = offset
-                          g = {
-                            ..g,
-                            next_offset: offset,
-                            var_offsets: new_offsets,
-                          }
+                          g = { ..g, var_offsets: new_offsets }
                           // Load from enum buffer: [r12 + (bind_idx + 1) * 8]
                           g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
-                          g = g.emit_inst(
-                            Mov(Reg64("rdx"), Imm32((bind_idx + 1) * 8)),
-                          )
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32((bind_idx + 1) * 8)))
                           g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
                           g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+                          // Store at rbp + offset
                           g = g.emit_inst(Mov(StackBP64(offset), Reg64("rax")))
                         }
                         _ => ()
