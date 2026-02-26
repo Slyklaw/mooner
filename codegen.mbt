@@ -1903,6 +1903,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         is_float_expr(right, self.var_is_float)
       let is_string = is_string_expr(left, self.var_is_string) ||
         is_string_expr(right, self.var_is_string)
+      let is_string_concat = op == "+" &&
+        is_string_expr(left, self.var_is_string) &&
+        is_string_expr(right, self.var_is_string)
       if is_string && (op == "==" || op == "!=") {
         let g = self.codegen_expr(left)
         let g = g.emit_inst(Push(Reg64("rax")))
@@ -1939,7 +1942,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         is_array_expr(left, self.var_array_len) &&
         is_array_expr(right, self.var_array_len) {
         self.codegen_expr(ArrayLit([Spread(left), Spread(right)]))
-      } else if op == "+" && is_string {
+      } else if is_string_concat {
         // String concatenation
         let mut g = self
         // Evaluate first string
@@ -1989,6 +1992,17 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         g = g.emit_inst(Pop(Reg64("rcx")))
         g = g.emit_inst(Pop(Reg64("rbx")))
         g
+      } else if op == "+" && is_string {
+        // String + non-string concatenation not fully implemented
+        // Evaluate both operands for side effects, return empty string
+        let mut g = self
+        g = g.codegen_expr(left)
+        g = g.emit_inst(Push(Reg64("rax")))
+        g = g.codegen_expr(right)
+        g = g.emit_inst(Pop(Reg64("rax")))
+        // Return empty string
+        let (g2, label) = g.add_string("")
+        g2.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
       } else if is_float {
         let g = self.codegen_expr(left)
         let g = g.emit_inst(PushXmm("xmm0"))
