@@ -2857,7 +2857,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   StructUpdate(base, updates) => {
                     // Inline struct update - get field names from base and print
                     let field_names = match base {
-                  Ident(var_name) =>
+                      Ident(var_name) =>
                         match g.var_struct_fields.get(var_name) {
                           Some(fields) => fields
                           None =>
@@ -4134,37 +4134,79 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     IndexExpr(arr, idx) => {
       let is_str = is_string_expr(arr, self.var_is_string)
       let is_map = is_map_expr(arr, self.var_is_map)
-      let g = self.codegen_expr(arr)
-      let g = g.emit_inst(Push(Reg64("rax"))) // push map offset
-      let g = g.codegen_expr(idx) // idx = key string
-      let g = if is_str {
-        g
-      } else if is_map {
-        // Map access: simplified - return 0 for now
-        g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+      let mut g = self.codegen_expr(arr)
+      // Save array/string/map address on stack
+      g = g.emit_inst(Push(Reg64("rax")))
+      // Evaluate index/key
+      g = g.codegen_expr(idx)
+      // rax = index (for array/string) or key pointer (for map)
+      if is_map {
+        // Map access: search for key in map buffer
+        // Pop map offset into r14
+        g = g.emit_inst(Pop(Reg64("r14")))
+        // r14 = map offset
+        // Load map buffer base into r13
+        let buf_label = ".Lmap_buf"
+        g = g.emit_inst(Lea(Reg64("r13"), RipRel32(buf_label)))
+        // r12 = map base = r13 + r14
+        g = g.emit_inst(Mov(Reg64("r12"), Reg64("r13")))
+        g = g.emit_inst(Add(Reg64("r12"), Reg64("r14")))
+        // Load num_entries into rbx
+        g = g.emit_inst(Mov(Reg64("rbx"), MemIndirect("r12")))
+        // Counter = 0
+        g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+        // Search loop
+        let map_search_loop = ".Lmap_search_loop\{g.label_counter}"
+        let map_found = ".Lmap_found\{g.label_counter + 1}"
+        let map_not_found = ".Lmap_not_found\{g.label_counter + 2}"
+        g = { ..g, label_counter: g.label_counter + 3 }
+        g = g.define_label(map_search_loop)
+        // Check if counter >= num_entries
+        g = g.emit_inst(Cmp(Reg64("rcx"), Reg64("rbx")))
+        g = g.emit_inst(Jae(map_not_found))
+        // Compare keys: entry key at r12 + 4 + rcx * 16
+        g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+        g = g.emit_inst(Mov(Reg64("rsi"), Imm32(16)))
+        g = g.emit_inst(Imul(Reg64("rdx"), Reg64("rsi")))
+        g = g.emit_inst(Add(Reg64("rdx"), Imm32(4)))
+        g = g.emit_inst(Add(Reg64("rdx"), Reg64("r12")))
+        g = g.emit_inst(Mov(Reg64("rdx"), MemIndirect("rdx")))
+        // Compare with search key - use rax directly
+        g = g.emit_inst(Cmp(Reg64("rdx"), Reg64("rax")))
+        g = g.emit_inst(Je(map_found))
+        // Increment counter
+        g = g.emit_inst(Inc(Reg64("rcx")))
+        g = g.emit_inst(Jmp(map_search_loop))
+        g = g.define_label(map_found)
+        // Found! Load value: r12 + 4 + rcx * 16 + 8
+        g = g.emit_inst(Mov(Reg64("rax"), Reg64("rcx")))
+        g = g.emit_inst(Mov(Reg64("rsi"), Imm32(16)))
+        g = g.emit_inst(Imul(Reg64("rax"), Reg64("rsi")))
+        g = g.emit_inst(Add(Reg64("rax"), Imm32(12)))
+        g = g.emit_inst(Add(Reg64("rax"), Reg64("r12")))
+        g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+        g = g.emit_inst(Jmp(".Lmap_search_end\{g.label_counter - 1}"))
+        g = g.define_label(map_not_found)
+        // Not found, return 0
+        g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+        g.define_label(".Lmap_search_end\{g.label_counter - 1}")
       } else {
-        let g = g.emit_inst(Mov(Reg64("rcx"), Imm32(8)))
-        g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
+        // Array or string indexing
+        // Pop the address
+        g = g.emit_inst(Pop(Reg64("rcx")))
+        // rcx = array/string address, rax = index
+        if is_str {
+          // String: add index to address, load byte
+          g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+          g.emit_inst(Movzx(Reg64("rax"), MemIndirect("rcx")))
+        } else {
+          // Array: index * 8 + address + 8
+          g = g.emit_inst(Mov(Reg64("rsi"), Imm32(8)))
+          g = g.emit_inst(Imul(Reg64("rax"), Reg64("rsi")))
+          g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+          g.emit_inst(Mov(Reg64("rax"), MemIndirect("rcx")))
+        }
       }
-      let g = g.emit_inst(Pop(Reg64("rcx")))
-      // For arrays, add 8 to skip the length field (offset 0 is length, elements start at offset 8)
-      let g = if is_str {
-        g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
-      } else if is_map {
-        // For map access, just return 0
-        g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-      } else {
-        let g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
-        g.emit_inst(Add(Reg64("rcx"), Imm32(8)))
-      }
-      // For strings/maps, rax already contains the value directly (after Add)
-      // For arrays, we need to load from memory
-      let g = if is_str || is_map {
-        g
-      } else {
-        g.emit_inst(Mov(Reg64("rax"), MemIndirect("rcx")))
-      }
-      g
     }
     Tuple(elems) => {
       let num_elems = elems.length()
@@ -4287,10 +4329,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       let is_bool = is_bool_expr(value, self.var_is_bool)
       let is_tuple = match value {
         Tuple(_) => true
+        Ident(src) => self.var_is_tuple.get(src) == Some(true)
         _ => false
       }
       let is_map = match value {
         MapLit(_) => true
+        Ident(src) => self.var_is_map.get(src) == Some(true)
         _ => false
       }
       let is_struct_or_tuple = match value {
