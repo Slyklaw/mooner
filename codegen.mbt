@@ -2857,7 +2857,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   StructUpdate(base, updates) => {
                     // Inline struct update - get field names from base and print
                     let field_names = match base {
-                      Ident(var_name) =>
+                  Ident(var_name) =>
                         match g.var_struct_fields.get(var_name) {
                           Some(fields) => fields
                           None =>
@@ -4416,7 +4416,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         let new_bools = g2.var_is_bool
         new_bools[name] = is_bool
         let new_tuples = g2.var_is_tuple
-        new_tuples[name] = is_tuple
+        // Also set is_tuple based on whether tuple_field_types was computed
+        let should_be_tuple = tuple_field_types != None
+        new_tuples[name] = is_tuple || should_be_tuple
         let new_maps = g2.var_is_map
         new_maps[name] = is_map
         let new_array_lens = g2.var_array_len
