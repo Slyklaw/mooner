@@ -4533,17 +4533,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             }
             match disc_val {
               Some(disc) => {
-                // Check if this variant has data (bindings)
-                // If so, the scrutinee is a pointer to the enum structure
-                // If not, the scrutinee IS the discriminant directly
-                let has_data = bindings.length() > 0
-                if has_data {
-                  // Load the address from stack, then load discriminant from that address
-                  g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
-                  g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rcx")))
-                } else {
-                  g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
-                }
+                // For CallExpr patterns (enum constructors like RGB), the scrutinee is always
+                // a pointer to the enum buffer, regardless of whether we bind any fields.
+                // Even RGB(_) has a pointer scrutinee - we must load discriminant from it.
+                // Load the pointer from stack, then load discriminant from the pointer
+                g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
+                g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rcx")))
                 g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(disc)))
                 if is_last {
                   // Last case - if doesn't match, fall through (do nothing)
@@ -4551,27 +4546,84 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   let skip_bind = ".Lmatch_skip_bind\{g.label_counter}"
                   g = { ..g, label_counter: g.label_counter + 1 }
                   g = g.emit_inst(Jne(skip_bind))
-                  // Bind fields - simplified: just skip for now
-                  // let num_bindings = bindings.length()
-                  // let mut bind_idx = 0
-                  // while bind_idx < num_bindings {
-                  //   match bindings[bind_idx] {
-                  //     Ident(bind_name) => {
-                  //       // Skip binding for now
-                  //     }
-                  //     _ => ()
-                  //   }
-                  //   bind_idx = bind_idx + 1
-                  // }
-                  g = g.codegen_expr(body)
+                  // Bind fields if there are any bindings
+                  let num_bindings = bindings.length()
+                  if num_bindings > 0 {
+                    // Load enum pointer from stack into r12
+                    g = g.emit_inst(Mov(Reg64("r12"), MemIndirect("rsp")))
+                    // Bind each field
+                    let mut bind_idx = 0
+                    while bind_idx < num_bindings {
+                      match bindings[bind_idx] {
+                        Ident(bind_name) => {
+                          // Allocate stack slot for this bound variable
+                          let offset = g.next_offset - 8
+                          let new_offsets = g.var_offsets
+                          new_offsets[bind_name] = offset
+                          g = {
+                            ..g,
+                            next_offset: offset,
+                            var_offsets: new_offsets,
+                          }
+                          // Load from enum buffer: [r12 + (bind_idx + 1) * 8]
+                          g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
+                          g = g.emit_inst(
+                            Mov(Reg64("rdx"), Imm32((bind_idx + 1) * 8)),
+                          )
+                          g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
+                          g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+                          g = g.emit_inst(Mov(StackBP64(offset), Reg64("rax")))
+                        }
+                        _ => ()
+                      }
+                      bind_idx = bind_idx + 1
+                    }
+                    g = g.codegen_expr(body)
+                  } else {
+                    g = g.codegen_expr(body)
+                  }
                   g = g.emit_inst(Jmp(end_label))
                   g = g.define_label(skip_bind)
                 } else {
                   let next_case = ".Lmatch_next\{g.label_counter}"
                   g = { ..g, label_counter: g.label_counter + 1 }
                   g = g.emit_inst(Jne(next_case))
-                  // Bind fields - simplified: just skip for now
-                  g = g.codegen_expr(body)
+                  // Bind fields if there are any bindings
+                  let num_bindings = bindings.length()
+                  if num_bindings > 0 {
+                    // Load enum pointer from stack into r12
+                    g = g.emit_inst(Mov(Reg64("r12"), MemIndirect("rsp")))
+                    // Bind each field
+                    let mut bind_idx = 0
+                    while bind_idx < num_bindings {
+                      match bindings[bind_idx] {
+                        Ident(bind_name) => {
+                          // Allocate stack slot for this bound variable
+                          let offset = g.next_offset - 8
+                          let new_offsets = g.var_offsets
+                          new_offsets[bind_name] = offset
+                          g = {
+                            ..g,
+                            next_offset: offset,
+                            var_offsets: new_offsets,
+                          }
+                          // Load from enum buffer: [r12 + (bind_idx + 1) * 8]
+                          g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
+                          g = g.emit_inst(
+                            Mov(Reg64("rdx"), Imm32((bind_idx + 1) * 8)),
+                          )
+                          g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
+                          g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+                          g = g.emit_inst(Mov(StackBP64(offset), Reg64("rax")))
+                        }
+                        _ => ()
+                      }
+                      bind_idx = bind_idx + 1
+                    }
+                    g = g.codegen_expr(body)
+                  } else {
+                    g = g.codegen_expr(body)
+                  }
                   g = g.emit_inst(Jmp(end_label))
                   g = g.define_label(next_case)
                 }
