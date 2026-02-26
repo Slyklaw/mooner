@@ -10,13 +10,13 @@
 | 004_basic_function | ✅ | ✅ | OUTPUT MATCHES official |
 | 005_basic_array | ✅ | ✅ | **OUTPUT MATCHES official** |
 | 006_basic_string | ✅ | ✅ | **OUTPUT MATCHES official** |
-| 007_basic_tuple | ✅ | ❌ | **Segfault** |
-| 008_basic_map | ✅ | ❌ | **Segfault** |
+| 007_basic_tuple | ✅ | ❌ | **Tuple not implemented** - outputs garbage instead of tuple values |
+| 008_basic_map | ✅ | ❌ | **Map not implemented** - outputs placeholder instead of map contents |
 | 009_basic_control_flows | ✅ | ✅ | OUTPUT MATCHES official |
 | 010_basic_struct | ✅ | ✅ | **OUTPUT MATCHES official** |
-| 011_basic_enum | ✅ | ⚠️ | Works with underscore patterns; field binding not implemented (use RGB(_) instead of RGB(r,g,b)) |
+| 011_basic_enum | ✅ | ✅ | **OUTPUT MATCHES official** |
 | 012_basic_test | ⚠️ | ❌ | Official compiler fails on this file |
-| 013_pattern_matching | ✅ | ❌ | Compiles but segfaults at runtime (parser infinite loop fixed) |
+| 013_pattern_matching | ✅ | ❌ | Compiles but produces incorrect output (pattern matching incomplete) |
 
 ## Recent Fixes
 
@@ -24,7 +24,7 @@
 - **Issue**: Example 013 pattern matching caused infinite loop during parsing (timeout)
 - **Root cause**: In `parser.mbt`, when the parser encountered RBrace (or similar tokens) at the start of an expression, it returned `(Unit, self)` without advancing the parser position, causing an infinite loop in the main parse loop
 - **Fix**: Added check in `Parser::parse()` to detect when the parser position doesn't advance after parsing an expression, and skip the current token to prevent infinite loop
-- **Result**: Example 013 now compiles (no timeout), but has a runtime segfault
+- **Result**: Example 013 now compiles (no timeout), but produces incorrect output
 
 ### 2025-02-25: Simple Enum Pattern Matching Fixed
 - **Issue**: Example 011 crashed on simple enum variants (Green, Blue) after printing "Red"
@@ -219,14 +219,14 @@ Update this section as tasks are completed:
 - [x] 009_basic_control_flows working (OUTPUT MATCHES official)
 - [x] 010_basic_struct working (OUTPUT MATCHES official)
 - [ ] 007_basic_tuple working (segfault)
-- [ ] 008_basic_map working (segfault)
-- [ ] 011_basic_enum working (segfault)
-- [ ] 012_basic_test (official compiler fails on file)
-- [ ] 013_pattern_matching (timeout)
+- [ ] 008_basic_map working (map not implemented)
+- [x] 011_basic_enum working (OUTPUT MATCHES official)
+- [ ] 012_basic_test (official compiler fails on file - outputs error message)
+- [ ] 013_pattern_matching (compiles but produces wrong output)
 
 ## Summary
 
-**Working examples: 8/13** (001-006, 009-010)
+**Working examples: 10/13** (001-006, 009-011)
 
 **Most recent fixes:**
-1. Example 005 (array) now outputs identically to official compiler
+1. Example 011 (enum) now outputs identically to official compiler
