@@ -260,9 +260,35 @@ Each test should be verified against official MoonBit compiler.
 
 ## Success Criteria
 
-- [x] `println({ "a": 1 })` prints something (not crash)
+- [x] `println({ "a": 1 })` prints something (not crash) - prints `<map>`
 - [x] `let m = { "a": 1 }; println(m["a"])` prints `1`
 - [x] `let m1 = { "a": 1 }; let m2 = { "a": 1 }; println(m1 == m2)` prints `true`
 - [ ] `println({ "a": 1 })` prints `{1: 1}` or similar (map printing not implemented)
-- [ ] `let m = { "a": 1 }; m["a"] = 5; println(m["a"])` prints `5` (map update works but printing not)
+- [x] Map update works: `let m = { "a": 1 }; m["a"] = 5; println(m["a"])` prints `5`
 - [ ] Example 008 output matches official compiler EXACTLY (map printing pending)
+
+## Progress Summary (2026-02-27)
+
+Example 008 has 4 println statements:
+1. `println(map1)` → `<map>` ❌ (should be `{"key1": 1, "key2": 2, "key3": 3}`)
+2. `println(map1["key1"])` → `1` ✓
+3. `println(map1 == map2)` → `true` ✓
+4. `println(map1)` (after update) → `<map>` ❌ (should be `{"key1": 10, ...}`)
+
+**Progress: 50%** - 2 of 4 println statements produce correct output.
+
+## Other Working Examples
+
+Verified working (output matches official compiler):
+- 001_hello ✓
+- 002_variable ✓
+- 003_basic_constants ✓
+- 004_basic_function ✓
+- 006_basic_string ✓
+- 009_basic_control_flows ✓
+- 010_basic_struct ✓
+
+Known issues in other examples:
+- 005_basic_array: push/pop operations differ
+- 007_basic_tuple: tuple printing shows `<tuple>`
+- 008_basic_map: map printing shows `<map>` (50% done)
