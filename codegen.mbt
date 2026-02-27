@@ -2818,12 +2818,16 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
                     } else if g.var_is_map.get(var_name) == Some(true) {
-                      // Map variable - print a placeholder for now
+                      // Map variable - use placeholder for now
                       g = g.codegen_expr(arg)
-                      let (g2, label1) = g.add_string("<map>")
-                      g = g2
-                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
+                      g = g.emit_inst(
+                        Lea(Reg64("rsi"), RipRel32(".Lmap_placeholder")),
+                      )
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      g = g.emit_inst(Jmp(skip_print_label))
                     } else if g.var_types.get(var_name) != None ||
                       is_struct_expr(arg, g.var_types) {
                       // Struct variable - print each field
@@ -5532,6 +5536,25 @@ pub fn codegen(ast : AST) -> Bytes {
     g = g.emit_byte(0)
     str_idx = str_idx + 1
   }
+  // Map printing strings
+  g = g.define_label(".Lmap_open")
+  g = g.emit_byte(123) // {
+  g = g.define_label(".Lmap_count")
+  g = g.emit_bytes([99, 111, 117, 110, 116, 58, 32, 0]) // "count: \0"
+  g = g.define_label(".Lmap_close")
+  g = g.emit_byte(125) // }
+  g = g.define_label(".Lmap_colon")
+  g = g.emit_byte(58) // :
+  g = g.emit_byte(32) // space
+  g = g.define_label(".Lmap_comma")
+  g = g.emit_byte(44) // ,
+  g = g.emit_byte(32) // space
+  g = g.define_label(".Lmap_val_placeholder")
+  g = g.emit_byte(42) // *
+  g = g.define_label(".Ldebug")
+  g = g.emit_bytes([100, 101, 98, 117, 103, 10, 0]) // "debug\n\0"
+  g = g.define_label(".Lmap_placeholder")
+  g = g.emit_bytes([60, 109, 97, 112, 62, 0]) // "<map>\0"
   let mut flt_idx = 0
   while flt_idx < g.floats.length() {
     let f = g.floats[flt_idx]

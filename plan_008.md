@@ -277,6 +277,20 @@ Example 008 has 4 println statements:
 
 **Progress: 50%** - 2 of 4 println statements produce correct output.
 
+## Map Printing Attempts (2026-02-27)
+
+Attempted to implement map printing but hit issues with memory addressing:
+- Basic placeholder `<map>` works fine
+- Attempted to iterate through entries using `Lea` + `Add` + `MemOffset` pattern
+- Each attempt to access map buffer memory causes segfault
+- Issue likely in how RIP-relative addressing works with computed offsets
+
+The map buffer is in .bss section (1024 bytes), accessed via `.Lmap_buf` label.
+The offset stored in map variable points into this buffer.
+Need to properly compute: `.Lmap_buf + offset` then read from that address.
+
+Current code just prints `<map>` placeholder.
+
 ## Other Working Examples
 
 Verified working (output matches official compiler):
