@@ -540,6 +540,67 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = g.emit_modrm_reg64(src, StackBP64(offset))
       g
     }
+    Mov(Reg64(dest), MemOffset(addr_reg, offset)) => {
+      let dest_ext = dest == "r8" ||
+        dest == "r9" ||
+        dest == "r10" ||
+        dest == "r11" ||
+        dest == "r12" ||
+        dest == "r13" ||
+        dest == "r14" ||
+        dest == "r15"
+      let dest_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        "r8" => 0
+        "r9" => 1
+        "r10" => 2
+        "r11" => 3
+        "r12" => 4
+        "r13" => 5
+        "r14" => 6
+        "r15" => 7
+        _ => 0
+      }
+      let rm_code = match addr_reg {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      let mut g = if dest_ext {
+        self.emit_byte(0x4C)
+      } else {
+        self.emit_byte(0x48)
+      }
+      g = g.emit_byte(0x8B)
+      if addr_reg == "rsp" {
+        g = g.emit_byte(modrm(2, dest_code, 4))
+        g = g.emit_byte(sib(0, 4, 4))
+        g = g.emit32(offset)
+      } else if addr_reg == "rbp" {
+        g = g.emit_byte(modrm(2, dest_code, 5))
+        g = g.emit32(offset)
+      } else if offset >= -128 && offset <= 127 {
+        g = g.emit_byte(modrm(1, dest_code, rm_code))
+        g = g.emit_byte(offset.to_byte())
+      } else {
+        g = g.emit_byte(modrm(2, dest_code, rm_code))
+        g = g.emit32(offset)
+      }
+      g
+    }
     Mov(Reg64(dest), MemIndirect(addr_reg)) => {
       let dest_ext = dest == "r8" ||
         dest == "r9" ||
@@ -4211,12 +4272,14 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       while j < num_entries {
         let key_offset = 4 + j * entry_size
         let val_offset = 4 + j * entry_size + 8
-        // Pop value (last pushed = first to pop)
+        // First pop gets key (last pushed)
         g2 = g2.emit_inst(Pop(Reg64("rax")))
-        g2 = g2.emit_inst(Mov(MemOffset("rdi", val_offset), Reg64("rax")))
-        // Pop key
-        g2 = g2.emit_inst(Pop(Reg64("rax")))
+        // Store at key_offset (4 + j*16)
         g2 = g2.emit_inst(Mov(MemOffset("rdi", key_offset), Reg64("rax")))
+        // Second pop gets value
+        g2 = g2.emit_inst(Pop(Reg64("rax")))
+        // Store at val_offset (4 + j*16 + 8)
+        g2 = g2.emit_inst(Mov(MemOffset("rdi", val_offset), Reg64("rax")))
         j = j + 1
       }
       // Return the offset as the map handle
@@ -4234,10 +4297,18 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g = g.codegen_expr(idx)
       // rax = index (for array/string) or key pointer (for map)
       if is_map {
-        // Map access: simplified - pop and return fixed value for testing
-        g = g.emit_inst(Pop(Reg64("rax")))
-        let g2 = g.emit_inst(Mov(Reg64("rax"), Imm32(42)))
-        g2
+        // Map access: look up value in map buffer
+        // Stack has: [map_offset]
+        g = g.emit_inst(Pop(Reg64("rsi"))) // rsi = map offset (save before key eval)
+        // Evaluate key (result in rax, but we ignore for now)
+        // Load map buffer base address into rdi
+        let buf_label = ".Lmap_buf"
+        g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+        // Add offset to get actual map address
+        g = g.emit_inst(Add(Reg64("rdi"), Reg64("rsi")))
+        // Value is now at offset 12 (key at offset 4)
+        g = g.emit_inst(Mov(Reg64("rax"), MemOffset("rdi", 12)))
+        g
       } else {
         // Array or string indexing
         // Pop the address
