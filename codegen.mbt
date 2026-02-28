@@ -2818,13 +2818,37 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
                     } else if g.var_is_map.get(var_name) == Some(true) {
-                      // Map variable - very simple
+                      // Map variable - print key only for now
                       g = g.codegen_expr(arg)
-                      // Just skip to placeholder for now
-                      let (g2, label1) = g.add_string("<map>")
-                      g = g2
-                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
+                      // Compute map base
+                      g = g.emit_inst(Push(Reg64("rax")))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+                      g = g.emit_inst(Pop(Reg64("rsi")))
+                      g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(".Lmap_buf")))
+                      g = g.emit_inst(Add(Reg64("rdi"), Reg64("rsi")))
+                      // Save key to r12
+                      g = g.emit_inst(Mov(Reg64("r12"), MemOffset("rdi", 4)))
+                      // Print {
+                      g = g.emit_inst(
+                        Lea(Reg64("rbx"), RipRel32(".Lmap_brace_open")),
+                      )
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rbx")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      // Print key
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("r12")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      // Print }
+                      g = g.emit_inst(
+                        Lea(Reg64("rbx"), RipRel32(".Lmap_brace_close")),
+                      )
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rbx")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
                       g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
                       g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
                       g = g.emit_inst(Syscall)
@@ -5597,6 +5621,15 @@ pub fn codegen(ast : AST) -> Bytes {
   // Support up to 64 entries (1KB total)
   g = g.define_label(".Lmap_buf")
   g = g.emit_bytes(Array::make(1024, 0x00))
+  // Map printing string labels
+  g = g.define_label(".Lmap_brace_open")
+  g = g.emit_byte(123) // {
+  g = g.define_label(".Lmap_brace_close")
+  g = g.emit_byte(125) // }
+  g = g.define_label(".Lmap_colon_space")
+  g = g.emit_bytes([58, 32]) // ": "
+  g = g.define_label(".Lmap_comma_space")
+  g = g.emit_bytes([44, 32]) // ", "
   // Enum buffer: stores enum data (discriminant + fields)
   // 64KB total, each RGB takes 32 bytes (1 + 3 args), ~2000 enums max
   g = g.define_label(".Lenum_buf")

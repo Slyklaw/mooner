@@ -260,22 +260,32 @@ Each test should be verified against official MoonBit compiler.
 
 ## Success Criteria
 
-- [x] `println({ "a": 1 })` prints something (not crash) - prints `<map>`
+- [x] `println({ "a": 1 })` prints something (not crash) - prints `{key}`
 - [x] `let m = { "a": 1 }; println(m["a"])` prints `1`
 - [x] `let m1 = { "a": 1 }; let m2 = { "a": 1 }; println(m1 == m2)` prints `true`
-- [x] Map printing doesn't crash - prints `<map>` placeholder
+- [x] Map printing doesn't crash - prints `{key}` (key only)
 - [x] Map update works: `let m = { "a": 1 }; m["a"] = 5; println(m["a"])` prints `5`
-- [ ] Example 008 output matches official compiler (map printing pending)
+- [ ] Example 008 output matches official compiler (full key:value printing pending)
 
 ## Progress Summary (2026-02-27)
 
 Example 008 has 4 println statements:
-1. `println(map1)` → `<map>` ❌ (should be `{"key1": 1, "key2": 2, "key3": 3}`)
+1. `println(map1)` → `{key1}` ❌ (should be `{"key1": 1, "key2": 2, "key3": 3}`)
 2. `println(map1["key1"])` → `1` ✓
 3. `println(map1 == map2)` → `true` ✓
-4. `println(map1)` (after update) → `<map>` ❌ (should be `{"key1": 10, ...}`)
+4. `println(map1)` (after update) → `{key1}` ❌ (should be `{"key1": 10, ...}`)
 
 **Progress: 50%** - 2 of 4 println statements produce correct output.
+
+## Map Printing Status (2026-02-28)
+
+Successfully printing map keys! Discovery:
+- Use predefined labels in data section (not dynamically generated strings)
+- Use rbx as intermediate register forLea results
+- Can print key string from map buffer
+- Cannot print integer values without complex int-to-string conversion
+
+Current output: `{key1}` - shows key only, values not printed.
 
 ## Map Printing Attempts (2026-02-27)
 
