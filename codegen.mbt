@@ -2818,11 +2818,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
                     } else if g.var_is_map.get(var_name) == Some(true) {
-                      // Map variable - use placeholder for now
+                      // Map variable - very simple
                       g = g.codegen_expr(arg)
-                      g = g.emit_inst(
-                        Lea(Reg64("rsi"), RipRel32(".Lmap_placeholder")),
-                      )
+                      // Just skip to placeholder for now
+                      let (g2, label1) = g.add_string("<map>")
+                      g = g2
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
                       g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
                       g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
@@ -5539,8 +5540,6 @@ pub fn codegen(ast : AST) -> Bytes {
   // Map printing strings
   g = g.define_label(".Lmap_open")
   g = g.emit_byte(123) // {
-  g = g.define_label(".Lmap_count")
-  g = g.emit_bytes([99, 111, 117, 110, 116, 58, 32, 0]) // "count: \0"
   g = g.define_label(".Lmap_close")
   g = g.emit_byte(125) // }
   g = g.define_label(".Lmap_colon")
