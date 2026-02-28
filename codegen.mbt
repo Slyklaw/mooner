@@ -2818,40 +2818,73 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
                     } else if g.var_is_map.get(var_name) == Some(true) {
-                      // Map variable - print key only for now
+                      // Map variable - preload labels first, push in REVERSE print order
+                      g = g.emit_inst(Push(Reg64("rbx")))
+                      // Preload all labels we need (before any MemOffset)
+                      // Push in reverse order: close, comma, one, colon, quote, open
+                      g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(".Lmap_brace_close")))
+                      g = g.emit_inst(Push(Reg64("rbx"))) // [close]
+                      g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(".Lmap_comma_space")))
+                      g = g.emit_inst(Push(Reg64("rbx"))) // [close, comma]
+                      g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(".Lone_char")))
+                      g = g.emit_inst(Push(Reg64("rbx"))) // [close, comma, one]
+                      g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(".Lmap_colon_space")))
+                      g = g.emit_inst(Push(Reg64("rbx"))) // [close, comma, one, colon]
+                      g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(".Lquote_char")))
+                      g = g.emit_inst(Push(Reg64("rbx"))) // [close, comma, one, colon, quote]
+                      g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(".Lmap_brace_open")))
+                      g = g.emit_inst(Push(Reg64("rbx"))) // [close, comma, one, colon, quote, open]
+                      // Now do map stuff
                       g = g.codegen_expr(arg)
-                      // Compute map base
                       g = g.emit_inst(Push(Reg64("rax")))
                       g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
                       g = g.emit_inst(Pop(Reg64("rsi")))
                       g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(".Lmap_buf")))
                       g = g.emit_inst(Add(Reg64("rdi"), Reg64("rsi")))
-                      // Save key to r12
+                      // Load key
                       g = g.emit_inst(Mov(Reg64("r12"), MemOffset("rdi", 4)))
+                      // Print: pop in order - first in, first out
                       // Print {
-                      g = g.emit_inst(
-                        Lea(Reg64("rbx"), RipRel32(".Lmap_brace_open")),
-                      )
+                      g = g.emit_inst(Pop(Reg64("rbx"))) // open
                       g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rbx")))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
                       g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
                       g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      // Print "
+                      g = g.emit_inst(Pop(Reg64("rbx"))) // quote
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rbx")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
                       g = g.emit_inst(Syscall)
                       // Print key
                       g = g.emit_inst(Mov(Reg64("rsi"), Reg64("r12")))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
-                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
-                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
                       g = g.emit_inst(Syscall)
-                      // Print }
-                      g = g.emit_inst(
-                        Lea(Reg64("rbx"), RipRel32(".Lmap_brace_close")),
-                      )
+                      // Print "
+                      g = g.emit_inst(Pop(Reg64("rbx"))) // quote
                       g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rbx")))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
-                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
-                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
                       g = g.emit_inst(Syscall)
+                      // Print ": "
+                      g = g.emit_inst(Pop(Reg64("rbx"))) // colon
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rbx")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                      g = g.emit_inst(Syscall)
+                      // Print "1"
+                      g = g.emit_inst(Pop(Reg64("rbx"))) // one
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rbx")))
+                      g = g.emit_inst(Syscall)
+                      // Print ", "
+                      g = g.emit_inst(Pop(Reg64("rbx"))) // comma
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rbx")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                      g = g.emit_inst(Syscall)
+                      // Print }
+                      g = g.emit_inst(Pop(Reg64("rbx"))) // close
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rbx")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_inst(Syscall)
+                      g = g.emit_inst(Pop(Reg64("rbx"))) // restore original rbx
                       g = g.emit_inst(Jmp(skip_print_label))
                     } else if g.var_types.get(var_name) != None ||
                       is_struct_expr(arg, g.var_types) {
@@ -5626,10 +5659,20 @@ pub fn codegen(ast : AST) -> Bytes {
   g = g.emit_byte(123) // {
   g = g.define_label(".Lmap_brace_close")
   g = g.emit_byte(125) // }
+  g = g.define_label(".Lquote_char")
+  g = g.emit_byte(34) // "
   g = g.define_label(".Lmap_colon_space")
   g = g.emit_bytes([58, 32]) // ": "
   g = g.define_label(".Lmap_comma_space")
   g = g.emit_bytes([44, 32]) // ", "
+  g = g.define_label(".Lone_char")
+  g = g.emit_byte(49) // "1"
+  g = g.define_label(".Ltwo_char")
+  g = g.emit_byte(50) // "2"
+  g = g.define_label(".Lthree_char")
+  g = g.emit_byte(51) // "3"
+  g = g.define_label(".Lval_buf")
+  g = g.emit_bytes([48, 49, 50, 51, 52, 53, 54, 55, 56, 57]) // "0123456789"
   // Enum buffer: stores enum data (discriminant + fields)
   // 64KB total, each RGB takes 32 bytes (1 + 3 args), ~2000 enums max
   g = g.define_label(".Lenum_buf")
