@@ -1,4 +1,0 @@
-fn main {
-  let m = { "a": 1 }
-  println(m)
-}
