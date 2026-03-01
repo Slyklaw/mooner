@@ -267,6 +267,67 @@ fn xmm_reg_code_lookup(reg : String) -> Int {
   else { 0 }
 }
 
+///|
+fn push_opcode_lookup(reg : String) -> Array[Byte] {
+  if reg == "rax" { [0x50] }
+  else if reg == "rcx" { [0x51] }
+  else if reg == "rdx" { [0x52] }
+  else if reg == "rbx" { [0x53] }
+  else if reg == "rsp" { [0x54] }
+  else if reg == "rbp" { [0x55] }
+  else if reg == "rsi" { [0x56] }
+  else if reg == "rdi" { [0x57] }
+  else if reg == "r8" { [0x41, 0x50] }
+  else if reg == "r9" { [0x41, 0x51] }
+  else if reg == "r10" { [0x41, 0x52] }
+  else if reg == "r11" { [0x41, 0x53] }
+  else if reg == "r12" { [0x41, 0x54] }
+  else if reg == "r13" { [0x41, 0x55] }
+  else if reg == "r14" { [0x41, 0x56] }
+  else if reg == "r15" { [0x41, 0x57] }
+  else { [] }
+}
+
+///|
+fn pop_opcode_lookup(reg : String) -> Array[Byte] {
+  if reg == "rax" { [0x58] }
+  else if reg == "rcx" { [0x59] }
+  else if reg == "rdx" { [0x5A] }
+  else if reg == "rbx" { [0x5B] }
+  else if reg == "rsp" { [0x5C] }
+  else if reg == "rbp" { [0x5D] }
+  else if reg == "rsi" { [0x5E] }
+  else if reg == "rdi" { [0x5F] }
+  else if reg == "r8" { [0x41, 0x58] }
+  else if reg == "r9" { [0x41, 0x59] }
+  else if reg == "r10" { [0x41, 0x5A] }
+  else if reg == "r11" { [0x41, 0x5B] }
+  else if reg == "r12" { [0x41, 0x5C] }
+  else if reg == "r13" { [0x41, 0x5D] }
+  else if reg == "r14" { [0x41, 0x5E] }
+  else if reg == "r15" { [0x41, 0x5F] }
+  else { [] }
+}
+
+///|
+fn reg8_code_lookup(reg : String) -> Int {
+  if reg == "al" { 0 }
+  else if reg == "cl" { 1 }
+  else if reg == "dl" { 2 }
+  else if reg == "bl" { 3 }
+  else if reg == "sil" { 6 }
+  else if reg == "dil" { 7 }
+  else if reg == "r8b" { 0 }
+  else if reg == "r9b" { 1 }
+  else if reg == "r10b" { 2 }
+  else if reg == "r11b" { 3 }
+  else if reg == "r12b" { 4 }
+  else if reg == "r13b" { 5 }
+  else if reg == "r14b" { 6 }
+  else if reg == "r15b" { 7 }
+  else { 0 }
+}
+
 // ============ END LOOKUP TABLES ============
 
 ///|
@@ -301,6 +362,16 @@ fn CodeGen::emit_reg64_opcode(self : CodeGen, reg : String) -> CodeGen {
 }
 
 ///|
+fn CodeGen::emit_push(self : CodeGen, reg : String) -> CodeGen {
+  self.emit_bytes(push_opcode_lookup(reg))
+}
+
+///|
+fn CodeGen::emit_pop(self : CodeGen, reg : String) -> CodeGen {
+  self.emit_bytes(pop_opcode_lookup(reg))
+}
+
+///|
 fn CodeGen::emit_operand64(self : CodeGen, op : X86Operand) -> CodeGen {
   match op {
     Imm8(v) => self.emit_byte(v.to_byte())
@@ -325,42 +396,14 @@ fn CodeGen::emit_modrm_reg64(
   reg : String,
   rm : X86Operand,
 ) -> CodeGen {
-  let reg_code = match reg {
-    "rax" => 0
-    "rcx" => 1
-    "rdx" => 2
-    "rbx" => 3
-    "rsp" => 4
-    "rbp" => 5
-    "rsi" => 6
-    "rdi" => 7
-    "r8" => 0
-    "r9" => 1
-    "r10" => 2
-    "r11" => 3
-    "r12" => 4
-    "r13" => 5
-    "r14" => 6
-    "r15" => 7
-    _ => 0
-  }
+  let reg_code = reg_code_lookup(reg)
+  let rm_code = 
+    match rm {
+      Reg64(r) => Some(reg_code_lookup(r))
+      _ => None
+    }
   match rm {
-    Reg64("rax") => self.emit_byte(modrm(3, reg_code, 0))
-    Reg64("rcx") => self.emit_byte(modrm(3, reg_code, 1))
-    Reg64("rdx") => self.emit_byte(modrm(3, reg_code, 2))
-    Reg64("rbx") => self.emit_byte(modrm(3, reg_code, 3))
-    Reg64("rsp") => self.emit_byte(modrm(3, reg_code, 4))
-    Reg64("rbp") => self.emit_byte(modrm(3, reg_code, 5))
-    Reg64("rsi") => self.emit_byte(modrm(3, reg_code, 6))
-    Reg64("rdi") => self.emit_byte(modrm(3, reg_code, 7))
-    Reg64("r8") => self.emit_byte(modrm(3, reg_code, 0))
-    Reg64("r9") => self.emit_byte(modrm(3, reg_code, 1))
-    Reg64("r10") => self.emit_byte(modrm(3, reg_code, 2))
-    Reg64("r11") => self.emit_byte(modrm(3, reg_code, 3))
-    Reg64("r12") => self.emit_byte(modrm(3, reg_code, 4))
-    Reg64("r13") => self.emit_byte(modrm(3, reg_code, 5))
-    Reg64("r14") => self.emit_byte(modrm(3, reg_code, 6))
-    Reg64("r15") => self.emit_byte(modrm(3, reg_code, 7))
+    Reg64(_) => self.emit_byte(modrm(3, reg_code, rm_code.unwrap()))
     Stack64(offset) => {
       let g = self.emit_byte(modrm(2, reg_code, 4))
       let g = g.emit_byte(sib(0, 4, 4))
@@ -398,56 +441,16 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     Ret => self.emit_byte(0xC3)
     Syscall => self.emit_bytes([0x0F, 0x05])
     RepMovsq => self.emit_bytes([0x48, 0xA5])
-    Push(Reg64("rax")) => self.emit_byte(0x50)
-    Push(Reg64("rcx")) => self.emit_byte(0x51)
-    Push(Reg64("rdx")) => self.emit_byte(0x52)
-    Push(Reg64("rbx")) => self.emit_byte(0x53)
-    Push(Reg64("rsp")) => self.emit_byte(0x54)
-    Push(Reg64("rbp")) => self.emit_byte(0x55)
-    Push(Reg64("rsi")) => self.emit_byte(0x56)
-    Push(Reg64("rdi")) => self.emit_byte(0x57)
-    Push(Reg64("r8")) => self.emit_bytes([0x41, 0x50])
-    Push(Reg64("r9")) => self.emit_bytes([0x41, 0x51])
-    Push(Reg64("r10")) => self.emit_bytes([0x41, 0x52])
-    Push(Reg64("r11")) => self.emit_bytes([0x41, 0x53])
-    Push(Reg64("r12")) => self.emit_bytes([0x41, 0x54])
-    Push(Reg64("r13")) => self.emit_bytes([0x41, 0x55])
-    Push(Reg64("r14")) => self.emit_bytes([0x41, 0x56])
-    Push(Reg64("r15")) => self.emit_bytes([0x41, 0x57])
+    Push(Reg64(reg)) => self.emit_push(reg)
     Push(Imm32(v)) => {
       let g = self.emit_byte(0x68)
       g.emit32(v)
     }
-    Pop(Reg64("rax")) => self.emit_byte(0x58)
-    Pop(Reg64("rcx")) => self.emit_byte(0x59)
-    Pop(Reg64("rdx")) => self.emit_byte(0x5A)
-    Pop(Reg64("rbx")) => self.emit_byte(0x5B)
-    Pop(Reg64("rsp")) => self.emit_byte(0x5C)
-    Pop(Reg64("rbp")) => self.emit_byte(0x5D)
-    Pop(Reg64("rsi")) => self.emit_byte(0x5E)
-    Pop(Reg64("rdi")) => self.emit_byte(0x5F)
-    Pop(Reg64("r8")) => self.emit_bytes([0x41, 0x58])
-    Pop(Reg64("r9")) => self.emit_bytes([0x41, 0x59])
-    Pop(Reg64("r10")) => self.emit_bytes([0x41, 0x5A])
-    Pop(Reg64("r11")) => self.emit_bytes([0x41, 0x5B])
-    Pop(Reg64("r12")) => self.emit_bytes([0x41, 0x5C])
-    Pop(Reg64("r13")) => self.emit_bytes([0x41, 0x5D])
-    Pop(Reg64("r14")) => self.emit_bytes([0x41, 0x5E])
-    Pop(Reg64("r15")) => self.emit_bytes([0x41, 0x5F])
+    Pop(Reg64(reg)) => self.emit_pop(reg)
     Mov(Reg64(dest), Imm32(v)) =>
       match dest {
         "r8" | "r9" | "r10" | "r11" | "r12" | "r13" | "r14" | "r15" => {
-          let reg_code = match dest {
-            "r8" => 0
-            "r9" => 1
-            "r10" => 2
-            "r11" => 3
-            "r12" => 4
-            "r13" => 5
-            "r14" => 6
-            "r15" => 7
-            _ => 0
-          }
+          let reg_code = reg_code_lookup(dest)
           let g = self.emit_byte(0x49)
           let g = g.emit_byte(0xC7)
           let g = g.emit_byte(modrm(3, 0, reg_code))
@@ -463,44 +466,8 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g.emit64(v)
     }
     Mov(Reg64(dest), Reg64(src)) => {
-      let src_code = match src {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        "r8" => 0
-        "r9" => 1
-        "r10" => 2
-        "r11" => 3
-        "r12" => 4
-        "r13" => 5
-        "r14" => 6
-        "r15" => 7
-        _ => 0
-      }
-      let dest_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        "r8" => 0
-        "r9" => 1
-        "r10" => 2
-        "r11" => 3
-        "r12" => 4
-        "r13" => 5
-        "r14" => 6
-        "r15" => 7
-        _ => 0
-      }
+      let src_code = reg_code_lookup(src)
+      let dest_code = reg_code_lookup(dest)
       let src_ext = src == "r8" ||
         src == "r9" ||
         src == "r10" ||
@@ -565,36 +532,8 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
         dest == "r13" ||
         dest == "r14" ||
         dest == "r15"
-      let dest_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        "r8" => 0
-        "r9" => 1
-        "r10" => 2
-        "r11" => 3
-        "r12" => 4
-        "r13" => 5
-        "r14" => 6
-        "r15" => 7
-        _ => 0
-      }
-      let rm_code = match addr_reg {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let dest_code = reg_code_lookup(dest)
+      let rm_code = reg_code_lookup(addr_reg)
       let mut g = if dest_ext {
         self.emit_byte(0x4C)
       } else {
@@ -626,36 +565,8 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
         dest == "r13" ||
         dest == "r14" ||
         dest == "r15"
-      let dest_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        "r8" => 0
-        "r9" => 1
-        "r10" => 2
-        "r11" => 3
-        "r12" => 4
-        "r13" => 5
-        "r14" => 6
-        "r15" => 7
-        _ => 0
-      }
-      let rm_code = match addr_reg {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let dest_code = reg_code_lookup(dest)
+      let rm_code = reg_code_lookup(addr_reg)
       let g = if dest_ext { self.emit_byte(0x4C) } else { self.emit_byte(0x48) }
       let g = g.emit_byte(0x8B)
       if addr_reg == "rsp" {
@@ -670,28 +581,8 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     }
     Mov(MemIndirect(addr_reg), Reg64(src)) => {
       // mov [addr_reg], reg64
-      let src_code = match src {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
-      let rm_code = match addr_reg {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let src_code = reg_code_lookup(src)
+      let rm_code = reg_code_lookup(addr_reg)
       // REX.W + 89 + ModRM (mod=00, reg=src, rm=addr_reg)
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x89)
@@ -706,34 +597,8 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       }
     }
     Mov(MemIndirect(addr_reg), Reg8(src)) => {
-      let reg_code = match src {
-        "al" => 0
-        "cl" => 1
-        "dl" => 2
-        "bl" => 3
-        "sil" => 6
-        "dil" => 7
-        "r8b" => 0
-        "r9b" => 1
-        "r10b" => 2
-        "r11b" => 3
-        "r12b" => 4
-        "r13b" => 5
-        "r14b" => 6
-        "r15b" => 7
-        _ => 0
-      }
-      let rm_code = match addr_reg {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let reg_code = reg8_code_lookup(src)
+      let rm_code = reg_code_lookup(addr_reg)
       let needs_rex = src == "r8b" ||
         src == "r9b" ||
         src == "r10b" ||
@@ -760,17 +625,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       }
     }
     Mov(MemIndirect(addr_reg), Imm8(v)) => {
-      let rm_code = match addr_reg {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let rm_code = reg_code_lookup(addr_reg)
       let mut g = self.emit_byte(0xC6)
       if addr_reg == "rsp" {
         g = g.emit_byte(modrm(0, 0, 4))
@@ -784,17 +639,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g.emit_byte(v.to_byte())
     }
     Mov(MemOffset(addr_reg, offset), Imm32(v)) => {
-      let rm_code = match addr_reg {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let rm_code = reg_code_lookup(addr_reg)
       let mut g = self.emit_byte(0x48) // REX.W
       if addr_reg == "rsp" {
         g = g.emit_byte(0xC7)
@@ -817,28 +662,8 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g.emit32(v)
     }
     Mov(MemOffset(addr_reg, offset), Reg64(src)) => {
-      let reg_code = match src {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
-      let rm_code = match addr_reg {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let reg_code = reg_code_lookup(src)
+      let rm_code = reg_code_lookup(addr_reg)
       let mut g = self.emit_byte(0x48) // REX.W
       if addr_reg == "rsp" {
         g = g.emit_byte(0x89)
@@ -861,24 +686,8 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Mov(Reg8(dest), Reg8(src)) => {
-      let src_code = match src {
-        "al" => 0
-        "cl" => 1
-        "dl" => 2
-        "bl" => 3
-        "sil" => 6
-        "dil" => 7
-        _ => 0
-      }
-      let dest_code = match dest {
-        "al" => 0
-        "cl" => 1
-        "dl" => 2
-        "bl" => 3
-        "sil" => 6
-        "dil" => 7
-        _ => 0
-      }
+      let src_code = reg8_code_lookup(src)
+      let dest_code = reg8_code_lookup(dest)
       let needs_rex = src == "sil" ||
         src == "dil" ||
         dest == "sil" ||
@@ -891,15 +700,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g.emit_byte(modrm(3, src_code, dest_code))
     }
     Mov(Reg8(dest), Imm8(v)) => {
-      let dest_code = match dest {
-        "al" => 0
-        "cl" => 1
-        "dl" => 2
-        "bl" => 3
-        "sil" => 6
-        "dil" => 7
-        _ => 0
-      }
+      let dest_code = reg8_code_lookup(dest)
       let needs_rex = dest == "sil" || dest == "dil"
       let mut g = self
       if needs_rex {
@@ -909,26 +710,8 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g.emit_byte(v.to_byte())
     }
     Movzx(Reg64(dest), Reg8(src)) => {
-      let dest_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
-      let src_code = match src {
-        "al" => 0
-        "cl" => 1
-        "dl" => 2
-        "bl" => 3
-        "sil" => 6
-        "dil" => 7
-        _ => 0
-      }
+      let dest_code = reg_code_lookup(dest)
+      let src_code = reg8_code_lookup(src)
       let needs_rex = src == "sil" || src == "dil"
       let mut g = self
       if needs_rex {
@@ -939,28 +722,8 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g.emit_byte(modrm(3, dest_code, src_code))
     }
     Movzx(Reg64(dest), MemIndirect(addr_reg)) => {
-      let dest_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
-      let rm_code = match addr_reg {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let dest_code = reg_code_lookup(dest)
+      let rm_code = reg_code_lookup(addr_reg)
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0xB6)
@@ -975,25 +738,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       }
     }
     Lea(Reg64(dest), RipRel32(label)) => {
-      let reg_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        "r8" => 0
-        "r9" => 1
-        "r10" => 2
-        "r11" => 3
-        "r12" => 4
-        "r13" => 5
-        "r14" => 6
-        "r15" => 7
-        _ => 0
-      }
+      let reg_code = reg_code_lookup(dest)
       let g = self.emit_byte(0x48) // REX.w
       let g = g.emit_byte(0x8D) // LEA
       let g = g.emit_byte(modrm(0, reg_code, 5)) // mod=00, reg=reg, rm=101 (RIP)
@@ -1009,17 +754,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Add(Reg64(dest), Imm32(v)) => {
-      let rm_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let rm_code = reg_code_lookup(dest)
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
       let g = g.emit_byte(modrm(3, 0, rm_code))
@@ -1032,17 +767,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Sub(Reg64(dest), Imm32(v)) => {
-      let rm_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let rm_code = reg_code_lookup(dest)
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
       let g = g.emit_byte(modrm(3, 5, rm_code))
@@ -1057,25 +782,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Idiv(Reg64(src)) => {
-      let src_code = match src {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        "r8" => 0
-        "r9" => 1
-        "r10" => 2
-        "r11" => 3
-        "r12" => 4
-        "r13" => 5
-        "r14" => 6
-        "r15" => 7
-        _ => 0
-      }
+      let src_code = reg_code_lookup(src)
       let is_ext = src == "r8" ||
         src == "r9" ||
         src == "r10" ||
@@ -1153,17 +860,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     And(Reg64(dest), Imm32(v)) => {
-      let rm_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let rm_code = reg_code_lookup(dest)
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
       let g = g.emit_byte(modrm(3, 4, rm_code))
@@ -1176,17 +873,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Or(Reg64(dest), Imm32(v)) => {
-      let rm_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let rm_code = reg_code_lookup(dest)
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
       let g = g.emit_byte(modrm(3, 1, rm_code))
@@ -1199,17 +886,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Xor(Reg64(dest), Imm32(v)) => {
-      let rm_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let rm_code = reg_code_lookup(dest)
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
       let g = g.emit_byte(modrm(3, 6, rm_code))
@@ -1230,17 +907,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     Inc(Reg64(dest)) =>
       match dest {
         "r8" | "r9" | "r10" | "r11" | "r12" | "r13" | "r14" | "r15" => {
-          let rm_code = match dest {
-            "r8" => 0
-            "r9" => 1
-            "r10" => 2
-            "r11" => 3
-            "r12" => 4
-            "r13" => 5
-            "r14" => 6
-            "r15" => 7
-            _ => 0
-          }
+          let rm_code = reg_code_lookup(dest)
           let g = self.emit_byte(0x49)
           let g = g.emit_byte(0xFF)
           g.emit_byte(modrm(3, 0, rm_code))
@@ -1255,17 +922,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     Dec(Reg64(dest)) =>
       match dest {
         "r8" | "r9" | "r10" | "r11" | "r12" | "r13" | "r14" | "r15" => {
-          let rm_code = match dest {
-            "r8" => 0
-            "r9" => 1
-            "r10" => 2
-            "r11" => 3
-            "r12" => 4
-            "r13" => 5
-            "r14" => 6
-            "r15" => 7
-            _ => 0
-          }
+          let rm_code = reg_code_lookup(dest)
           let g = self.emit_byte(0x49)
           let g = g.emit_byte(0xFF)
           g.emit_byte(modrm(3, 1, rm_code))
@@ -1292,25 +949,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     }
     Shl(Reg64(dest), Imm8(v)) => {
       // SHL r/m64, imm8 = REX.W + C1 /4 ib
-      let dest_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        "r8" => 0
-        "r9" => 1
-        "r10" => 2
-        "r11" => 3
-        "r12" => 4
-        "r13" => 5
-        "r14" => 6
-        "r15" => 7
-        _ => 0
-      }
+      let dest_code = reg_code_lookup(dest)
       let dest_ext = dest == "r8" ||
         dest == "r9" ||
         dest == "r10" ||
@@ -1346,51 +985,21 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     // Variable shift by cl register
     Shl(Reg64(dest), Reg64("cl")) => {
       // shl r64, cl = REX.W + D3 /4
-      let rm_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let rm_code = reg_code_lookup(dest)
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0xD3)
       g.emit_byte(modrm(3, 4, rm_code))
     }
     Shr(Reg64(dest), Reg64("cl")) => {
       // shr r64, cl = REX.W + D3 /5
-      let rm_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let rm_code = reg_code_lookup(dest)
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0xD3)
       g.emit_byte(modrm(3, 5, rm_code))
     }
     Sar(Reg64(dest), Reg64("cl")) => {
       // sar r64, cl = REX.W + D3 /7
-      let rm_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        _ => 0
-      }
+      let rm_code = reg_code_lookup(dest)
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0xD3)
       g.emit_byte(modrm(3, 7, rm_code))
