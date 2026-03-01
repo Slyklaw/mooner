@@ -120,9 +120,5 @@ done
 
 ## Project Components
 
-- `lexer.mbt` - Tokenizer
-- `parser.mbt` - Parser
-- `type_checker.mbt` - Type checking
-- `codegen.mbt` - x86_64 code generation
-- `compiler.mbt` - Main compilation pipeline
+- `compiler_combined.mbt` - Combined compiler (Lexer, Parser, Type Checker, Code Generator)
 - `cmd/main/main.mbt` - CLI entry point
