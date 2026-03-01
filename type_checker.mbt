@@ -175,7 +175,7 @@ fn TypeChecker::check_expr(
     Unit => (self, TUnit)
     Bool(_) => (self, TBool)
     Int(_) => (self, TInt)
-    Float(_) => (self, TFloat)
+    // Float(_) => (self, TFloat) // Removed for self-hosting
     String(_) => (self, TString)
     StringConcat(parts) => {
       let mut checker = self

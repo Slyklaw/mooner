@@ -1,7 +1,29 @@
 # Plan 1: Remove Unnecessary Code for Working Examples
 
 ## Goal
-Simplify the compiler to only support features needed by the 8 working examples, making self-hosting easier.
+Simplify the compiler to only support features needed by the 8 working examples, AND make the compiler source compilable by itself (self-hosting).
+
+## Updated Analysis
+
+### Current Blocker: Parser Performance
+Our parser hangs when compiling lexer.mbt due to complex nested `while` + `match` patterns in:
+- `read_multiline_string()` - lines ~484-527
+- `read_string()` - lines ~505-672 (string interpolation)
+
+### Root Cause
+Certain patterns in MoonBit source code cause our parser to take exponential time:
+```moonbit
+while not(done) {
+  match expr {
+    Some(x) => ...
+    None => ...
+  }
+}
+```
+When these are deeply nested (e.g., 3+ levels), parsing becomes prohibitively slow.
+
+### Solution
+Simplify the lexer source to avoid these patterns, AND remove unused features to reduce codebase size.
 
 ## Working Examples (IDENTICAL to official MoonBit compiler)
 - 001_hello.mbt - println strings
@@ -13,83 +35,91 @@ Simplify the compiler to only support features needed by the 8 working examples,
 - 010_basic_struct.mbt - user-defined types
 - 011_basic_enum.mbt - enums
 
-## Features to KEEP (from working examples)
+## Features to KEEP
 
-| Feature | Files Affected |
-|---------|---------------|
-| Integer/Boolean/Char literals | lexer.mbt, type_checker.mbt |
-| String literals & operations | lexer.mbt, codegen.mbt |
-| Arithmetic (+, -, *, /, %) | codegen.mbt |
-| Comparison (==, !=, <, >, <=, >=) | codegen.mbt |
-| Bitwise (&, \|, ^, <<, >>) | codegen.mbt |
-| Unary (!, -) | codegen.mbt |
-| Variables (let, assignment) | parser.mbt, codegen.mbt |
-| Compound assignment (+=, etc) | parser.mbt, codegen.mbt |
-| Functions (def, call, return) | parser.mbt, type_checker.mbt, codegen.mbt |
-| If/else expressions | parser.mbt, codegen.mbt |
-| While/for loops | parser.mbt, codegen.mbt |
-| Break/continue | codegen.mbt |
-| Match expressions (Int/Bool patterns) | parser.mbt, codegen.mbt |
-| User-defined types (struct) | parser.mbt, type_checker.mbt, codegen.mbt |
-| Enum definitions | parser.mbt, type_checker.mbt, codegen.mbt |
-| println/print | codegen.mbt |
-| Builtins: input, int_to_string, string_to_int, char_to_int, int_to_char | codegen.mbt |
+| Feature | Files Affected | Notes |
+|---------|---------------|-------|
+| Integer/Boolean/Char literals | lexer.mbt, type_checker.mbt | Essential |
+| String literals | lexer.mbt, codegen.mbt | Essential |
+| Arithmetic (+, -, *, /, %) | codegen.mbt | Essential |
+| Comparison (==, !=, <, >, <=, >=) | codegen.mbt | Essential |
+| Bitwise (&, \|, ^, <<, >>) | codegen.mbt | Essential |
+| Unary (!, -) | codegen.mbt | Essential |
+| Variables (let, assignment) | parser.mbt, codegen.mbt | Essential |
+| Compound assignment (+=, etc) | parser.mbt, codegen.mbt | Essential |
+| Functions (def, call, return) | parser.mbt, type_checker.mbt, codegen.mbt | Essential |
+| If/else expressions | parser.mbt, codegen.mbt | Essential |
+| While/for loops | parser.mbt, codegen.mbt | Essential |
+| Break/continue | codegen.mbt | Essential |
+| Match expressions (Int/Bool patterns) | parser.mbt, codegen.mbt | Essential |
+| User-defined types (struct) | parser.mbt, type_checker.mbt, codegen.mbt | Essential |
+| Enum definitions | parser.mbt, type_checker.mbt, codegen.mbt | Essential |
+| println/print | codegen.mbt | Essential |
+| Builtins: input, int_to_string, string_to_int, char_to_int, int_to_char | codegen.mbt | Essential |
 
 ## Features to REMOVE
 
-| Feature | Rationale |
-|---------|-----------|
-| Float/Double support | Not needed for compiler, not in working examples |
-| Array operations | Example 005 doesn't work identically |
-| Tuple operations | Example 007 binary differs |
-| Map operations | Example 008 binary differs |
-| String concatenation | Not needed for self-hosting |
-| String interpolation | Not implemented |
-| Test syntax | Example 012 not supported |
-| Advanced pattern matching | Example 013 differs |
-| Field access (.) on complex types | Not needed for compiler |
+### High Priority (causing parser issues)
+
+| Feature | Action | Rationale |
+|---------|--------|-----------|
+| String interpolation | Remove | Complex nested patterns in lexer cause parser hang |
+| Multiline strings (#\|) | Remove | Complex nested patterns in lexer cause parser hang |
+| Float/Double | Remove | Not needed for compiler source |
+| Array operations | Remove | Example 005 doesn't work identically |
+| Tuple operations | Remove | Example 007 binary differs |
+| Map operations | Remove | Example 008 binary differs |
+| Test syntax | Remove | Not needed for self-hosting |
+| Advanced pattern matching | Remove | Not needed for compiler source |
+
+### Lower Priority (can keep for now)
+- String comparison (needed for compiler)
+- Basic field access on structs (needed for compiler)
 
 ## Implementation Steps
 
-1. Run `moon build` to ensure current state compiles
+### Phase 1: Simplify lexer.mbt (CRITICAL)
 
-2. Remove float parsing/emitting from lexer.mbt
-   - Remove Float token variant or mark as unused
+1. **Remove string interpolation** from `read_string()`:
+   - Remove the complex `parts`, `in_interpolation`, `current_expr` handling
+   - Simple string parsing only
+
+2. **Remove multiline string** support from `read_multiline_string()`:
+   - Either remove entirely or make a no-op
+   - The nested while+match pattern causes parser hang
+
+3. **Remove Float token and parsing**:
+   - Remove `Float(Double)` from Token enum
    - Remove float literal parsing
 
-3. Remove float type from type_checker.mbt
-   - Remove TFloat type variant if not used
-   - Remove float-specific type checking
+### Phase 2: Simplify parser.mbt
 
-4. Remove float operations from codegen.mbt
-   - Remove XMM register support
-   - Remove float arithmetic instructions (addsd, subsd, mulsd, divsd)
-   - Remove float comparison (ucomisd, cvtsi2sd, cvtsd2si)
-   - Remove float literal handling in .rodata
+1. Keep as-is (it works for our use case)
 
-5. Remove array literal/indexing code paths
-   - Remove ArrayLit AST node handling in codegen
-   - Remove array indexing
+### Phase 3: Simplify type_checker.mbt
 
-6. Remove tuple code paths
-   - Remove Tuple/TupleGet AST handling
-   - Remove tuple field access (.0, .1, etc.)
+1. Remove TFloat type if present
+2. Remove float-specific type checking
 
-7. Remove map code paths
-   - Remove MapLit AST handling
+### Phase 4: Simplify codegen.mbt
 
-8. Remove string_concat and string operations beyond comparison
-   - Keep string literals and comparison
-   - Remove string concatenation runtime
+1. Remove XMM register support
+2. Remove float arithmetic instructions
+3. Remove float comparison
+4. Remove array, tuple, map code generation
 
-9. Run tests to verify working examples still pass
+### Phase 5: Test Self-Hosting
+
+After simplification, try compiling the compiler:
+```bash
+moon run cmd/main lexer.mbt
+```
 
 ## Verification
 
-After each removal, run:
+After each phase:
 ```bash
-moon test
-# Or manually verify working examples:
+# Test working examples
 for i in 001 002 003 004 006 009 010 011; do
   moon run cmd/main examples/mbt_examples/${i}_*.mbt
   chmod +x examples/mbt_examples/${i}_*.exe
@@ -97,4 +127,13 @@ for i in 001 002 003 004 006 009 010 011; do
   ./examples/mbt_examples/${i}_*.exe > /tmp/our_$i.txt
   diff /tmp/moon_$i.txt /tmp/our_$i.txt && echo "$i: OK"
 done
+
+# Test self-hosting
+moon run cmd/main lexer.mbt
 ```
+
+## Success Criteria
+
+1. ✅ All 8 working examples compile and produce identical output
+2. ✅ Compiler source (lexer.mbt, etc.) compiles without hanging
+3. ✅ Generated compiler can compile simple programs

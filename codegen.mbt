@@ -1716,7 +1716,7 @@ fn CodeGen::add_float(self : CodeGen, f : Double) -> (CodeGen, String) {
 ///|
 fn is_float_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
   match expr {
-    Float(_) => true
+    // Float(_) => true // Removed for self-hosting
     Ident(name) => var_is_float.get(name) == Some(true)
     Binary(_, left, right) =>
       is_float_expr(left, var_is_float) || is_float_expr(right, var_is_float)
@@ -1981,12 +1981,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         }
         self.codegen_expr(result_expr)
       }
-    Float(f) => {
-      let (g, label) = self.add_float(f)
-      let g = g.emit_inst(Movsd(Xmm("xmm0"), RipRel32(label)))
-      let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
-      g
-    }
+    // Float(f) => { // Removed for self-hosting
+    //   let (g, label) = self.add_float(f)
+    //   let g = g.emit_inst(Movsd(Xmm("xmm0"), RipRel32(label)))
+    //   let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+    //   g
+    // }
     Ident(name) =>
       match self.var_offsets.get(name) {
         Some(offset) =>
@@ -2480,13 +2480,13 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
                     g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
                   }
-                  Float(f) => {
-                    let s = f.to_string()
-                    let (g2, label) = g.add_string(s)
-                    g = g2
-                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
-                  }
+                  // Float(f) => { // Removed for self-hosting
+                  //   let s = f.to_string()
+                  //   let (g2, label) = g.add_string(s)
+                  //   g = g2
+                  //   g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                  //   g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                  // }
                   Char(c) => {
                     let s = c.to_string()
                     let (g2, label) = g.add_string(s)

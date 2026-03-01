@@ -33,9 +33,9 @@ pub enum Token {
   Ident(String)
   Int(Int)
   UInt(UInt)
-  Float(Double)
+  // Float(Double) // Removed for self-hosting
   String(String)
-  InterpolatedString(Array[(Bool, String)]) // (is_expression, text)
+  // InterpolatedString(Array[(Bool, String)]) // Removed - causes parser hang
   Char(Char)
   Plus
   Minus
@@ -482,186 +482,49 @@ fn Lexer::read_decimal_number(self : Lexer) -> (String, Lexer) {
 
 ///|
 fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
+  // Simplified: just skip to |# for self-hosting
   let mut lexer = self
-  let mut s = ""
-  let mut first_line = true
   let mut done = false
   while not(done) {
     match char_at(lexer.input, lexer.pos) {
-      Some('#') =>
-        if char_at(lexer.input, lexer.pos + 1) == Some('|') {
+      Some('|') =>
+        if char_at(lexer.input, lexer.pos + 1) == Some('#') {
           lexer = lexer.advance().advance()
-          if not(first_line) {
-            s = s + "\n"
-          }
-          first_line = false
-          let mut line_done = false
-          while not(line_done) {
-            match char_at(lexer.input, lexer.pos) {
-              Some('\n') => {
-                lexer = lexer.advance()
-                line_done = true
-              }
-              Some(c) => {
-                s = s + c.to_string()
-                lexer = lexer.advance()
-              }
-              None => {
-                line_done = true
-                done = true
-              }
-            }
-          }
-        } else {
           done = true
-        }
-      Some(c) =>
-        if is_whitespace(c) {
+        } else {
           lexer = lexer.advance()
-        } else {
-          done = true
         }
+      Some(_) => lexer = lexer.advance()
       None => done = true
     }
   }
-  (s, lexer)
+  ("", lexer)
 }
 
 ///|
 fn Lexer::read_string(self : Lexer) -> (Token, Lexer) {
+  // Simplified: no string interpolation for self-hosting
   let mut lexer = self.advance()
   let mut s = ""
-  let mut parts : Array[(Bool, String)] = []
-  let mut in_interpolation = false
-  let mut current_expr = ""
   let mut done = false
   while not(done) {
     match char_at(lexer.input, lexer.pos) {
       Some('"') => {
         lexer = lexer.advance()
-        if in_interpolation && s != "" {
-          parts = parts + [(false, s)]
-          s = ""
-        }
         done = true
       }
       Some('\\') => {
         lexer = lexer.advance()
         match char_at(lexer.input, lexer.pos) {
-          Some('{') => {
-            if s != "" {
-              parts = parts + [(false, s)]
-            }
-            s = ""
-            in_interpolation = true
-            lexer = lexer.advance()
-          }
-          Some('n') => {
-            s = s + "\n"
-            lexer = lexer.advance()
-          }
-          Some('t') => {
-            s = s + "\t"
-            lexer = lexer.advance()
-          }
-          Some('r') => {
-            s = s + "\r"
-            lexer = lexer.advance()
-          }
-          Some('\\') => {
-            s = s + "\\"
-            lexer = lexer.advance()
-          }
-          Some('"') => {
-            s = s + "\""
-            lexer = lexer.advance()
-          }
-          Some('u') => {
-            lexer = lexer.advance()
-            match char_at(lexer.input, lexer.pos) {
-              Some('{') => {
-                lexer = lexer.advance()
-                let mut hex = ""
-                let mut reading = true
-                while reading {
-                  match char_at(lexer.input, lexer.pos) {
-                    Some('}') => {
-                      lexer = lexer.advance()
-                      reading = false
-                    }
-                    Some(c) =>
-                      if (c >= '0' && c <= '9') ||
-                        (c >= 'a' && c <= 'f') ||
-                        (c >= 'A' && c <= 'F') {
-                        hex = hex + c.to_string()
-                        lexer = lexer.advance()
-                      } else {
-                        reading = false
-                      }
-                    None => reading = false
-                  }
-                }
-                let code = parse_hex(hex)
-                // Convert code point to UTF-8 bytes
-                if code < 0x80 {
-                  // 1-byte sequence
-                  s = s + Char::from_int(code).to_string()
-                } else if code < 0x800 {
-                  // 2-byte sequence
-                  let b1 = 0xC0 | (code >> 6)
-                  let b2 = 0x80 | (code & 0x3F)
-                  s = s + Char::from_int(b1).to_string()
-                  s = s + Char::from_int(b2).to_string()
-                } else if code < 0x10000 {
-                  // 3-byte sequence
-                  let b1 = 0xE0 | (code >> 12)
-                  let b2 = 0x80 | ((code >> 6) & 0x3F)
-                  let b3 = 0x80 | (code & 0x3F)
-                  s = s + Char::from_int(b1).to_string()
-                  s = s + Char::from_int(b2).to_string()
-                  s = s + Char::from_int(b3).to_string()
-                } else {
-                  // 4-byte sequence
-                  let b1 = 0xF0 | (code >> 18)
-                  let b2 = 0x80 | ((code >> 12) & 0x3F)
-                  let b3 = 0x80 | ((code >> 6) & 0x3F)
-                  let b4 = 0x80 | (code & 0x3F)
-                  s = s + Char::from_int(b1).to_string()
-                  s = s + Char::from_int(b2).to_string()
-                  s = s + Char::from_int(b3).to_string()
-                  s = s + Char::from_int(b4).to_string()
-                }
-              }
-              Some(c) => {
-                s = s + "u"
-                s = s + c.to_string()
-                lexer = lexer.advance()
-              }
-              None => {
-                s = s + "u"
-                done = true
-              }
-            }
-          }
-          Some(c) => {
-            s = s + c.to_string()
-            lexer = lexer.advance()
-          }
+          Some('n') => { s = s + "\n"; lexer = lexer.advance() }
+          Some('t') => { s = s + "\t"; lexer = lexer.advance() }
+          Some('r') => { s = s + "\r"; lexer = lexer.advance() }
+          Some('\\') => { s = s + "\\"; lexer = lexer.advance() }
+          Some('"') => { s = s + "\""; lexer = lexer.advance() }
+          Some(c) => { s = s + c.to_string(); lexer = lexer.advance() }
           None => done = true
         }
       }
-      Some('}') if in_interpolation => {
-        lexer = lexer.advance()
-        parts = parts + [(true, current_expr)]
-        current_expr = ""
-        in_interpolation = false
-        s = ""
-      }
-      Some(c) if in_interpolation => {
-        current_expr = current_expr + c.to_string()
-        lexer = lexer.advance()
-      }
-      Some('\n') => done = true
       Some(c) => {
         s = s + c.to_string()
         lexer = lexer.advance()
@@ -669,14 +532,7 @@ fn Lexer::read_string(self : Lexer) -> (Token, Lexer) {
       None => done = true
     }
   }
-  if parts.is_empty() {
-    (String(s), lexer)
-  } else {
-    if s != "" {
-      parts = parts + [(false, s)]
-    }
-    (InterpolatedString(parts), lexer)
-  }
+  (String(s), lexer)
 }
 
 ///|
@@ -800,7 +656,7 @@ fn token_eq(a : Token, b : Token) -> Bool {
     (Underscore, Underscore) => true
     (Ident(s1), Ident(s2)) => s1 == s2
     (Int(i1), Int(i2)) => i1 == i2
-    (Float(f1), Float(f2)) => f1 == f2
+    // (Float(f1), Float(f2)) => f1 == f2 // Removed
     (String(s1), String(s2)) => s1 == s2
     (Char(c1), Char(c2)) => c1 == c2
     (Plus, Plus) => true
@@ -865,13 +721,8 @@ pub fn Lexer::next_token(self : Lexer) -> (Token, Lexer) {
         (is_keyword(ident), lexer2)
       } else if is_digit(c) {
         let (num_str, lexer2) = lexer.read_number()
-        let has_dot = has_dot(num_str)
-        let has_exp = has_exp(num_str)
-        if has_dot || has_exp {
-          (Float(parse_double(num_str)), lexer2)
-        } else {
-          (Int(parse_int(num_str)), lexer2)
-        }
+        // Floats removed for self-hosting - treat all numbers as integers
+        (Int(parse_int(num_str)), lexer2)
       } else if c == '"' {
         let (tok, lexer2) = lexer.read_string()
         (tok, lexer2)

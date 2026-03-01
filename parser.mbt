@@ -2,7 +2,7 @@
 pub enum AST {
   Unit
   Int(Int)
-  Float(Double)
+  // Float(Double) // Removed for self-hosting
   String(String)
   Char(Char)
   Bool(Bool)
@@ -106,59 +106,9 @@ fn Parser::parse_literal(self : Parser) -> (AST, Parser) {
     True => (Bool(true), self.advance())
     False => (Bool(false), self.advance())
     Int(i) => (Int(i), self.advance())
-    Float(f) => (Float(f), self.advance())
+    // Float(f) => (Float(f), self.advance()) // Removed for self-hosting
     String(s) => (String(s), self.advance())
-    InterpolatedString(parts) => {
-      let p = self.advance()
-      let mut concat_parts : Array[AST] = []
-      for part in parts {
-        match part {
-          (false, literal_text) =>
-            concat_parts = concat_parts + [String(literal_text)]
-          (true, expr_text) => {
-            // Parse the expression text - could be simple identifier or number
-            let expr_ast : AST = if expr_text.length() > 0 {
-              let first_char = expr_text[0]
-              if (first_char >= 'a' && first_char <= 'z') ||
-                (first_char >= 'A' && first_char <= 'Z') ||
-                first_char == '_' {
-                // Try as identifier
-                AST::Ident(expr_text)
-              } else if first_char >= '0' && first_char <= '9' {
-                // Try as number - parse manually
-                let mut num = 0
-                let mut i = 0
-                let mut valid = true
-                while i < expr_text.length() {
-                  let c = expr_text[i]
-                  if c >= '0' && c <= '9' {
-                    num = num * 10 + (c.to_int() - 48)
-                  } else {
-                    valid = false
-                  }
-                  i = i + 1
-                }
-                if valid {
-                  AST::Int(num)
-                } else {
-                  AST::Ident(expr_text)
-                }
-              } else {
-                AST::Ident(expr_text)
-              }
-            } else {
-              AST::Ident("")
-            }
-            concat_parts = concat_parts + [expr_ast]
-          }
-        }
-      }
-      if concat_parts.length() == 1 {
-        (concat_parts[0], p)
-      } else {
-        (StringConcat(concat_parts), p)
-      }
-    }
+    // InterpolatedString removed for self-hosting
     Char(c) => (Char(c), self.advance())
     Ident(name) => (Ident(name), self.advance())
     LParen => self.parse_tuple_or_parens()
@@ -253,9 +203,9 @@ fn Parser::parse_primary(self : Parser) -> (AST, Parser) {
   match tok {
     Ident(_)
     | Int(_)
-    | Float(_)
+    // | Float(_) // Removed for self-hosting
     | String(_)
-    | InterpolatedString(_)
+    // | InterpolatedString(_) // Removed for self-hosting
     | Char(_)
     | True
     | False
