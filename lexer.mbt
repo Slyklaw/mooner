@@ -503,84 +503,69 @@ fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
 
 ///|
 fn Lexer::read_string(self : Lexer) -> (Token, Lexer) {
-  // Simplified: no string interpolation for self-hosting
-  let mut lexer = self.advance()
-  let mut s = ""
-  let mut done = false
-  while not(done) {
-    match char_at(lexer.input, lexer.pos) {
-      Some('"') => {
-        lexer = lexer.advance()
-        done = true
-      }
-      Some('\\') => {
-        lexer = lexer.advance()
-        match char_at(lexer.input, lexer.pos) {
-          Some('n') => { s = s + "\n"; lexer = lexer.advance() }
-          Some('t') => { s = s + "\t"; lexer = lexer.advance() }
-          Some('r') => { s = s + "\r"; lexer = lexer.advance() }
-          Some('\\') => { s = s + "\\"; lexer = lexer.advance() }
-          Some('"') => { s = s + "\""; lexer = lexer.advance() }
-          Some(c) => { s = s + c.to_string(); lexer = lexer.advance() }
-          None => done = true
-        }
-      }
-      Some(c) => {
-        s = s + c.to_string()
-        lexer = lexer.advance()
-      }
-      None => done = true
+  // Ultra-simplified for self-hosting: just read until closing quote
+  let lexer = self.advance()
+  let (s, lex) = read_string_loop(lexer, "")
+  (String(s), lex)
+}
+
+fn read_string_loop(lexer : Lexer, acc : String) -> (String, Lexer) {
+  let c = char_at(lexer.input, lexer.pos)
+  match c {
+    Some('"') => (acc, lexer.advance())
+    Some('\\') => {
+      let (next, lex) = read_escape_seq(lexer.advance())
+      read_string_loop(lex, acc + next)
     }
+    Some(c) => read_string_loop(lexer.advance(), acc + c.to_string())
+    None => (acc, lexer)
   }
-  (String(s), lexer)
+}
+
+fn read_escape_seq(lexer : Lexer) -> (String, Lexer) {
+  let c = char_at(lexer.input, lexer.pos)
+  match c {
+    Some('n') => ("\n", lexer.advance())
+    Some('t') => ("\t", lexer.advance())
+    Some('r') => ("\r", lexer.advance())
+    Some('\\') => ("\\", lexer.advance())
+    Some('"') => ("\"", lexer.advance())
+    Some(c) => (c.to_string(), lexer.advance())
+    None => ("", lexer)
+  }
 }
 
 ///|
 fn Lexer::read_char(self : Lexer) -> (Char, Lexer) {
-  let mut lexer = self.advance()
-  let mut ch = '?'
-  match char_at(lexer.input, lexer.pos) {
+  let lexer = self.advance()
+  let c = char_at(lexer.input, lexer.pos)
+  let (ch, lexer) = match c {
     Some('\\') => {
-      lexer = lexer.advance()
-      match char_at(lexer.input, lexer.pos) {
-        Some('n') => {
-          lexer = lexer.advance()
-          ch = '\n'
-        }
-        Some('t') => {
-          lexer = lexer.advance()
-          ch = '\t'
-        }
-        Some('r') => {
-          lexer = lexer.advance()
-          ch = '\r'
-        }
-        Some('\\') => {
-          lexer = lexer.advance()
-          ch = '\\'
-        }
-        Some('\'') => {
-          lexer = lexer.advance()
-          ch = '\''
-        }
-        Some(c) => {
-          lexer = lexer.advance()
-          ch = c
-        }
-        None => ch = '?'
-      }
+      let escaped = lexer.read_escape_char()
+      (escaped, lexer)
     }
-    Some(c) => {
-      lexer = lexer.advance()
-      ch = c
-    }
-    None => ch = '?'
+    Some(ch) => (ch, lexer)
+    None => ('?', lexer)
   }
-  match char_at(lexer.input, lexer.pos) {
-    Some('\'') => lexer = lexer.advance()
-    _ => ()
+  let lex2 = match char_at(lexer.input, lexer.pos) {
+    Some('\'') => lexer.advance()
+    _ => lexer
   }
-  (ch, lexer)
+  (ch, lex2)
+}
+
+fn Lexer::read_escape_char(self : Lexer) -> Char {
+  let c = char_at(self.input, self.pos)
+  let lexer = self.advance()
+  match c {
+    Some('n') => '\n'
+    Some('t') => '\t'
+    Some('r') => '\r'
+    Some('\\') => '\\'
+    Some('\'') => '\''
+    Some(c) => c
+    None => '?'
+  }
 }
 
 ///|

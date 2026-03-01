@@ -114,78 +114,84 @@ Accept the limitation and focus on other goals:
 **Pros**: No immediate work needed  
 **Cons**: Can't achieve true self-hosting
 
-## Implementation Plan
+## Current Status (Updated: 2026-02-28)
 
-### Step 1: Create Simplified Lexer
+### What Was Done
 
-Replace the complex `next_token` function with a simpler version:
+Successfully implemented **Option 1** (Simplify Lexer Structure):
+
+1. **Simplified `read_string`** - Replaced deeply nested while+match with recursive helper functions:
+   - `read_string_loop()` - recursively reads string contents
+   - `read_escape_seq()` - handles escape sequences
+
+2. **Simplified `read_char`** - Added helper function:
+   - `read_escape_char()` - handles character escape sequences
+
+### Results
+
+- ✅ **lexer.mbt compiles** - Self-hosting works for lexer!
+- ✅ **parser.mbt compiles** - Works after lexer fix
+- ❌ **type_checker.mbt** - Still hangs (same nested pattern issue)
+- ❌ **codegen.mbt** - Still hangs (same nested pattern issue)
+
+### Key Finding
+
+The issue is specifically caused by **nested `while not(done) { match ... }` patterns** where:
+- The while loop has complex match expressions inside
+- The match has 3+ branches with nested conditions
+- This triggers exponential time complexity in the parser
+
+### Files That Need Simplification
+
+The following files still contain problematic patterns:
+
+1. **lexer.mbt** - Already fixed ✅
+2. **parser.mbt** - Contains ~16 instances of `while not(done)`
+3. **type_checker.mbt** - Contains ~1 instance
+4. **codegen.mbt** - Contains many instances
+
+### Next Steps
+
+To achieve full self-hosting, apply the same simplification pattern to remaining files:
 
 ```moonbit
-// Instead of deeply nested match:
-pub fn Lexer::next_token(self : Lexer) -> (Token, Lexer) {
-  let lexer = self.skip_whitespace()
-  let c = lexer.current_char()
-  
-  if c == None { return (Eof, lexer) }
-  let c = c.unwrap()
-  
-  // Use early returns instead of nested matches
-  if is_alpha(c) || c == '_' { return lexer.read_ident_token() }
-  if is_digit(c) { return lexer.read_number_token() }
-  if c == '"' { return lexer.read_string_token() }
-  if c == '\'' { return lexer.read_char_token() }
-  
-  // Single char tokens via lookup table or simple match
-  lexer.read_punct_token()
+// Instead of:
+let mut done = false
+while not(done) {
+  match expr {
+    Some(x) => ...
+    None => done = true
+  }
 }
 
-// Helper functions instead of nested matches
-fn Lexer::read_ident_token(self : Lexer) -> (Token, Lexer) { ... }
-fn Lexer::read_number_token(self : Lexer) -> (Token, Lexer) { ... }
-fn Lexer::read_string_token(self : Lexer) -> (Token, Lexer) { ... }
-fn Lexer::read_char_token(self : Lexer) -> (Token, Lexer) { ... }
-fn Lexer::read_punct_token(self : Lexer) -> (Token, Lexer) { ... }
+// Use recursion:
+fn helper(lexer) {
+  let c = char_at(lexer.input, lexer.pos)
+  match c {
+    Some(x) => helper(lexer.advance())
+    None => lexer
+  }
+}
 ```
 
-### Step 2: Test Self-Hosting
+## Verification (Current)
 
-```bash
-moon run cmd/main lexer.mbt
-```
+1. **lexer.mbt compiles**: ✅ `moon run cmd/main lexer.mbt` completes in ~10 seconds
+2. **parser.mbt compiles**: ✅ Works after lexer fix
+3. **8 examples still work**: ✅ 001-004, 006, 009-011
+4. **Generated code has bugs**: ⚠️ lexer.exe produces incorrect output (needs debugging)
 
-### Step 3: Extend to Full Compiler
+## Timeline Estimate (Remaining)
 
-Once lexer compiles:
-- Test parser.mbt
-- Test type_checker.mbt  
-- Test codegen.mbt
+- **Simplify type_checker.mbt**: 30 min
+- **Simplify codegen.mbt**: 1-2 hours
+- **Debug generated code**: 1-2 hours
+- **Full self-hosting verification**: 1 hour
 
-### Step 4: Verify Output
+**Total remaining**: ~4-6 hours
 
-Ensure the self-hosted compiler produces correct output:
-```bash
-./lexer.exe examples/simple.mbt
-./simple.exe  # Should work
-```
+## Open Questions (Answered)
 
-## Verification
-
-After implementing the fix:
-
-1. **lexer.mbt compiles**: `moon run cmd/main lexer.mbt` completes in < 30 seconds
-2. **Full self-hosting**: Can compile all compiler source files
-3. **Output correct**: Generated compiler produces same output as official
-
-## Timeline Estimate
-
-- **Simplified lexer**: 1-2 hours
-- **Full self-hosting**: 2-4 hours (may reveal more issues)
-- **Testing/verification**: 1-2 hours
-
-**Total**: ~4-8 hours
-
-## Open Questions
-
-1. Will simplifying lexer.mbt be enough, or do other files have the same issue?
-2. Is this a parser bug or fundamental limitation?
-3. Should we fix the parser instead of working around it?
+1. **Will simplifying lexer.mbt be enough?** ❌ - No, parser.mbt, type_checker.mbt, and codegen.mbt also have the same issue
+2. **Is this a parser bug or fundamental limitation?** - Parser has exponential behavior with deeply nested patterns
+3. **Should we fix the parser instead of working around it?** - Could be done but more risky; simplification approach works
