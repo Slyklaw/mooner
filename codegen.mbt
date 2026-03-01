@@ -223,50 +223,81 @@ fn sib(scale : Int, index : Int, base : Int) -> Byte {
   ((scale << 6) | (index << 3) | base).to_byte()
 }
 
+// ============ LOOKUP TABLES FOR PARSER PERFORMANCE ============
+
+///|
+fn reg_code_lookup(reg : String) -> Int {
+  if reg == "rax" { 0 }
+  else if reg == "rcx" { 1 }
+  else if reg == "rdx" { 2 }
+  else if reg == "rbx" { 3 }
+  else if reg == "rsp" { 4 }
+  else if reg == "rbp" { 5 }
+  else if reg == "rsi" { 6 }
+  else if reg == "rdi" { 7 }
+  else if reg == "r8" { 0 }
+  else if reg == "r9" { 1 }
+  else if reg == "r10" { 2 }
+  else if reg == "r11" { 3 }
+  else if reg == "r12" { 4 }
+  else if reg == "r13" { 5 }
+  else if reg == "r14" { 6 }
+  else if reg == "r15" { 7 }
+  else { 0 }
+}
+
+///|
+fn xmm_reg_code_lookup(reg : String) -> Int {
+  if reg == "xmm0" { 0 }
+  else if reg == "xmm1" { 1 }
+  else if reg == "xmm2" { 2 }
+  else if reg == "xmm3" { 3 }
+  else if reg == "xmm4" { 4 }
+  else if reg == "xmm5" { 5 }
+  else if reg == "xmm6" { 6 }
+  else if reg == "xmm7" { 7 }
+  else if reg == "xmm8" { 0 }
+  else if reg == "xmm9" { 1 }
+  else if reg == "xmm10" { 2 }
+  else if reg == "xmm11" { 3 }
+  else if reg == "xmm12" { 4 }
+  else if reg == "xmm13" { 5 }
+  else if reg == "xmm14" { 6 }
+  else if reg == "xmm15" { 7 }
+  else { 0 }
+}
+
+// ============ END LOOKUP TABLES ============
+
 ///|
 fn xmm_reg_code(reg : String) -> Int {
-  match reg {
-    "xmm0" => 0
-    "xmm1" => 1
-    "xmm2" => 2
-    "xmm3" => 3
-    "xmm4" => 4
-    "xmm5" => 5
-    "xmm6" => 6
-    "xmm7" => 7
-    "xmm8" => 0
-    "xmm9" => 1
-    "xmm10" => 2
-    "xmm11" => 3
-    "xmm12" => 4
-    "xmm13" => 5
-    "xmm14" => 6
-    "xmm15" => 7
-    _ => 0
-  }
+  xmm_reg_code_lookup(reg)
 }
 
 ///|
 fn reg_code(reg : String) -> Int {
-  match reg {
-    "rax" => 0
-    "rcx" => 1
-    "rdx" => 2
-    "rbx" => 3
-    "rsp" => 4
-    "rbp" => 5
-    "rsi" => 6
-    "rdi" => 7
-    "r8" => 0
-    "r9" => 1
-    "r10" => 2
-    "r11" => 3
-    "r12" => 4
-    "r13" => 5
-    "r14" => 6
-    "r15" => 7
-    _ => 0
-  }
+  reg_code_lookup(reg)
+}
+
+///|
+fn CodeGen::emit_reg64_opcode(self : CodeGen, reg : String) -> CodeGen {
+  if reg == "rax" { self.emit_byte(0xB8) }
+  else if reg == "rcx" { self.emit_byte(0xB9) }
+  else if reg == "rdx" { self.emit_byte(0xBA) }
+  else if reg == "rbx" { self.emit_byte(0xBB) }
+  else if reg == "rsp" { self.emit_byte(0xBC) }
+  else if reg == "rbp" { self.emit_byte(0xBD) }
+  else if reg == "rsi" { self.emit_byte(0xBE) }
+  else if reg == "rdi" { self.emit_byte(0xBF) }
+  else if reg == "r8" { self.emit_bytes([0x49, 0xB8]) }
+  else if reg == "r9" { self.emit_bytes([0x49, 0xB9]) }
+  else if reg == "r10" { self.emit_bytes([0x49, 0xBA]) }
+  else if reg == "r11" { self.emit_bytes([0x49, 0xBB]) }
+  else if reg == "r12" { self.emit_bytes([0x49, 0xBC]) }
+  else if reg == "r13" { self.emit_bytes([0x49, 0xBD]) }
+  else if reg == "r14" { self.emit_bytes([0x49, 0xBE]) }
+  else if reg == "r15" { self.emit_bytes([0x49, 0xBF]) }
+  else { self }
 }
 
 ///|
@@ -275,22 +306,7 @@ fn CodeGen::emit_operand64(self : CodeGen, op : X86Operand) -> CodeGen {
     Imm8(v) => self.emit_byte(v.to_byte())
     Imm32(v) => self.emit32(v)
     Imm64(v) => self.emit64(v)
-    Reg64("rax") => self.emit_byte(0xB8)
-    Reg64("rcx") => self.emit_byte(0xB9)
-    Reg64("rdx") => self.emit_byte(0xBA)
-    Reg64("rbx") => self.emit_byte(0xBB)
-    Reg64("rsp") => self.emit_byte(0xBC)
-    Reg64("rbp") => self.emit_byte(0xBD)
-    Reg64("rsi") => self.emit_byte(0xBE)
-    Reg64("rdi") => self.emit_byte(0xBF)
-    Reg64("r8") => self.emit_bytes([0x49, 0xB8])
-    Reg64("r9") => self.emit_bytes([0x49, 0xB9])
-    Reg64("r10") => self.emit_bytes([0x49, 0xBA])
-    Reg64("r11") => self.emit_bytes([0x49, 0xBB])
-    Reg64("r12") => self.emit_bytes([0x49, 0xBC])
-    Reg64("r13") => self.emit_bytes([0x49, 0xBD])
-    Reg64("r14") => self.emit_bytes([0x49, 0xBE])
-    Reg64("r15") => self.emit_bytes([0x49, 0xBF])
+    Reg64(reg) => self.emit_reg64_opcode(reg)
     Stack64(offset) => self.emit32(offset)
     RipRel32(_label) => self.emit32(0)
     Label(name) => {
