@@ -64,6 +64,7 @@ moon build
 ### Run the compiler
 
 ```bash
+# Single file:
 moon run cmd/main <input_file> [output_file]
 ```
 

@@ -1,4 +1,2091 @@
 ///|
+pub enum Token {
+  Fn
+  Let
+  Mut
+  If
+  Else
+  Match
+  Case
+  While
+  For
+  In
+  Break
+  Continue
+  Return
+  True
+  False
+  Unit
+  Self
+  Type
+  Struct
+  Enum
+  Test
+  Interface
+  Impl
+  Pub
+  Priv
+  Override
+  Static
+  Virtual
+  Abstract
+  Underscore
+  Ident(String)
+  Int(Int)
+  UInt(UInt)
+  // Float(Double) // Removed for self-hosting
+  String(String)
+  // InterpolatedString(Array[(Bool, String)]) // Removed - causes parser hang
+  Char(Char)
+  Plus
+  Minus
+  Star
+  Slash
+  Percent
+  Ampersand
+  Pipe
+  Caret
+  Tilde
+  Bang
+  Question
+  Colon
+  ColonColon
+  Dot
+  DotDot
+  DotDotDot
+  Comma
+  Semicolon
+  Equal
+  PlusEqual
+  MinusEqual
+  StarEqual
+  SlashEqual
+  PercentEqual
+  AmpersandEqual
+  PipeEqual
+  CaretEqual
+  TildeEqual
+  QuestionEqual
+  EqEq
+  BangEqual
+  Lt
+  LtEqual
+  Gt
+  GtEqual
+  AmpersandAmpersand
+  PipePipe
+  LtLt
+  GtGt
+  LParen
+  RParen
+  LBracket
+  RBracket
+  LBrace
+  RBrace
+  InterpolateStart
+  InterpolateEnd
+  Arrow
+  At
+  Eof
+} derive(Show)
+
+///|
+pub struct Lexer {
+  input : String
+  pos : Int
+  line : Int
+  column : Int
+}
+
+///|
+pub fn Lexer::new(input : String) -> Lexer {
+  { input, pos: 0, line: 1, column: 1 }
+}
+
+///|
+fn char_at(s : String, i : Int) -> Char? {
+  if i < s.length() {
+    let c = s[i]
+    c.to_char()
+  } else {
+    None
+  }
+}
+
+///|
+fn Lexer::current_char(self : Lexer) -> Char? {
+  char_at(self.input, self.pos)
+}
+
+///|
+fn Lexer::advance(self : Lexer) -> Lexer {
+  match self.current_char() {
+    Some('\n') => { ..self, pos: self.pos + 1, line: self.line + 1, column: 1 }
+    Some(_) => { ..self, pos: self.pos + 1, column: self.column + 1 }
+    None => self
+  }
+}
+
+///|
+fn is_whitespace(c : Char) -> Bool {
+  c == ' ' || c == '\t' || c == '\n' || c == '\r'
+}
+
+///|
+fn is_alpha(c : Char) -> Bool {
+  (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+///|
+fn is_digit(c : Char) -> Bool {
+  c >= '0' && c <= '9'
+}
+
+///|
+fn is_alphanum(c : Char) -> Bool {
+  (c >= 'a' && c <= 'z') ||
+  (c >= 'A' && c <= 'Z') ||
+  (c >= '0' && c <= '9') ||
+  c == '_'
+}
+
+///|
+fn Lexer::skip_whitespace(self : Lexer) -> Lexer {
+  let mut lexer = self
+  let mut done = false
+  while not(done) {
+    match char_at(lexer.input, lexer.pos) {
+      Some(c) =>
+        if is_whitespace(c) {
+          lexer = lexer.advance()
+        } else {
+          done = true
+        }
+      None => done = true
+    }
+  }
+  lexer
+}
+
+///|
+fn Lexer::skip_line_comment(self : Lexer) -> Lexer {
+  let mut lexer = self
+  let mut done = false
+  while not(done) {
+    match char_at(lexer.input, lexer.pos) {
+      Some('\n') | None => done = true
+      _ => lexer = lexer.advance()
+    }
+  }
+  lexer
+}
+
+///|
+fn Lexer::skip_block_comment(self : Lexer) -> Lexer {
+  let mut lexer = self.advance()
+  let mut depth = 1
+  while depth > 0 {
+    match char_at(lexer.input, lexer.pos) {
+      Some('/') =>
+        if char_at(lexer.input, lexer.pos + 1) == Some('*') {
+          depth = depth + 1
+          lexer = lexer.advance().advance()
+        } else {
+          lexer = lexer.advance()
+        }
+      Some('*') =>
+        if char_at(lexer.input, lexer.pos + 1) == Some('/') {
+          depth = depth - 1
+          lexer = lexer.advance().advance()
+        } else {
+          lexer = lexer.advance()
+        }
+      Some(_) => lexer = lexer.advance()
+      None => depth = 0
+    }
+  }
+  lexer
+}
+
+///|
+fn Lexer::read_ident(self : Lexer) -> (String, Lexer) {
+  let mut lexer = self
+  let mut ident = ""
+  let mut done = false
+  while not(done) {
+    match char_at(lexer.input, lexer.pos) {
+      Some(c) =>
+        if is_alphanum(c) {
+          ident = ident + c.to_string()
+          lexer = lexer.advance()
+        } else {
+          done = true
+        }
+      None => done = true
+    }
+  }
+  (ident, lexer)
+}
+
+///|
+fn read_while(lexer : Lexer, cond_fn : (Char) -> Bool) -> (String, Lexer) {
+  let mut lex = lexer
+  let mut result = ""
+  let mut done = false
+  while not(done) {
+    match char_at(lex.input, lex.pos) {
+      Some(c) =>
+        if cond_fn(c) {
+          result = result + c.to_string()
+          lex = lex.advance()
+        } else {
+          done = true
+        }
+      None => done = true
+    }
+  }
+  (result, lex)
+}
+
+///|
+fn has_dot(s : String) -> Bool {
+  let mut i = 0
+  let mut result = false
+  while i < s.length() {
+    if s[i] == 46 { // '.'
+      result = true
+    }
+    i = i + 1
+  }
+  result
+}
+
+///|
+fn has_exp(s : String) -> Bool {
+  let mut i = 0
+  let mut result = false
+  while i < s.length() {
+    let c = s[i]
+    if c == 101 || c == 69 { // 'e' or 'E'
+      result = true
+    }
+    i = i + 1
+  }
+  result
+}
+
+///|
+fn parse_int(s : String) -> Int {
+  let mut result = 0
+  let mut i = 0
+  while i < s.length() {
+    let c = s[i]
+    if c >= 48 && c <= 57 { // '0' to '9'
+      result = result * 10 + (c - 48).to_int()
+    }
+    i = i + 1
+  }
+  result
+}
+
+///|
+fn parse_double(s : String) -> Double {
+  let mut result = 0.0
+  let mut i = 0
+  let mut is_fraction = false
+  let mut divisor = 1.0
+
+  while i < s.length() {
+    let c = s[i]
+    if c == 46 { // '.'
+      is_fraction = true
+    } else if c >= 48 && c <= 57 { // '0' to '9'
+      let digit = (c - 48).to_int()
+      if is_fraction {
+        divisor = divisor * 10.0
+        result = result + digit.to_double() / divisor
+      } else {
+        result = result * 10.0 + digit.to_double()
+      }
+    } else if (c == 101 || c == 69) && i < s.length() - 1 {
+      // 'e' or 'E'
+      // Skip exponent for now - simplified
+    }
+    i = i + 1
+  }
+  result
+}
+
+///|
+fn is_hex_digit(c : Char) -> Bool {
+  (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+}
+
+///|
+fn is_binary_digit(c : Char) -> Bool {
+  c == '0' || c == '1'
+}
+
+///|
+fn Lexer::read_number(self : Lexer) -> (String, Lexer) {
+  match char_at(self.input, self.pos) {
+    Some('0') =>
+      match char_at(self.input, self.pos + 1) {
+        Some('x') | Some('X') => {
+          let lexer = self.advance().advance()
+          let mut result = ""
+          let mut lex = lexer
+          let mut done = false
+          while not(done) {
+            match char_at(lex.input, lex.pos) {
+              Some(c) if is_hex_digit(c) => {
+                result = result + c.to_string()
+                lex = lex.advance()
+              }
+              Some('_') => lex = lex.advance()
+              _ => done = true
+            }
+          }
+          let val = parse_hex(result)
+          (val.to_string(), lex)
+        }
+        Some('b') | Some('B') => {
+          let lexer = self.advance().advance()
+          let mut result = ""
+          let mut lex = lexer
+          let mut done = false
+          while not(done) {
+            match char_at(lex.input, lex.pos) {
+              Some(c) if is_binary_digit(c) => {
+                result = result + c.to_string()
+                lex = lex.advance()
+              }
+              Some('_') => lex = lex.advance()
+              _ => done = true
+            }
+          }
+          let val = parse_binary(result)
+          (val.to_string(), lex)
+        }
+        _ => self.read_decimal_number()
+      }
+    _ => self.read_decimal_number()
+  }
+}
+
+///|
+fn parse_hex(s : String) -> Int {
+  let mut result = 0
+  let mut i = 0
+  while i < s.length() {
+    let c = s[i]
+    let digit = if c >= 48 && c <= 57 {
+      c - 48
+    } else if c >= 97 && c <= 102 {
+      c - 97 + 10
+    } else if c >= 65 && c <= 70 {
+      c - 65 + 10
+    } else {
+      0
+    }
+    result = result * 16 + digit.to_int()
+    i = i + 1
+  }
+  result
+}
+
+///|
+fn parse_binary(s : String) -> Int {
+  let mut result = 0
+  let mut i = 0
+  while i < s.length() {
+    let c = s[i]
+    let digit = if c == 48 { 0 } else { 1 }
+    result = result * 2 + digit
+    i = i + 1
+  }
+  result
+}
+
+///|
+fn Lexer::read_decimal_number(self : Lexer) -> (String, Lexer) {
+  let mut int_part = ""
+  let mut lexer = self
+  let mut done = false
+  while not(done) {
+    match char_at(lexer.input, lexer.pos) {
+      Some(c) if is_digit(c) => {
+        int_part = int_part + c.to_string()
+        lexer = lexer.advance()
+      }
+      Some('_') => lexer = lexer.advance()
+      _ => done = true
+    }
+  }
+  match char_at(lexer.input, lexer.pos) {
+    Some('.') => {
+      let lexer3 = lexer.advance()
+      let mut frac_part = ""
+      let mut lex = lexer3
+      let mut done = false
+      while not(done) {
+        match char_at(lex.input, lex.pos) {
+          Some(c) if is_digit(c) => {
+            frac_part = frac_part + c.to_string()
+            lex = lex.advance()
+          }
+          Some('_') => lex = lex.advance()
+          _ => done = true
+        }
+      }
+      match char_at(lex.input, lex.pos) {
+        Some('e') | Some('E') => {
+          let lexer5 = lex.advance()
+          let mut exp_part = ""
+          let mut lex2 = lexer5
+          let mut done = false
+          while not(done) {
+            match char_at(lex2.input, lex2.pos) {
+              Some(c) if is_digit(c) || c == '-' => {
+                exp_part = exp_part + c.to_string()
+                lex2 = lex2.advance()
+              }
+              Some('_') => lex2 = lex2.advance()
+              _ => done = true
+            }
+          }
+          (int_part + "." + frac_part + "e" + exp_part, lex2)
+        }
+        _ => (int_part + "." + frac_part, lex)
+      }
+    }
+    Some('e') | Some('E') => {
+      let lexer3 = lexer.advance()
+      let mut exp_part = ""
+      let mut lex = lexer3
+      let mut done = false
+      while not(done) {
+        match char_at(lex.input, lex.pos) {
+          Some(c) if is_digit(c) || c == '-' => {
+            exp_part = exp_part + c.to_string()
+            lex = lex.advance()
+          }
+          Some('_') => lex = lex.advance()
+          _ => done = true
+        }
+      }
+      (int_part + "e" + exp_part, lex)
+    }
+    _ => (int_part, lexer)
+  }
+}
+
+///|
+fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
+  // Simplified: just skip to |# for self-hosting
+  let mut lexer = self
+  let mut done = false
+  while not(done) {
+    match char_at(lexer.input, lexer.pos) {
+      Some('|') =>
+        if char_at(lexer.input, lexer.pos + 1) == Some('#') {
+          lexer = lexer.advance().advance()
+          done = true
+        } else {
+          lexer = lexer.advance()
+        }
+      Some(_) => lexer = lexer.advance()
+      None => done = true
+    }
+  }
+  ("", lexer)
+}
+
+///|
+fn Lexer::read_string(self : Lexer) -> (Token, Lexer) {
+  // Ultra-simplified for self-hosting: just read until closing quote
+  let lexer = self.advance()
+  let (s, lex) = read_string_loop(lexer, "")
+  (String(s), lex)
+}
+
+fn read_string_loop(lexer : Lexer, acc : String) -> (String, Lexer) {
+  let c = char_at(lexer.input, lexer.pos)
+  match c {
+    Some('"') => (acc, lexer.advance())
+    Some('\\') => {
+      let (next, lex) = read_escape_seq(lexer.advance())
+      read_string_loop(lex, acc + next)
+    }
+    Some(c) => read_string_loop(lexer.advance(), acc + c.to_string())
+    None => (acc, lexer)
+  }
+}
+
+fn read_escape_seq(lexer : Lexer) -> (String, Lexer) {
+  let c = char_at(lexer.input, lexer.pos)
+  match c {
+    Some('n') => ("\n", lexer.advance())
+    Some('t') => ("\t", lexer.advance())
+    Some('r') => ("\r", lexer.advance())
+    Some('\\') => ("\\", lexer.advance())
+    Some('"') => ("\"", lexer.advance())
+    Some(c) => (c.to_string(), lexer.advance())
+    None => ("", lexer)
+  }
+}
+
+///|
+fn Lexer::read_char(self : Lexer) -> (Char, Lexer) {
+  let lexer = self.advance()
+  let c = char_at(lexer.input, lexer.pos)
+  let (ch, lexer) = match c {
+    Some('\\') => {
+      let escaped = lexer.read_escape_char()
+      (escaped, lexer)
+    }
+    Some(ch) => (ch, lexer)
+    None => ('?', lexer)
+  }
+  let lex2 = match char_at(lexer.input, lexer.pos) {
+    Some('\'') => lexer.advance()
+    _ => lexer
+  }
+  (ch, lex2)
+}
+
+fn Lexer::read_escape_char(self : Lexer) -> Char {
+  let c = char_at(self.input, self.pos)
+  let lexer = self.advance()
+  match c {
+    Some('n') => '\n'
+    Some('t') => '\t'
+    Some('r') => '\r'
+    Some('\\') => '\\'
+    Some('\'') => '\''
+    Some(c) => c
+    None => '?'
+  }
+}
+
+///|
+fn is_keyword(s : String) -> Token {
+  match s {
+    "fn" => Fn
+    "let" => Let
+    "mut" => Mut
+    "if" => If
+    "else" => Else
+    "match" => Match
+    "case" => Case
+    "while" => While
+    "for" => For
+    "in" => In
+    "break" => Break
+    "continue" => Continue
+    "return" => Return
+    "true" => True
+    "false" => False
+    "unit" => Unit
+    "self" => Self
+    "type" => Type
+    "struct" => Struct
+    "enum" => Enum
+    "test" => Test
+    "interface" => Interface
+    "impl" => Impl
+    "pub" => Pub
+    "priv" => Priv
+    "override" => Override
+    "static" => Static
+    "virtual" => Virtual
+    "abstract" => Abstract
+    "_" => Underscore
+    _ => Ident(s)
+  }
+}
+
+///|
+fn token_eq(a : Token, b : Token) -> Bool {
+  match (a, b) {
+    (Eof, Eof) => true
+    (Fn, Fn) => true
+    (Let, Let) => true
+    (Mut, Mut) => true
+    (If, If) => true
+    (Else, Else) => true
+    (Match, Match) => true
+    (Case, Case) => true
+    (While, While) => true
+    (For, For) => true
+    (In, In) => true
+    (Break, Break) => true
+    (Continue, Continue) => true
+    (Return, Return) => true
+    (True, True) => true
+    (False, False) => true
+    (Unit, Unit) => true
+    (Self, Self) => true
+    (Type, Type) => true
+    (Struct, Struct) => true
+    (Enum, Enum) => true
+    (Test, Test) => true
+    (Interface, Interface) => true
+    (Impl, Impl) => true
+    (Pub, Pub) => true
+    (Priv, Priv) => true
+    (Override, Override) => true
+    (Static, Static) => true
+    (Virtual, Virtual) => true
+    (Abstract, Abstract) => true
+    (Underscore, Underscore) => true
+    (Ident(s1), Ident(s2)) => s1 == s2
+    (Int(i1), Int(i2)) => i1 == i2
+    // (Float(f1), Float(f2)) => f1 == f2 // Removed
+    (String(s1), String(s2)) => s1 == s2
+    (Char(c1), Char(c2)) => c1 == c2
+    (Plus, Plus) => true
+    (Minus, Minus) => true
+    (Star, Star) => true
+    (Slash, Slash) => true
+    (Percent, Percent) => true
+    (Ampersand, Ampersand) => true
+    (Pipe, Pipe) => true
+    (Caret, Caret) => true
+    (Tilde, Tilde) => true
+    (Bang, Bang) => true
+    (Question, Question) => true
+    (Colon, Colon) => true
+    (ColonColon, ColonColon) => true
+    (Dot, Dot) => true
+    (DotDot, DotDot) => true
+    (DotDotDot, DotDotDot) => true
+    (Comma, Comma) => true
+    (Semicolon, Semicolon) => true
+    (Equal, Equal) => true
+    (PlusEqual, PlusEqual) => true
+    (MinusEqual, MinusEqual) => true
+    (StarEqual, StarEqual) => true
+    (SlashEqual, SlashEqual) => true
+    (PercentEqual, PercentEqual) => true
+    (AmpersandEqual, AmpersandEqual) => true
+    (PipeEqual, PipeEqual) => true
+    (CaretEqual, CaretEqual) => true
+    (TildeEqual, TildeEqual) => true
+    (QuestionEqual, QuestionEqual) => true
+    (EqEq, EqEq) => true
+    (BangEqual, BangEqual) => true
+    (Lt, Lt) => true
+    (LtEqual, LtEqual) => true
+    (Gt, Gt) => true
+    (GtEqual, GtEqual) => true
+    (AmpersandAmpersand, AmpersandAmpersand) => true
+    (PipePipe, PipePipe) => true
+    (LtLt, LtLt) => true
+    (GtGt, GtGt) => true
+    (LParen, LParen) => true
+    (RParen, RParen) => true
+    (LBracket, LBracket) => true
+    (RBracket, RBracket) => true
+    (LBrace, LBrace) => true
+    (RBrace, RBrace) => true
+    (Arrow, Arrow) => true
+    (At, At) => true
+    _ => false
+  }
+}
+
+///|
+pub fn Lexer::next_token(self : Lexer) -> (Token, Lexer) {
+  let lexer = self.skip_whitespace()
+
+  match char_at(lexer.input, lexer.pos) {
+    Some(c) =>
+      if is_alpha(c) || c == '_' {
+        let (ident, lexer2) = lexer.read_ident()
+        (is_keyword(ident), lexer2)
+      } else if is_digit(c) {
+        let (num_str, lexer2) = lexer.read_number()
+        // Floats removed for self-hosting - treat all numbers as integers
+        (Int(parse_int(num_str)), lexer2)
+      } else if c == '"' {
+        let (tok, lexer2) = lexer.read_string()
+        (tok, lexer2)
+      } else if c == '\'' {
+        let (ch, lexer2) = lexer.read_char()
+        (Char(ch), lexer2)
+      } else if c == '#' && char_at(lexer.input, lexer.pos + 1) == Some('|') {
+        let (s, lexer2) = lexer.read_multiline_string()
+        (String(s), lexer2)
+      } else {
+        let lexer2 = lexer.advance()
+        match c {
+          '+' =>
+            if char_at(lexer2.input, lexer2.pos) == Some('=') {
+              (PlusEqual, lexer2.advance())
+            } else {
+              (Plus, lexer2)
+            }
+          '-' =>
+            match char_at(lexer2.input, lexer2.pos) {
+              Some('>') => (Arrow, lexer2.advance())
+              Some('=') => (MinusEqual, lexer2.advance())
+              _ => (Minus, lexer2)
+            }
+          '*' =>
+            if char_at(lexer2.input, lexer2.pos) == Some('=') {
+              (StarEqual, lexer2.advance())
+            } else {
+              (Star, lexer2)
+            }
+          '/' =>
+            match char_at(lexer2.input, lexer2.pos) {
+              Some('/') => lexer2.skip_line_comment().next_token()
+              Some('*') => lexer2.skip_block_comment().next_token()
+              Some('=') => (SlashEqual, lexer2.advance())
+              _ => (Slash, lexer2)
+            }
+          '%' =>
+            if char_at(lexer2.input, lexer2.pos) == Some('=') {
+              (PercentEqual, lexer2.advance())
+            } else {
+              (Percent, lexer2)
+            }
+          '&' =>
+            match char_at(lexer2.input, lexer2.pos) {
+              Some('&') => (AmpersandAmpersand, lexer2.advance())
+              Some('=') => (AmpersandEqual, lexer2.advance())
+              _ => (Ampersand, lexer2)
+            }
+          '|' =>
+            match char_at(lexer2.input, lexer2.pos) {
+              Some('|') => (PipePipe, lexer2.advance())
+              Some('=') => (PipeEqual, lexer2.advance())
+              _ => (Pipe, lexer2)
+            }
+          '^' =>
+            if char_at(lexer2.input, lexer2.pos) == Some('=') {
+              (CaretEqual, lexer2.advance())
+            } else {
+              (Caret, lexer2)
+            }
+          '~' =>
+            if char_at(lexer2.input, lexer2.pos) == Some('=') {
+              (TildeEqual, lexer2.advance())
+            } else {
+              (Tilde, lexer2)
+            }
+          '!' =>
+            if char_at(lexer2.input, lexer2.pos) == Some('=') {
+              (BangEqual, lexer2.advance())
+            } else {
+              (Bang, lexer2)
+            }
+          '?' =>
+            if char_at(lexer2.input, lexer2.pos) == Some('=') {
+              (QuestionEqual, lexer2.advance())
+            } else {
+              (Question, lexer2)
+            }
+          ':' =>
+            if char_at(lexer2.input, lexer2.pos) == Some(':') {
+              (ColonColon, lexer2.advance())
+            } else {
+              (Colon, lexer2)
+            }
+          '.' =>
+            if char_at(lexer2.input, lexer2.pos) == Some('.') {
+              if char_at(lexer2.input, lexer2.pos + 1) == Some('.') {
+                (DotDotDot, lexer2.advance().advance())
+              } else {
+                (DotDot, lexer2.advance())
+              }
+            } else {
+              (Dot, lexer2)
+            }
+          ',' => (Comma, lexer2)
+          ';' => (Semicolon, lexer2)
+          '=' =>
+            if char_at(lexer2.input, lexer2.pos) == Some('=') {
+              (EqEq, lexer2.advance())
+            } else if char_at(lexer2.input, lexer2.pos) == Some('>') {
+              (Arrow, lexer2.advance())
+            } else {
+              (Equal, lexer2)
+            }
+          '<' =>
+            if char_at(lexer2.input, lexer2.pos) == Some('<') {
+              if char_at(lexer2.input, lexer2.pos + 1) == Some('=') {
+                (LtLt, lexer2.advance().advance())
+              } else {
+                (LtLt, lexer2.advance())
+              }
+            } else if char_at(lexer2.input, lexer2.pos) == Some('=') {
+              (LtEqual, lexer2.advance())
+            } else {
+              (Lt, lexer2)
+            }
+          '>' =>
+            if char_at(lexer2.input, lexer2.pos) == Some('>') {
+              if char_at(lexer2.input, lexer2.pos + 1) == Some('=') {
+                (GtGt, lexer2.advance().advance())
+              } else {
+                (GtGt, lexer2.advance())
+              }
+            } else if char_at(lexer2.input, lexer2.pos) == Some('=') {
+              (GtEqual, lexer2.advance())
+            } else {
+              (Gt, lexer2)
+            }
+          '(' => (LParen, lexer2)
+          ')' => (RParen, lexer2)
+          '[' => (LBracket, lexer2)
+          ']' => (RBracket, lexer2)
+          '{' => (LBrace, lexer2)
+          '}' => (RBrace, lexer2)
+          '@' => (At, lexer2)
+          '_' => (Underscore, lexer2)
+          _ => (Eof, lexer2)
+        }
+      }
+    None => (Eof, lexer)
+  }
+}
+
+///|
+pub fn tokenize(input : String) -> Array[Token] {
+  let mut lexer = Lexer::new(input)
+  let mut tokens : Array[Token] = []
+
+  let mut done = false
+  while not(done) {
+    let (token, new_lexer) = lexer.next_token()
+    tokens = tokens + [token]
+    lexer = new_lexer
+    if token_eq(token, Eof) {
+      done = true
+    }
+  }
+
+  tokens
+}
+///|
+pub enum AST {
+  Unit
+  Int(Int)
+  // Float(Double) // Removed for self-hosting
+  String(String)
+  Char(Char)
+  Bool(Bool)
+  Ident(String)
+  Block(Array[AST])
+  Func(String, Array[(String, AST?)], AST?, AST)
+  LetBind(String, AST?, AST, AST)
+  IfExpr(AST, AST, AST?)
+  MatchExpr(AST, Array[(AST, AST)])
+  WhileLoop(AST, AST)
+  ForLoop(AST?, AST?, AST?, AST)
+  ForInLoop(String, AST, AST) // for x in arr { body }
+  ReturnExpr(AST)
+  Break
+  Continue
+  Binary(String, AST, AST)
+  Unary(String, AST)
+  CallExpr(AST, Array[AST])
+  IndexExpr(AST, AST)
+  FieldExpr(AST, String)
+  Tuple(Array[AST])
+  ArrayLit(Array[AST])
+  MapLit(Array[(AST, AST)]) // map[key] = value
+  Assign(AST, AST)
+  AssignOp(String, AST, AST)
+  TypeDecl(String, Array[(String, String)])
+  EnumDef(String, Array[String])
+  StructLit(String, Array[(String, AST)])
+  StructUpdate(AST, Array[(String, AST)])
+  StringConcat(Array[AST])
+  Spread(AST)
+  TestBlock(String?, AST) // optional name, body
+} derive(Show)
+
+///|
+pub struct Parser {
+  tokens : Array[Token]
+  pos : Int
+}
+
+///|
+pub fn Parser::new(tokens : Array[Token]) -> Parser {
+  { tokens, pos: 0 }
+}
+
+///|
+fn Parser::current(self : Parser) -> Token {
+  if self.pos < self.tokens.length() {
+    self.tokens[self.pos]
+  } else {
+    Eof
+  }
+}
+
+///|
+fn Parser::_peek(self : Parser, offset : Int) -> Token {
+  let idx = self.pos + offset
+  if idx < self.tokens.length() {
+    self.tokens[idx]
+  } else {
+    Eof
+  }
+}
+
+///|
+fn Parser::advance(self : Parser) -> Parser {
+  if self.pos < self.tokens.length() - 1 {
+    { ..self, pos: self.pos + 1 }
+  } else {
+    self
+  }
+}
+
+///|
+fn Parser::skip(self : Parser, n : Int) -> Parser {
+  let new_pos = self.pos + n
+  if new_pos < self.tokens.length() - 1 {
+    { ..self, pos: new_pos }
+  } else {
+    { ..self, pos: self.tokens.length() - 1 }
+  }
+}
+
+///|
+fn self_token_eq(a : Token, b : Token) -> Bool {
+  token_eq(a, b)
+}
+
+///|
+fn Parser::parse_ident(self : Parser) -> (String, Parser) {
+  match self.current() {
+    Ident(name) => (name, self.advance())
+    _ => ("", self)
+  }
+}
+
+///|
+fn Parser::parse_literal(self : Parser) -> (AST, Parser) {
+  match self.current() {
+    Unit => (Unit, self.advance())
+    True => (Bool(true), self.advance())
+    False => (Bool(false), self.advance())
+    Int(i) => (Int(i), self.advance())
+    // Float(f) => (Float(f), self.advance()) // Removed for self-hosting
+    String(s) => (String(s), self.advance())
+    // InterpolatedString removed for self-hosting
+    Char(c) => (Char(c), self.advance())
+    Ident(name) => (Ident(name), self.advance())
+    LParen => self.parse_tuple_or_parens()
+    LBracket => self.parse_array()
+    Eof => (Unit, self.advance())
+    RBrace => (Unit, self)
+    _ => (Unit, self.advance())
+  }
+}
+
+///|
+fn Parser::parse_tuple_or_parens(self : Parser) -> (AST, Parser) {
+  let p = self.skip(1)
+  if self_token_eq(p.current(), RParen) {
+    (Tuple([]), p.advance())
+  } else {
+    let (first, p2) = p.parse_expr()
+    if self_token_eq(p2.current(), RParen) {
+      (first, p2.advance())
+    } else if self_token_eq(p2.current(), Comma) {
+      let p3 = p2.skip(1)
+      let mut elems = [first]
+      let mut parser = p3
+      let mut done = false
+      while not(done) {
+        let (expr, p2) = parser.parse_expr()
+        elems = elems + [expr]
+        if self_token_eq(p2.current(), Comma) {
+          parser = p2.skip(1)
+        } else if self_token_eq(p2.current(), RParen) {
+          parser = p2.advance()
+          done = true
+        } else {
+          done = true
+        }
+      }
+      (Tuple(elems), parser)
+    } else {
+      (first, p2)
+    }
+  }
+}
+
+///|
+fn Parser::parse_array(self : Parser) -> (AST, Parser) {
+  let p = self.skip(1)
+  if self_token_eq(p.current(), RBracket) {
+    (ArrayLit([]), p.advance())
+  } else {
+    let (first, p2) = if self_token_eq(p.current(), DotDot) {
+      let p_skip = p.skip(1)
+      let (inner, p_after) = p_skip.parse_expr()
+      (Spread(inner), p_after)
+    } else {
+      p.parse_expr()
+    }
+    if self_token_eq(p2.current(), RBracket) {
+      (ArrayLit([first]), p2.advance())
+    } else if self_token_eq(p2.current(), Comma) {
+      let p3 = p2.skip(1)
+      let mut elems = [first]
+      let mut parser = p3
+      let mut done = false
+      while not(done) {
+        let (expr, p2) = if self_token_eq(parser.current(), DotDot) {
+          let p_skip = parser.skip(1)
+          let (inner, p_after) = p_skip.parse_expr()
+          (Spread(inner), p_after)
+        } else {
+          parser.parse_expr()
+        }
+        elems = elems + [expr]
+        if self_token_eq(p2.current(), Comma) {
+          parser = p2.skip(1)
+        } else if self_token_eq(p2.current(), RBracket) {
+          parser = p2.advance()
+          done = true
+        } else {
+          done = true
+        }
+      }
+      (ArrayLit(elems), parser)
+    } else {
+      (ArrayLit([first]), p2)
+    }
+  }
+}
+
+///|
+fn Parser::parse_primary(self : Parser) -> (AST, Parser) {
+  let tok = self.current()
+  match tok {
+    Ident(_)
+    | Int(_)
+    // | Float(_) // Removed for self-hosting
+    | String(_)
+    // | InterpolatedString(_) // Removed for self-hosting
+    | Char(_)
+    | True
+    | False
+    | Unit => self.parse_literal()
+    LParen => self.parse_tuple_or_parens()
+    LBracket => self.parse_array()
+    If => self.parse_if()
+    Match => self.parse_match()
+    While => self.parse_while()
+    For => self.parse_for()
+    Let => self.parse_let()
+    Fn => self.parse_function()
+    Type => self.parse_type_decl()
+    Struct => self.parse_type_decl()
+    Enum => self.parse_enum()
+    Test => self.parse_test()
+    LBrace => self.parse_struct_or_block()
+    Return => {
+      let p = self.advance()
+      let (expr, p2) = p.parse_expr()
+      (ReturnExpr(expr), p2)
+    }
+    Break => (Break, self.advance())
+    Continue => (Continue, self.advance())
+    Underscore => (Ident("_".to_string()), self.advance())
+    Equal => (Unit, self.advance())
+    Eof => (Unit, self.advance())
+    RBrace => (Unit, self)
+    RParen => (Unit, self)
+    Comma => (Unit, self.advance())
+    Semicolon => (Unit, self.advance())
+    _ => (Unit, self.advance())
+  }
+}
+
+///|
+fn Parser::parse_block(self : Parser) -> (AST, Parser) {
+  let p = self.skip(1)
+  let mut stmts : Array[AST] = []
+  let mut parser = p
+  let mut done = false
+  while not(done) {
+    if self_token_eq(parser.current(), RBrace) {
+      parser = parser.advance()
+      // Skip optional derive annotation
+      if self_token_eq(parser.current(), Ident("derive")) {
+        parser = parser.skip(1)
+        if self_token_eq(parser.current(), LParen) {
+          parser = parser.skip(1)
+          while not(self_token_eq(parser.current(), RParen)) &&
+                not(self_token_eq(parser.current(), Eof)) {
+            parser = parser.advance()
+          }
+          if self_token_eq(parser.current(), RParen) {
+            parser = parser.skip(1)
+          }
+        }
+      }
+      done = true
+    } else if self_token_eq(parser.current(), Eof) {
+      done = true
+    } else {
+      let (stmt, p2) = parser.parse_expr()
+      stmts = stmts + [stmt]
+      parser = p2
+    }
+  }
+  (Block(stmts), parser)
+}
+
+///|
+fn Parser::parse_struct_or_block(self : Parser) -> (AST, Parser) {
+  let p = self.skip(1)
+  // Try to detect struct literal: { field: value, ... }
+  // Struct literals have identifiers followed by colons
+  // Blocks have expressions (not field: value pairs)
+  // Map literals have string keys: { "key": value, ... }
+  match p.current() {
+    String(key_str) => {
+      // This is a map literal: { "key": value, ... }
+      let p2 = p.advance()
+      if self_token_eq(p2.current(), Colon) {
+        // This is a map literal: { "key": value, ... }
+        let p3 = p2.skip(1)
+        let (field_val, p4) = p3.parse_expr()
+        let mut entries : Array[(AST, AST)] = [(String(key_str), field_val)]
+        let mut parser = p4
+        let mut done = false
+        while not(done) {
+          if self_token_eq(parser.current(), Comma) {
+            let p5 = parser.skip(1)
+            if self_token_eq(p5.current(), RBrace) {
+              parser = p5.advance()
+              done = true
+            } else {
+              match p5.current() {
+                String(key) => {
+                  let p6 = p5.advance()
+                  if self_token_eq(p6.current(), Colon) {
+                    let p7 = p6.skip(1)
+                    let (v, p8) = p7.parse_expr()
+                    entries = entries + [(String(key), v)]
+                    parser = p8
+                  } else {
+                    // Not a map literal, fallback to block
+                    return p.parse_block()
+                  }
+                }
+                _ => parser = p5
+              }
+            }
+          } else if self_token_eq(parser.current(), RBrace) {
+            parser = parser.advance()
+            done = true
+          } else {
+            done = true
+          }
+        }
+        (MapLit(entries), parser)
+      } else {
+        // Not a map literal, parse as block
+        p.parse_block()
+      }
+    }
+    Ident(field_name) => {
+      // Look ahead to check if this is field: value
+      let p2 = p.advance()
+      if self_token_eq(p2.current(), Colon) {
+        // This is a struct literal: { field: value, ... }
+        let p3 = p2.skip(1)
+        let (field_val, p4) = p3.parse_expr()
+        let mut fields : Array[(String, AST)] = [(field_name, field_val)]
+        let mut parser = p4
+        let mut done = false
+        while not(done) {
+          if self_token_eq(parser.current(), Comma) {
+            let p5 = parser.skip(1)
+            if self_token_eq(p5.current(), RBrace) {
+              parser = p5.advance()
+              done = true
+            } else {
+              match p5.current() {
+                Ident(fname) => {
+                  let p6 = p5.advance()
+                  if self_token_eq(p6.current(), Colon) {
+                    let p7 = p6.skip(1)
+                    let (v, p8) = p7.parse_expr()
+                    fields = fields + [(fname, v)]
+                    parser = p8
+                  } else {
+                    // Not a struct literal, fallback to block
+                    return p.parse_block()
+                  }
+                }
+                _ => parser = p5
+              }
+            }
+          } else if self_token_eq(parser.current(), RBrace) {
+            parser = parser.advance()
+            done = true
+          } else {
+            done = true
+          }
+        }
+        (StructLit("", fields), parser)
+      } else {
+        // Not a struct literal, parse as block
+        p.parse_block()
+      }
+    }
+    DotDot => {
+      // Functional update syntax: { ..point, x: 20 }
+      let p2 = p.skip(1)
+      let (base, p3) = p2.parse_expr()
+      let mut fields : Array[(String, AST)] = []
+      let mut parser = p3
+      if self_token_eq(parser.current(), Comma) {
+        parser = parser.skip(1)
+        let mut done = false
+        while not(done) {
+          if self_token_eq(parser.current(), RBrace) {
+            parser = parser.advance()
+            done = true
+          } else {
+            match parser.current() {
+              Token::Ident(fname) => {
+                let p4 = parser.advance()
+                if self_token_eq(p4.current(), Colon) {
+                  let p5 = p4.skip(1)
+                  let (v, p6) = p5.parse_expr()
+                  fields = fields + [(fname, v)]
+                  if self_token_eq(p6.current(), Comma) {
+                    parser = p6.skip(1)
+                  } else {
+                    parser = p6
+                  }
+                } else {
+                  parser = p4
+                }
+              }
+              _ => parser = parser.advance()
+            }
+          }
+        }
+      } else if self_token_eq(parser.current(), RBrace) {
+        parser = parser.advance()
+      }
+      (StructUpdate(base, fields), parser)
+    }
+    RBrace => {
+      // Empty struct literal or empty block
+      let p2 = p.advance()
+      (StructLit("", []), p2)
+    }
+    _ =>
+      // Not a struct literal, parse as block
+      p.parse_block()
+  }
+}
+
+///|
+fn Parser::parse_if(self : Parser) -> (AST, Parser) {
+  let p = self.skip(1)
+  let (cond, p2) = p.parse_expr()
+  let (then, p3) = p2.parse_block_or_expr()
+  if self_token_eq(p3.current(), Else) {
+    let p4 = p3.skip(1)
+    if self_token_eq(p4.current(), If) {
+      p4.parse_if()
+    } else {
+      let (else_branch, p5) = p4.parse_block_or_expr()
+      (IfExpr(cond, then, Some(else_branch)), p5)
+    }
+  } else {
+    (IfExpr(cond, then, None), p3)
+  }
+}
+
+///|
+fn Parser::parse_match(self : Parser) -> (AST, Parser) {
+  let p = self.skip(1)
+  let (expr, p2) = p.parse_expr()
+  if self_token_eq(p2.current(), LBrace) {
+    let p3 = p2.skip(1)
+    let mut cases : Array[(AST, AST)] = []
+    let mut parser = p3
+    let mut done = false
+    while not(done) {
+      if self_token_eq(parser.current(), RBrace) {
+        parser = parser.advance()
+        done = true
+      } else if self_token_eq(parser.current(), Case) {
+        let p2 = parser.skip(1)
+        let (pattern, p3) = p2.parse_expr()
+        if self_token_eq(p3.current(), Arrow) {
+          let p4 = p3.skip(1)
+          let (body, p5) = p4.parse_block_or_expr()
+          cases = cases + [(pattern, body)]
+          parser = p5
+        } else {
+          parser = p3
+        }
+      } else if self_token_eq(parser.current(), Underscore) {
+        let (pattern, p2) = parser.parse_expr()
+        if self_token_eq(p2.current(), Arrow) {
+          let p3 = p2.skip(1)
+          let (body, p4) = p3.parse_block_or_expr()
+          cases = cases + [(pattern, body)]
+          parser = p4
+        } else {
+          parser = p2
+        }
+      } else {
+        match parser.current() {
+          Token::Ident(_) | Token::Int(_) => {
+            let (pattern, p2) = parser.parse_expr()
+            if self_token_eq(p2.current(), Arrow) {
+              let p3 = p2.skip(1)
+              let (body, p4) = p3.parse_block_or_expr()
+              cases = cases + [(pattern, body)]
+              parser = p4
+            } else {
+              parser = p2
+            }
+          }
+          _ => parser = parser.advance()
+        }
+      }
+    }
+    (MatchExpr(expr, cases), parser)
+  } else {
+    (MatchExpr(expr, []), p2)
+  }
+}
+
+///|
+fn Parser::parse_while(self : Parser) -> (AST, Parser) {
+  let p = self.skip(1)
+  let (cond, p2) = p.parse_expr()
+  let (body, p3) = p2.parse_block_or_expr()
+  (WhileLoop(cond, body), p3)
+}
+
+///|
+fn Parser::parse_for(self : Parser) -> (AST, Parser) {
+  let p = self.skip(1)
+
+  // Check for "for-in" syntax: for x in arr { ... }
+  // This is when we have: for identifier in expression
+  // We need to peek without consuming
+  match p.current() {
+    Ident(name) => {
+      // Look ahead to see if next token is 'in'
+      let p_ahead = p.advance()
+      if self_token_eq(p_ahead.current(), In) {
+        let p3 = p_ahead.skip(1)
+        let (iter_expr, p4) = p3.parse_expr()
+        let (body, p5) = p4.parse_block_or_expr()
+        return (ForInLoop(name, iter_expr, body), p5)
+      }
+      // Not for-in, continue with C-style
+    }
+    _ => ()
+  }
+
+  // Otherwise, parse as C-style for loop: for (init; cond; step) { body }
+  // Check if there's a '(' or if it's a simple identifier (for i = ...)
+  let has_paren = self_token_eq(p.current(), LParen)
+  let p_after_paren = if has_paren { p.skip(1) } else { p }
+
+  // Parse init (can be let-binding, assignment, or empty)
+  let (init, p2) = if self_token_eq(p_after_paren.current(), Semicolon) {
+    (None, p_after_paren.skip(1))
+  } else if self_token_eq(p_after_paren.current(), Let) {
+    // let binding
+    let (expr, p4) = p_after_paren.parse_let()
+    if self_token_eq(p4.current(), Semicolon) {
+      (Some(expr), p4.skip(1))
+    } else {
+      (Some(expr), p4)
+    }
+  } else {
+    // Could be an identifier = value (for loop variable) or other expression
+    let (expr, p4) = p_after_paren.parse_expr()
+    // Check if this is an assignment to an undeclared variable (for loop init)
+    let init_expr = match expr {
+      Assign(Ident(name), value) =>
+        // Convert to LetBind for the loop scope
+        // We'll use Unit as the body since it's just initialization
+        LetBind(name, None, value, Unit)
+      _ => expr
+    }
+    if self_token_eq(p4.current(), Semicolon) {
+      (Some(init_expr), p4.skip(1))
+    } else {
+      (Some(init_expr), p4)
+    }
+  }
+
+  // Parse condition
+  let (cond, p3) = if self_token_eq(p2.current(), Semicolon) {
+    (None, p2.skip(1))
+  } else {
+    let (expr, p4) = p2.parse_expr()
+    if self_token_eq(p4.current(), Semicolon) {
+      (Some(expr), p4.skip(1))
+    } else {
+      (Some(expr), p4)
+    }
+  }
+
+  // Parse step (either until ')' or until '{')
+  let (step, p4) = if has_paren {
+    if self_token_eq(p3.current(), RParen) {
+      (None, p3.advance())
+    } else {
+      let (expr, p5) = p3.parse_expr()
+      if self_token_eq(p5.current(), RParen) {
+        (Some(expr), p5.advance())
+      } else {
+        (Some(expr), p5)
+      }
+    }
+    // No parentheses - step goes until '{'
+  } else if self_token_eq(p3.current(), LBrace) {
+    (None, p3)
+  } else {
+    let (expr, p5) = p3.parse_expr()
+    (Some(expr), p5)
+  }
+
+  let (body, p5) = p4.parse_block_or_expr()
+  (ForLoop(init, cond, step, body), p5)
+}
+
+///|
+fn Parser::parse_let(self : Parser) -> (AST, Parser) {
+  let p = self.skip(1)
+  let is_mut = self_token_eq(p.current(), Mut)
+  let p_after_mut = if is_mut { p.skip(1) } else { p }
+  let (name, p2) = p_after_mut.parse_ident()
+  let (annot, p3) = if self_token_eq(p2.current(), Colon) {
+    let p4 = p2.skip(1)
+    let (t, p5) = p4.parse_type()
+    (Some(t), p5)
+  } else {
+    (None, p2)
+  }
+  if self_token_eq(p3.current(), Equal) {
+    let p4 = p3.skip(1)
+    let (value, p5) = p4.parse_expr()
+    let (body, p6) = p5.parse_expr()
+    (LetBind(name, annot, value, body), p6)
+  } else {
+    (LetBind(name, annot, Unit, Unit), p3)
+  }
+}
+
+///|
+fn Parser::parse_function(self : Parser) -> (AST, Parser) {
+  let p = self.skip(1)
+  let (name, p2) = p.parse_ident()
+  if self_token_eq(p2.current(), LParen) {
+    let (params, p3) = p2.parse_params()
+    let (ret_type, p4) = if self_token_eq(p3.current(), Arrow) {
+      let p5 = p3.skip(1)
+      let (t, p6) = p5.parse_type()
+      (Some(t), p6)
+    } else {
+      (None, p3)
+    }
+    let (body, p5) = p4.parse_block_or_expr()
+    (Func(name, params, ret_type, body), p5)
+  } else {
+    let p3 = p2
+    if self_token_eq(p3.current(), LBrace) {
+      let (body, p4) = p3.parse_block()
+      (Func(name, [], None, body), p4)
+    } else {
+      (Func(name, [], None, Unit), p3)
+    }
+  }
+}
+
+///|
+fn Parser::parse_test(self : Parser) -> (AST, Parser) {
+  // test { ... } or test "name" { ... }
+  let p = self.skip(1)
+  let test_name : String? = match p.current() {
+    String(s) => Some(s)
+    _ => None
+  }
+  let p2 = if test_name != None { p.advance() } else { p }
+  if self_token_eq(p2.current(), LBrace) {
+    let (body, p3) = p2.parse_block()
+    (TestBlock(test_name, body), p3)
+  } else {
+    (TestBlock(test_name, Unit), p2)
+  }
+}
+
+///|
+fn Parser::parse_type_decl(self : Parser) -> (AST, Parser) {
+  // type Name { field1: Type1, field2: Type2 }
+  let p = self.skip(1)
+  let (name, p2) = p.parse_ident()
+  if self_token_eq(p2.current(), LBrace) {
+    let p3 = p2.skip(1)
+    let mut fields : Array[(String, String)] = []
+    let mut parser = p3
+    let mut done = false
+    while not(done) {
+      if self_token_eq(parser.current(), RBrace) {
+        parser = parser.advance()
+        // Skip optional derive annotation
+        if self_token_eq(parser.current(), Ident("derive")) {
+          parser = parser.skip(1)
+          if self_token_eq(parser.current(), LParen) {
+            parser = parser.skip(1)
+            while not(self_token_eq(parser.current(), RParen)) &&
+                  not(self_token_eq(parser.current(), Eof)) {
+              parser = parser.advance()
+            }
+            if self_token_eq(parser.current(), RParen) {
+              parser = parser.skip(1)
+            }
+          }
+        }
+        done = true
+      } else if self_token_eq(parser.current(), Eof) {
+        done = true
+      } else if self_token_eq(parser.current(), Mut) {
+        parser = parser.advance()
+      } else {
+        let (field_name, p4) = parser.parse_ident()
+        let (field_type, p5) = if self_token_eq(p4.current(), Colon) {
+          let p6 = p4.skip(1)
+          let (t, p7) = p6.parse_type_name()
+          (t, p7)
+        } else {
+          ("Int", p4)
+        }
+        fields = fields + [(field_name, field_type)]
+        if self_token_eq(p5.current(), Comma) {
+          parser = p5.skip(1)
+        } else if self_token_eq(p5.current(), RBrace) {
+          parser = p5.advance()
+          // Skip optional derive annotation
+          if self_token_eq(parser.current(), Ident("derive")) {
+            parser = parser.skip(1)
+            if self_token_eq(parser.current(), LParen) {
+              parser = parser.skip(1)
+              while not(self_token_eq(parser.current(), RParen)) &&
+                    not(self_token_eq(parser.current(), Eof)) {
+                parser = parser.advance()
+              }
+              if self_token_eq(parser.current(), RParen) {
+                parser = parser.skip(1)
+              }
+            }
+          }
+          done = true
+        } else if self_token_eq(p5.current(), Mut) {
+          parser = p5.advance()
+        } else {
+          parser = p5
+        }
+      }
+    }
+    (TypeDecl(name, fields), parser)
+  } else {
+    (TypeDecl(name, []), p2)
+  }
+}
+
+///|
+fn Parser::parse_enum(self : Parser) -> (AST, Parser) {
+  let p = self.skip(1)
+  let (name, p2) = p.parse_ident()
+  if self_token_eq(p2.current(), LBrace) {
+    let p3 = p2.skip(1)
+    let mut variants : Array[String] = []
+    let mut parser = p3
+    let mut done = false
+    while not(done) {
+      if self_token_eq(parser.current(), RBrace) {
+        parser = parser.advance()
+        done = true
+      } else if self_token_eq(parser.current(), Eof) {
+        done = true
+      } else {
+        match parser.current() {
+          Token::Ident(variant_name) => {
+            variants = variants + [variant_name]
+            parser = parser.advance()
+            if self_token_eq(parser.current(), Comma) {
+              parser = parser.skip(1)
+            }
+          }
+          _ => parser = parser.advance()
+        }
+      }
+    }
+    (EnumDef(name, variants), parser)
+  } else {
+    (EnumDef(name, []), p2)
+  }
+}
+
+///|
+fn Parser::parse_type_name(self : Parser) -> (String, Parser) {
+  match self.current() {
+    Ident(name) => {
+      let p = self.advance()
+      if self_token_eq(p.current(), LBracket) {
+        let p2 = p.skip(1)
+        let (inner, p3) = p2.parse_type_name()
+        if self_token_eq(p3.current(), RBracket) {
+          ("\{name}[\{inner}]", p3.advance())
+        } else {
+          ("\{name}[\{inner}]", p3)
+        }
+      } else if self_token_eq(p.current(), LtLt) {
+        let p2 = p.skip(1)
+        let (inner, p3) = p2.parse_type_name()
+        ("\{name}<\{inner}>", p3)
+      } else {
+        (name, p)
+      }
+    }
+    _ => ("Int", self)
+  }
+}
+
+///|
+fn Parser::parse_params(self : Parser) -> (Array[(String, AST?)], Parser) {
+  let p = self.skip(1)
+  if self_token_eq(p.current(), RParen) {
+    ([], p.advance())
+  } else {
+    let (first_name, p2) = p.parse_ident()
+    let (first_annot, p3) = if self_token_eq(p2.current(), Colon) {
+      let p4 = p2.skip(1)
+      let (t, p5) = p4.parse_type()
+      (Some(t), p5)
+    } else {
+      (None, p2)
+    }
+    let first = (first_name, first_annot)
+    let mut params = [first]
+    let mut parser = p3
+    let mut done = false
+    while not(done) {
+      if self_token_eq(parser.current(), Comma) {
+        let p2 = parser.skip(1)
+        let (n, p3) = p2.parse_ident()
+        let (a, p4) = if self_token_eq(p3.current(), Colon) {
+          let p5 = p3.skip(1)
+          let (t, p6) = p5.parse_type()
+          (Some(t), p6)
+        } else {
+          (None, p3)
+        }
+        params = params + [(n, a)]
+        parser = p4
+      } else if self_token_eq(parser.current(), RParen) {
+        parser = parser.advance()
+        done = true
+      } else {
+        done = true
+      }
+    }
+    (params, parser)
+  }
+}
+
+///|
+fn Parser::parse_type(self : Parser) -> (AST, Parser) {
+  match self.current() {
+    Ident(name) => {
+      let p = self.advance()
+      if self_token_eq(p.current(), LBracket) {
+        let p2 = p.skip(1)
+        let (inner, p3) = p2.parse_type()
+        let inner_name = match inner {
+          Ident(n) => n
+          _ => "Unknown"
+        }
+        if self_token_eq(p3.current(), RBracket) {
+          (Ident("\{name}[\{inner_name}]"), p3.advance())
+        } else {
+          (Ident("\{name}[\{inner_name}]"), p3)
+        }
+      } else {
+        (Ident(name), p)
+      }
+    }
+    LParen => self.parse_type_tuple()
+    _ => (Ident("Unknown"), self)
+  }
+}
+
+///|
+fn Parser::parse_type_tuple(self : Parser) -> (AST, Parser) {
+  let p = self.skip(1)
+  if self_token_eq(p.current(), RParen) {
+    (Ident("Unit"), p.advance())
+  } else {
+    let (first, p2) = p.parse_type()
+    if self_token_eq(p2.current(), RParen) {
+      (first, p2.advance())
+    } else if self_token_eq(p2.current(), Comma) {
+      let p3 = p2.skip(1)
+      let mut types = [first]
+      let mut parser = p3
+      let mut done = false
+      while not(done) {
+        let (t, p2) = parser.parse_type()
+        types = types + [t]
+        if self_token_eq(p2.current(), Comma) {
+          parser = p2.skip(1)
+        } else if self_token_eq(p2.current(), RParen) {
+          parser = p2.advance()
+          done = true
+        } else if self_token_eq(p2.current(), Arrow) {
+          done = true
+        } else {
+          done = true
+        }
+      }
+      (Tuple(types), parser)
+    } else if self_token_eq(p2.current(), Arrow) {
+      let p3 = p2.skip(1)
+      let (ret, p4) = p3.parse_type()
+      (Ident("(\{first})->\{ret}"), p4)
+    } else {
+      (first, p2)
+    }
+  }
+}
+
+///|
+fn Parser::parse_block_or_expr(self : Parser) -> (AST, Parser) {
+  if self_token_eq(self.current(), LBrace) {
+    self.parse_block()
+  } else {
+    self.parse_expr()
+  }
+}
+
+///|
+fn Parser::parse_postfix(self : Parser) -> (AST, Parser) {
+  let (base, p2) = self.parse_primary()
+  let mut expr = base
+  let mut parser = p2
+  let mut done = false
+  while not(done) {
+    if self_token_eq(parser.current(), LParen) {
+      let (args, p3) = parser.parse_args()
+      expr = CallExpr(expr, args)
+      parser = p3
+    } else if self_token_eq(parser.current(), ColonColon) {
+      let type_name = match expr {
+        Ident(name) => name
+        _ => ""
+      }
+      let p3 = parser.skip(1)
+      if self_token_eq(p3.current(), LBrace) {
+        let p4 = p3.skip(1)
+        let mut fields : Array[(String, AST)] = []
+        let mut p5 = p4
+        let mut done2 = false
+        while not(done2) {
+          if self_token_eq(p5.current(), RBrace) {
+            p5 = p5.advance()
+            done2 = true
+          } else if self_token_eq(p5.current(), Eof) {
+            done2 = true
+          } else {
+            let (field_name, p6) = p5.parse_ident()
+            let (field_val, p7) = if self_token_eq(p6.current(), Colon) {
+              let p8 = p6.skip(1)
+              let (v, p9) = p8.parse_expr()
+              (v, p9)
+            } else {
+              (Unit, p6)
+            }
+            fields = fields + [(field_name, field_val)]
+            if self_token_eq(p7.current(), Comma) {
+              p5 = p7.skip(1)
+            } else if self_token_eq(p7.current(), RBrace) {
+              p5 = p7.advance()
+              done2 = true
+            } else {
+              p5 = p7
+            }
+          }
+        }
+        expr = StructLit(type_name, fields)
+        parser = p5
+      } else {
+        match p3.current() {
+          Token::Ident(variant_name) => {
+            expr = Ident("\{type_name}::\{variant_name}")
+            parser = p3.advance()
+          }
+          _ => parser = p3
+        }
+      }
+    } else if self_token_eq(parser.current(), Dot) {
+      let p3 = parser.skip(1)
+      // Check for numeric field (tuple index) or identifier
+      match p3.current() {
+        Int(i) => {
+          expr = FieldExpr(expr, i.to_string())
+          parser = p3.advance()
+        }
+        _ => {
+          let (field, p4) = p3.parse_ident()
+          expr = FieldExpr(expr, field)
+          parser = p4
+        }
+      }
+    } else if self_token_eq(parser.current(), LBracket) {
+      let p3 = parser.skip(1)
+      let (index, p4) = p3.parse_expr()
+      if self_token_eq(p4.current(), RBracket) {
+        expr = IndexExpr(expr, index)
+        parser = p4.advance()
+      } else {
+        parser = p4
+      }
+    } else {
+      done = true
+    }
+  }
+  (expr, parser)
+}
+
+///|
+fn Parser::parse_args(self : Parser) -> (Array[AST], Parser) {
+  let p = self.skip(1)
+  if self_token_eq(p.current(), RParen) {
+    ([], p.advance())
+  } else {
+    let (first, p2) = p.parse_expr()
+    let mut args = [first]
+    let mut parser = p2
+    let mut done = false
+    while not(done) {
+      if self_token_eq(parser.current(), Comma) {
+        let p2 = parser.skip(1)
+        let (arg, p3) = p2.parse_expr()
+        args = args + [arg]
+        parser = p3
+      } else if self_token_eq(parser.current(), RParen) {
+        parser = parser.advance()
+        done = true
+      } else {
+        done = true
+      }
+    }
+    (args, parser)
+  }
+}
+
+///|
+fn Parser::parse_unary(self : Parser) -> (AST, Parser) {
+  let tok = self.current()
+  if self_token_eq(tok, Bang) {
+    let p = self.skip(1)
+    let (expr, p2) = p.parse_unary()
+    (Unary("!", expr), p2)
+  } else if self_token_eq(tok, Minus) {
+    let p = self.skip(1)
+    let (expr, p2) = p.parse_unary()
+    (Unary("-", expr), p2)
+  } else if self_token_eq(tok, Tilde) {
+    let p = self.skip(1)
+    let (expr, p2) = p.parse_unary()
+    (Unary("~", expr), p2)
+  } else if self_token_eq(tok, Ampersand) {
+    let p = self.skip(1)
+    let (expr, p2) = p.parse_unary()
+    (Unary("&", expr), p2)
+  } else {
+    self.parse_postfix()
+  }
+}
+
+///|
+fn parse_bin_prec(op : String) -> Int {
+  match op {
+    "||" => 1
+    "&&" => 2
+    "|" => 3
+    "^" => 4
+    "&" => 5
+    "==" | "!=" => 6
+    "<" | ">" | "<=" | ">=" => 7
+    "<<" | ">>" => 8
+    "+" | "-" => 9
+    "*" | "/" | "%" => 10
+    _ => 0
+  }
+}
+
+///|
+fn is_binop(tok : Token) -> Bool {
+  match tok {
+    Plus
+    | Minus
+    | Star
+    | Slash
+    | Percent
+    | Ampersand
+    | Pipe
+    | Caret
+    | Lt
+    | Gt
+    | LtEqual
+    | GtEqual
+    | EqEq
+    | BangEqual
+    | AmpersandAmpersand
+    | PipePipe
+    | LtLt
+    | GtGt => true
+    _ => false
+  }
+}
+
+///|
+fn binop_to_str(tok : Token) -> String {
+  match tok {
+    Plus => "+"
+    Minus => "-"
+    Star => "*"
+    Slash => "/"
+    Percent => "%"
+    Ampersand => "&"
+    Pipe => "|"
+    Caret => "^"
+    Lt => "<"
+    Gt => ">"
+    LtEqual => "<="
+    GtEqual => ">="
+    EqEq => "=="
+    BangEqual => "!="
+    AmpersandAmpersand => "&&"
+    PipePipe => "||"
+    LtLt => "<<"
+    GtGt => ">>"
+    _ => ""
+  }
+}
+
+///|
+fn Parser::parse_binary(self : Parser, min_prec : Int) -> (AST, Parser) {
+  let (left, p2) = self.parse_unary()
+  let mut parser = p2
+  let mut left_expr = left
+  let mut done = false
+  while not(done) {
+    let tok = parser.current()
+    if is_binop(tok) {
+      let op = binop_to_str(tok)
+      let prec = parse_bin_prec(op)
+      if prec >= min_prec {
+        let p3 = parser.skip(1)
+        let (right, p4) = p3.parse_binary(prec + 1)
+        left_expr = Binary(op, left_expr, right)
+        parser = p4
+      } else {
+        done = true
+      }
+    } else {
+      done = true
+    }
+  }
+  (left_expr, parser)
+}
+
+///|
+fn Parser::parse_expr(self : Parser) -> (AST, Parser) {
+  let (left, p2) = self.parse_binary(1)
+  // Check for assignment
+  if self_token_eq(p2.current(), Equal) {
+    let p3 = p2.skip(1)
+    let (value, p4) = p3.parse_expr()
+    (Assign(left, value), p4)
+  } else {
+    // Check for compound assignment operators
+    let op = match p2.current() {
+      PlusEqual => Some("+")
+      MinusEqual => Some("-")
+      StarEqual => Some("*")
+      SlashEqual => Some("/")
+      PercentEqual => Some("%")
+      AmpersandEqual => Some("&")
+      PipeEqual => Some("|")
+      CaretEqual => Some("^")
+      LtLt => Some("<<")
+      GtGt => Some(">>")
+      _ => None
+    }
+    match op {
+      Some(op_str) => {
+        let p3 = p2.skip(1)
+        let (value, p4) = p3.parse_expr()
+        (AssignOp(op_str, left, value), p4)
+      }
+      None => (left, p2)
+    }
+  }
+}
+
+///|
+pub fn Parser::parse(self : Parser) -> AST {
+  let mut stmts : Array[AST] = []
+  let mut parser = self
+  let mut done = false
+  while not(done) {
+    if self_token_eq(parser.current(), Eof) {
+      done = true
+    } else {
+      let (expr, p2) = parser.parse_expr()
+      // If parser didn't advance, skip current token to avoid infinite loop
+      if p2.pos == parser.pos {
+        parser = parser.advance()
+      } else {
+        stmts = stmts + [expr]
+        parser = p2
+      }
+    }
+  }
+  if stmts.length() == 1 {
+    stmts[0]
+  } else {
+    Block(stmts)
+  }
+}
+
+///|
+pub fn parse(tokens : Array[Token]) -> AST {
+  let parser = Parser::new(tokens)
+  parser.parse()
+}
+///|
 pub enum Operand {
   Imm(Int)
   Reg(String)
@@ -267,67 +2354,6 @@ fn xmm_reg_code_lookup(reg : String) -> Int {
   else { 0 }
 }
 
-///|
-fn push_opcode_lookup(reg : String) -> Array[Byte] {
-  if reg == "rax" { [0x50] }
-  else if reg == "rcx" { [0x51] }
-  else if reg == "rdx" { [0x52] }
-  else if reg == "rbx" { [0x53] }
-  else if reg == "rsp" { [0x54] }
-  else if reg == "rbp" { [0x55] }
-  else if reg == "rsi" { [0x56] }
-  else if reg == "rdi" { [0x57] }
-  else if reg == "r8" { [0x41, 0x50] }
-  else if reg == "r9" { [0x41, 0x51] }
-  else if reg == "r10" { [0x41, 0x52] }
-  else if reg == "r11" { [0x41, 0x53] }
-  else if reg == "r12" { [0x41, 0x54] }
-  else if reg == "r13" { [0x41, 0x55] }
-  else if reg == "r14" { [0x41, 0x56] }
-  else if reg == "r15" { [0x41, 0x57] }
-  else { [] }
-}
-
-///|
-fn pop_opcode_lookup(reg : String) -> Array[Byte] {
-  if reg == "rax" { [0x58] }
-  else if reg == "rcx" { [0x59] }
-  else if reg == "rdx" { [0x5A] }
-  else if reg == "rbx" { [0x5B] }
-  else if reg == "rsp" { [0x5C] }
-  else if reg == "rbp" { [0x5D] }
-  else if reg == "rsi" { [0x5E] }
-  else if reg == "rdi" { [0x5F] }
-  else if reg == "r8" { [0x41, 0x58] }
-  else if reg == "r9" { [0x41, 0x59] }
-  else if reg == "r10" { [0x41, 0x5A] }
-  else if reg == "r11" { [0x41, 0x5B] }
-  else if reg == "r12" { [0x41, 0x5C] }
-  else if reg == "r13" { [0x41, 0x5D] }
-  else if reg == "r14" { [0x41, 0x5E] }
-  else if reg == "r15" { [0x41, 0x5F] }
-  else { [] }
-}
-
-///|
-fn reg8_code_lookup(reg : String) -> Int {
-  if reg == "al" { 0 }
-  else if reg == "cl" { 1 }
-  else if reg == "dl" { 2 }
-  else if reg == "bl" { 3 }
-  else if reg == "sil" { 6 }
-  else if reg == "dil" { 7 }
-  else if reg == "r8b" { 0 }
-  else if reg == "r9b" { 1 }
-  else if reg == "r10b" { 2 }
-  else if reg == "r11b" { 3 }
-  else if reg == "r12b" { 4 }
-  else if reg == "r13b" { 5 }
-  else if reg == "r14b" { 6 }
-  else if reg == "r15b" { 7 }
-  else { 0 }
-}
-
 // ============ END LOOKUP TABLES ============
 
 ///|
@@ -362,16 +2388,6 @@ fn CodeGen::emit_reg64_opcode(self : CodeGen, reg : String) -> CodeGen {
 }
 
 ///|
-fn CodeGen::emit_push(self : CodeGen, reg : String) -> CodeGen {
-  self.emit_bytes(push_opcode_lookup(reg))
-}
-
-///|
-fn CodeGen::emit_pop(self : CodeGen, reg : String) -> CodeGen {
-  self.emit_bytes(pop_opcode_lookup(reg))
-}
-
-///|
 fn CodeGen::emit_operand64(self : CodeGen, op : X86Operand) -> CodeGen {
   match op {
     Imm8(v) => self.emit_byte(v.to_byte())
@@ -396,14 +2412,42 @@ fn CodeGen::emit_modrm_reg64(
   reg : String,
   rm : X86Operand,
 ) -> CodeGen {
-  let reg_code = reg_code_lookup(reg)
-  let rm_code = 
-    match rm {
-      Reg64(r) => Some(reg_code_lookup(r))
-      _ => None
-    }
+  let reg_code = match reg {
+    "rax" => 0
+    "rcx" => 1
+    "rdx" => 2
+    "rbx" => 3
+    "rsp" => 4
+    "rbp" => 5
+    "rsi" => 6
+    "rdi" => 7
+    "r8" => 0
+    "r9" => 1
+    "r10" => 2
+    "r11" => 3
+    "r12" => 4
+    "r13" => 5
+    "r14" => 6
+    "r15" => 7
+    _ => 0
+  }
   match rm {
-    Reg64(_) => self.emit_byte(modrm(3, reg_code, rm_code.unwrap()))
+    Reg64("rax") => self.emit_byte(modrm(3, reg_code, 0))
+    Reg64("rcx") => self.emit_byte(modrm(3, reg_code, 1))
+    Reg64("rdx") => self.emit_byte(modrm(3, reg_code, 2))
+    Reg64("rbx") => self.emit_byte(modrm(3, reg_code, 3))
+    Reg64("rsp") => self.emit_byte(modrm(3, reg_code, 4))
+    Reg64("rbp") => self.emit_byte(modrm(3, reg_code, 5))
+    Reg64("rsi") => self.emit_byte(modrm(3, reg_code, 6))
+    Reg64("rdi") => self.emit_byte(modrm(3, reg_code, 7))
+    Reg64("r8") => self.emit_byte(modrm(3, reg_code, 0))
+    Reg64("r9") => self.emit_byte(modrm(3, reg_code, 1))
+    Reg64("r10") => self.emit_byte(modrm(3, reg_code, 2))
+    Reg64("r11") => self.emit_byte(modrm(3, reg_code, 3))
+    Reg64("r12") => self.emit_byte(modrm(3, reg_code, 4))
+    Reg64("r13") => self.emit_byte(modrm(3, reg_code, 5))
+    Reg64("r14") => self.emit_byte(modrm(3, reg_code, 6))
+    Reg64("r15") => self.emit_byte(modrm(3, reg_code, 7))
     Stack64(offset) => {
       let g = self.emit_byte(modrm(2, reg_code, 4))
       let g = g.emit_byte(sib(0, 4, 4))
@@ -441,16 +2485,56 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     Ret => self.emit_byte(0xC3)
     Syscall => self.emit_bytes([0x0F, 0x05])
     RepMovsq => self.emit_bytes([0x48, 0xA5])
-    Push(Reg64(reg)) => self.emit_push(reg)
+    Push(Reg64("rax")) => self.emit_byte(0x50)
+    Push(Reg64("rcx")) => self.emit_byte(0x51)
+    Push(Reg64("rdx")) => self.emit_byte(0x52)
+    Push(Reg64("rbx")) => self.emit_byte(0x53)
+    Push(Reg64("rsp")) => self.emit_byte(0x54)
+    Push(Reg64("rbp")) => self.emit_byte(0x55)
+    Push(Reg64("rsi")) => self.emit_byte(0x56)
+    Push(Reg64("rdi")) => self.emit_byte(0x57)
+    Push(Reg64("r8")) => self.emit_bytes([0x41, 0x50])
+    Push(Reg64("r9")) => self.emit_bytes([0x41, 0x51])
+    Push(Reg64("r10")) => self.emit_bytes([0x41, 0x52])
+    Push(Reg64("r11")) => self.emit_bytes([0x41, 0x53])
+    Push(Reg64("r12")) => self.emit_bytes([0x41, 0x54])
+    Push(Reg64("r13")) => self.emit_bytes([0x41, 0x55])
+    Push(Reg64("r14")) => self.emit_bytes([0x41, 0x56])
+    Push(Reg64("r15")) => self.emit_bytes([0x41, 0x57])
     Push(Imm32(v)) => {
       let g = self.emit_byte(0x68)
       g.emit32(v)
     }
-    Pop(Reg64(reg)) => self.emit_pop(reg)
+    Pop(Reg64("rax")) => self.emit_byte(0x58)
+    Pop(Reg64("rcx")) => self.emit_byte(0x59)
+    Pop(Reg64("rdx")) => self.emit_byte(0x5A)
+    Pop(Reg64("rbx")) => self.emit_byte(0x5B)
+    Pop(Reg64("rsp")) => self.emit_byte(0x5C)
+    Pop(Reg64("rbp")) => self.emit_byte(0x5D)
+    Pop(Reg64("rsi")) => self.emit_byte(0x5E)
+    Pop(Reg64("rdi")) => self.emit_byte(0x5F)
+    Pop(Reg64("r8")) => self.emit_bytes([0x41, 0x58])
+    Pop(Reg64("r9")) => self.emit_bytes([0x41, 0x59])
+    Pop(Reg64("r10")) => self.emit_bytes([0x41, 0x5A])
+    Pop(Reg64("r11")) => self.emit_bytes([0x41, 0x5B])
+    Pop(Reg64("r12")) => self.emit_bytes([0x41, 0x5C])
+    Pop(Reg64("r13")) => self.emit_bytes([0x41, 0x5D])
+    Pop(Reg64("r14")) => self.emit_bytes([0x41, 0x5E])
+    Pop(Reg64("r15")) => self.emit_bytes([0x41, 0x5F])
     Mov(Reg64(dest), Imm32(v)) =>
       match dest {
         "r8" | "r9" | "r10" | "r11" | "r12" | "r13" | "r14" | "r15" => {
-          let reg_code = reg_code_lookup(dest)
+          let reg_code = match dest {
+            "r8" => 0
+            "r9" => 1
+            "r10" => 2
+            "r11" => 3
+            "r12" => 4
+            "r13" => 5
+            "r14" => 6
+            "r15" => 7
+            _ => 0
+          }
           let g = self.emit_byte(0x49)
           let g = g.emit_byte(0xC7)
           let g = g.emit_byte(modrm(3, 0, reg_code))
@@ -466,8 +2550,44 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g.emit64(v)
     }
     Mov(Reg64(dest), Reg64(src)) => {
-      let src_code = reg_code_lookup(src)
-      let dest_code = reg_code_lookup(dest)
+      let src_code = match src {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        "r8" => 0
+        "r9" => 1
+        "r10" => 2
+        "r11" => 3
+        "r12" => 4
+        "r13" => 5
+        "r14" => 6
+        "r15" => 7
+        _ => 0
+      }
+      let dest_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        "r8" => 0
+        "r9" => 1
+        "r10" => 2
+        "r11" => 3
+        "r12" => 4
+        "r13" => 5
+        "r14" => 6
+        "r15" => 7
+        _ => 0
+      }
       let src_ext = src == "r8" ||
         src == "r9" ||
         src == "r10" ||
@@ -532,8 +2652,36 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
         dest == "r13" ||
         dest == "r14" ||
         dest == "r15"
-      let dest_code = reg_code_lookup(dest)
-      let rm_code = reg_code_lookup(addr_reg)
+      let dest_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        "r8" => 0
+        "r9" => 1
+        "r10" => 2
+        "r11" => 3
+        "r12" => 4
+        "r13" => 5
+        "r14" => 6
+        "r15" => 7
+        _ => 0
+      }
+      let rm_code = match addr_reg {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let mut g = if dest_ext {
         self.emit_byte(0x4C)
       } else {
@@ -565,8 +2713,36 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
         dest == "r13" ||
         dest == "r14" ||
         dest == "r15"
-      let dest_code = reg_code_lookup(dest)
-      let rm_code = reg_code_lookup(addr_reg)
+      let dest_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        "r8" => 0
+        "r9" => 1
+        "r10" => 2
+        "r11" => 3
+        "r12" => 4
+        "r13" => 5
+        "r14" => 6
+        "r15" => 7
+        _ => 0
+      }
+      let rm_code = match addr_reg {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = if dest_ext { self.emit_byte(0x4C) } else { self.emit_byte(0x48) }
       let g = g.emit_byte(0x8B)
       if addr_reg == "rsp" {
@@ -581,8 +2757,28 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     }
     Mov(MemIndirect(addr_reg), Reg64(src)) => {
       // mov [addr_reg], reg64
-      let src_code = reg_code_lookup(src)
-      let rm_code = reg_code_lookup(addr_reg)
+      let src_code = match src {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      let rm_code = match addr_reg {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       // REX.W + 89 + ModRM (mod=00, reg=src, rm=addr_reg)
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x89)
@@ -597,8 +2793,34 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       }
     }
     Mov(MemIndirect(addr_reg), Reg8(src)) => {
-      let reg_code = reg8_code_lookup(src)
-      let rm_code = reg_code_lookup(addr_reg)
+      let reg_code = match src {
+        "al" => 0
+        "cl" => 1
+        "dl" => 2
+        "bl" => 3
+        "sil" => 6
+        "dil" => 7
+        "r8b" => 0
+        "r9b" => 1
+        "r10b" => 2
+        "r11b" => 3
+        "r12b" => 4
+        "r13b" => 5
+        "r14b" => 6
+        "r15b" => 7
+        _ => 0
+      }
+      let rm_code = match addr_reg {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let needs_rex = src == "r8b" ||
         src == "r9b" ||
         src == "r10b" ||
@@ -625,7 +2847,17 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       }
     }
     Mov(MemIndirect(addr_reg), Imm8(v)) => {
-      let rm_code = reg_code_lookup(addr_reg)
+      let rm_code = match addr_reg {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let mut g = self.emit_byte(0xC6)
       if addr_reg == "rsp" {
         g = g.emit_byte(modrm(0, 0, 4))
@@ -639,7 +2871,17 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g.emit_byte(v.to_byte())
     }
     Mov(MemOffset(addr_reg, offset), Imm32(v)) => {
-      let rm_code = reg_code_lookup(addr_reg)
+      let rm_code = match addr_reg {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let mut g = self.emit_byte(0x48) // REX.W
       if addr_reg == "rsp" {
         g = g.emit_byte(0xC7)
@@ -662,8 +2904,28 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g.emit32(v)
     }
     Mov(MemOffset(addr_reg, offset), Reg64(src)) => {
-      let reg_code = reg_code_lookup(src)
-      let rm_code = reg_code_lookup(addr_reg)
+      let reg_code = match src {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      let rm_code = match addr_reg {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let mut g = self.emit_byte(0x48) // REX.W
       if addr_reg == "rsp" {
         g = g.emit_byte(0x89)
@@ -686,8 +2948,24 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Mov(Reg8(dest), Reg8(src)) => {
-      let src_code = reg8_code_lookup(src)
-      let dest_code = reg8_code_lookup(dest)
+      let src_code = match src {
+        "al" => 0
+        "cl" => 1
+        "dl" => 2
+        "bl" => 3
+        "sil" => 6
+        "dil" => 7
+        _ => 0
+      }
+      let dest_code = match dest {
+        "al" => 0
+        "cl" => 1
+        "dl" => 2
+        "bl" => 3
+        "sil" => 6
+        "dil" => 7
+        _ => 0
+      }
       let needs_rex = src == "sil" ||
         src == "dil" ||
         dest == "sil" ||
@@ -700,7 +2978,15 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g.emit_byte(modrm(3, src_code, dest_code))
     }
     Mov(Reg8(dest), Imm8(v)) => {
-      let dest_code = reg8_code_lookup(dest)
+      let dest_code = match dest {
+        "al" => 0
+        "cl" => 1
+        "dl" => 2
+        "bl" => 3
+        "sil" => 6
+        "dil" => 7
+        _ => 0
+      }
       let needs_rex = dest == "sil" || dest == "dil"
       let mut g = self
       if needs_rex {
@@ -710,8 +2996,26 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g.emit_byte(v.to_byte())
     }
     Movzx(Reg64(dest), Reg8(src)) => {
-      let dest_code = reg_code_lookup(dest)
-      let src_code = reg8_code_lookup(src)
+      let dest_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      let src_code = match src {
+        "al" => 0
+        "cl" => 1
+        "dl" => 2
+        "bl" => 3
+        "sil" => 6
+        "dil" => 7
+        _ => 0
+      }
       let needs_rex = src == "sil" || src == "dil"
       let mut g = self
       if needs_rex {
@@ -722,8 +3026,28 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g.emit_byte(modrm(3, dest_code, src_code))
     }
     Movzx(Reg64(dest), MemIndirect(addr_reg)) => {
-      let dest_code = reg_code_lookup(dest)
-      let rm_code = reg_code_lookup(addr_reg)
+      let dest_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
+      let rm_code = match addr_reg {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0xB6)
@@ -738,7 +3062,25 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       }
     }
     Lea(Reg64(dest), RipRel32(label)) => {
-      let reg_code = reg_code_lookup(dest)
+      let reg_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        "r8" => 0
+        "r9" => 1
+        "r10" => 2
+        "r11" => 3
+        "r12" => 4
+        "r13" => 5
+        "r14" => 6
+        "r15" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48) // REX.w
       let g = g.emit_byte(0x8D) // LEA
       let g = g.emit_byte(modrm(0, reg_code, 5)) // mod=00, reg=reg, rm=101 (RIP)
@@ -754,7 +3096,17 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Add(Reg64(dest), Imm32(v)) => {
-      let rm_code = reg_code_lookup(dest)
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
       let g = g.emit_byte(modrm(3, 0, rm_code))
@@ -767,7 +3119,17 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Sub(Reg64(dest), Imm32(v)) => {
-      let rm_code = reg_code_lookup(dest)
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
       let g = g.emit_byte(modrm(3, 5, rm_code))
@@ -782,7 +3144,25 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Idiv(Reg64(src)) => {
-      let src_code = reg_code_lookup(src)
+      let src_code = match src {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        "r8" => 0
+        "r9" => 1
+        "r10" => 2
+        "r11" => 3
+        "r12" => 4
+        "r13" => 5
+        "r14" => 6
+        "r15" => 7
+        _ => 0
+      }
       let is_ext = src == "r8" ||
         src == "r9" ||
         src == "r10" ||
@@ -860,7 +3240,17 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     And(Reg64(dest), Imm32(v)) => {
-      let rm_code = reg_code_lookup(dest)
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
       let g = g.emit_byte(modrm(3, 4, rm_code))
@@ -873,7 +3263,17 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Or(Reg64(dest), Imm32(v)) => {
-      let rm_code = reg_code_lookup(dest)
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
       let g = g.emit_byte(modrm(3, 1, rm_code))
@@ -886,7 +3286,17 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g
     }
     Xor(Reg64(dest), Imm32(v)) => {
-      let rm_code = reg_code_lookup(dest)
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x81)
       let g = g.emit_byte(modrm(3, 6, rm_code))
@@ -907,7 +3317,17 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     Inc(Reg64(dest)) =>
       match dest {
         "r8" | "r9" | "r10" | "r11" | "r12" | "r13" | "r14" | "r15" => {
-          let rm_code = reg_code_lookup(dest)
+          let rm_code = match dest {
+            "r8" => 0
+            "r9" => 1
+            "r10" => 2
+            "r11" => 3
+            "r12" => 4
+            "r13" => 5
+            "r14" => 6
+            "r15" => 7
+            _ => 0
+          }
           let g = self.emit_byte(0x49)
           let g = g.emit_byte(0xFF)
           g.emit_byte(modrm(3, 0, rm_code))
@@ -922,7 +3342,17 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     Dec(Reg64(dest)) =>
       match dest {
         "r8" | "r9" | "r10" | "r11" | "r12" | "r13" | "r14" | "r15" => {
-          let rm_code = reg_code_lookup(dest)
+          let rm_code = match dest {
+            "r8" => 0
+            "r9" => 1
+            "r10" => 2
+            "r11" => 3
+            "r12" => 4
+            "r13" => 5
+            "r14" => 6
+            "r15" => 7
+            _ => 0
+          }
           let g = self.emit_byte(0x49)
           let g = g.emit_byte(0xFF)
           g.emit_byte(modrm(3, 1, rm_code))
@@ -949,7 +3379,25 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     }
     Shl(Reg64(dest), Imm8(v)) => {
       // SHL r/m64, imm8 = REX.W + C1 /4 ib
-      let dest_code = reg_code_lookup(dest)
+      let dest_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        "r8" => 0
+        "r9" => 1
+        "r10" => 2
+        "r11" => 3
+        "r12" => 4
+        "r13" => 5
+        "r14" => 6
+        "r15" => 7
+        _ => 0
+      }
       let dest_ext = dest == "r8" ||
         dest == "r9" ||
         dest == "r10" ||
@@ -985,21 +3433,51 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     // Variable shift by cl register
     Shl(Reg64(dest), Reg64("cl")) => {
       // shl r64, cl = REX.W + D3 /4
-      let rm_code = reg_code_lookup(dest)
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0xD3)
       g.emit_byte(modrm(3, 4, rm_code))
     }
     Shr(Reg64(dest), Reg64("cl")) => {
       // shr r64, cl = REX.W + D3 /5
-      let rm_code = reg_code_lookup(dest)
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0xD3)
       g.emit_byte(modrm(3, 5, rm_code))
     }
     Sar(Reg64(dest), Reg64("cl")) => {
       // sar r64, cl = REX.W + D3 /7
-      let rm_code = reg_code_lookup(dest)
+      let rm_code = match dest {
+        "rax" => 0
+        "rcx" => 1
+        "rdx" => 2
+        "rbx" => 3
+        "rsp" => 4
+        "rbp" => 5
+        "rsi" => 6
+        "rdi" => 7
+        _ => 0
+      }
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0xD3)
       g.emit_byte(modrm(3, 7, rm_code))
@@ -5323,4 +7801,122 @@ pub fn codegen(ast : AST) -> Bytes {
     i = i + 1
   }
   Bytes::from_array(code)
+}
+///|
+pub fn compile_file(
+  input_path : String,
+  output_path : String,
+) -> Result[Unit, String] {
+  // Read input file
+  let source = @fs.read_file_to_string(input_path) catch {
+    e => return Err("Failed to read input file: \{e}")
+  }
+
+  // Tokenize
+  let tokens = tokenize(source)
+
+  // Parse into AST
+  let ast = parse(tokens)
+
+  // Generate x86_64 code
+  let code = codegen(ast)
+
+  // Header is 64 + 56 = 120 bytes (0x78)
+  // Code should start at 0x401000 (like GCC -nostdlib -s)
+  // File offset for 0x1000
+  // Padding: 0x1000 - 0x78 = 0xF88 bytes
+  let padding_len = 0x1000 - 0x78
+  let padding : Array[Byte] = Array::make(padding_len, 0x00B)
+
+  let header : Array[Byte] = [
+    // ELF header (64 bytes)
+    0x7F, 0x45, 0x4C, 0x46, // magic
+     0x02, // 64-bit
+     0x01, // little endian
+     0x01, // version
+     0x00, // SYS V ABI
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // padding
+     0x02, 0x00, // e_type = ET_EXEC
+     0x3E, 0x00, // e_machine = x86-64
+     0x01, 0x00, 0x00, 0x00, // e_version
+     0x00, 0x10, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, // e_entry = 0x401000
+     0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // e_phoff = 64
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // e_shoff = 0
+     0x00, 0x00, 0x00, 0x00, // e_flags
+     0x40, 0x00, // e_ehsize = 64
+     0x38, 0x00, // e_phentsize = 56
+     0x01, 0x00, // e_phnum = 1
+     0x00, 0x00, // e_shentsize
+     0x00, 0x00, // e_shnum
+     0x00, 0x00, // e_shstrndx
+
+    // Program header (56 bytes)
+     0x01, 0x00, 0x00, 0x00, // p_type = PT_LOAD
+     0x07, 0x00, 0x00, 0x00, // p_flags = PF_X | PF_W | PF_R
+     0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // p_offset = 0x1000
+     0x00, 0x10, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, // p_vaddr = 0x401000
+     0x00, 0x10, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, // p_paddr = 0x401000
+  ]
+
+  // Calculate code size and pad to page boundary
+  let code_len = code.length()
+  let padded_code_len = (code_len + 0xFFF) & 0xFFFFF000
+
+  // Header is 96 bytes (ELF header 64 + partial program header 32)
+  // phdr_extra is 24 bytes (p_filesz, p_memsz, p_align)
+  // Total: 120 bytes
+  // Padding: 0x1000 - 120 = 3976 bytes (0xF88)
+  let padding_len = 0x1000 - 120
+
+  // Create phdr_bytes - write padded_code_len as little-endian bytes
+  let mut phdr_all : Array[Byte] = []
+
+  // p_filesz (8 bytes) - padded_code_len in little-endian
+  // For a 32-bit Int, we only need the lower 4 bytes; upper 4 are zero
+  phdr_all = phdr_all +
+    [
+      (padded_code_len & 0xFF).to_byte(),
+      ((padded_code_len >> 8) & 0xFF).to_byte(),
+      ((padded_code_len >> 16) & 0xFF).to_byte(),
+      ((padded_code_len >> 24) & 0xFF).to_byte(),
+      0x00,
+      0x00,
+      0x00,
+      0x00, // Upper 4 bytes are always 0 for 32-bit values
+    ]
+
+  // p_memsz (8 bytes) - same as filesz
+  phdr_all = phdr_all +
+    [
+      (padded_code_len & 0xFF).to_byte(),
+      ((padded_code_len >> 8) & 0xFF).to_byte(),
+      ((padded_code_len >> 16) & 0xFF).to_byte(),
+      ((padded_code_len >> 24) & 0xFF).to_byte(),
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+    ]
+
+  // p_align (8 bytes) = 0x1000
+  phdr_all = phdr_all + [0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+  let phdr_bytes = Bytes::from_array(phdr_all)
+  let header_bytes = Bytes::from_array(header)
+  let padding : Array[Byte] = Array::make(padding_len, 0x00B)
+  let padding_bytes = Bytes::from_array(padding)
+
+  // Pad code to match padded_code_len
+  let code_padding_len = padded_code_len - code_len
+  let code_padding : Array[Byte] = Array::make(code_padding_len, 0x00)
+  let code_bytes = code + Bytes::from_array(code_padding)
+
+  let result = header_bytes + phdr_bytes + padding_bytes + code_bytes
+
+  try {
+    @fs.write_bytes_to_file(output_path, result)
+    Ok(())
+  } catch {
+    e => Err("Failed to write output file: \{e}")
+  }
 }
