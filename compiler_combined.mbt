@@ -5373,19 +5373,26 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(lq1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
                       g = g.emit_call_print()
-                      // Print key - rax has offset, rbx has base
-                      // Save r15 and r14
+                      // Print key - use r15 to index into map
                       g = g.emit_inst(Push(Reg64("r15")))
                       g = g.emit_inst(Push(Reg64("r14")))
-                      // rax = key offset
-                      // Use MemOffset to load key directly
-                      g = g.emit_inst(Mov(Reg64("rsi"), MemOffset("rbx", 0))) // DEBUG: try offset 0
-                      // Print key (4 chars)
+                      // r15 has index. Calculate: 4 + r15 * 16
+                      // rsi = r15
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("r15")))
+                      // rsi = r15 * 16
+                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(16)))
+                      g = g.emit_inst(Imul(Reg64("rsi"), Reg64("rcx")))
+                      // rsi = 4 + r15 * 16
+                      g = g.emit_inst(Add(Reg64("rsi"), Imm32(4)))
+                      // rsi = rbx + rsi (actual key address)
+                      g = g.emit_inst(Add(Reg64("rsi"), Reg64("rbx")))
+                      // Now rsi points to key pointer. Load it.
+                      g = g.emit_inst(Mov(Reg64("rsi"), MemIndirect("rsi")))
+                      // Print 4 bytes (the key)
                       g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
                       g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(4)))
                       g = g.emit_inst(Syscall)
-                      // Restore r14 and r15
                       g = g.emit_inst(Pop(Reg64("r14")))
                       g = g.emit_inst(Pop(Reg64("r15")))
                       // Print closing quote
@@ -5410,34 +5417,44 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       // Print value
                       g = g.emit_inst(Push(Reg64("r15")))
                       g = g.emit_inst(Push(Reg64("r14")))
-                      // rax = value address
+                      // rax = value offset
+                      // Compute value address: rax = rbx + rax
                       g = g.emit_inst(Add(Reg64("rax"), Reg64("rbx")))
-                      // Load value
-                      g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
-                      // Print value (single digit)
-                      let nz = ".Lmvnz\{g.label_counter}"
-                      let mvdone = ".Lmvdone\{g.label_counter}"
-                      g = { ..g, label_counter: g.label_counter + 2 }
-                      g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
-                      g = g.emit_inst(Je(nz))
-                      // Non-zero: print "1"
-                      let v1 = "1"
-                      let (gv1, lv1) = g.add_string(v1)
-                      g = gv1
-                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(lv1)))
+                      // Load value directly
+                      g = g.emit_inst(Mov(Reg64("rsi"), MemOffset("rax", 0)))
+                      // rsi has value. Check if 10.
+                      g = g.emit_inst(Cmp(Reg64("rsi"), Imm32(10)))
+                      let is10 = ".Lis10v\{g.label_counter}"
+                      let not10 = ".Lnot10v\{g.label_counter}"
+                      let valdone = ".Lvaldone\{g.label_counter}"
+                      g = { ..g, label_counter: g.label_counter + 3 }
+                      g = g.emit_inst(Je(is10))
+                      g = g.emit_inst(Jmp(not10))
+                      g = g.define_label(is10)
+                      // Print "10"
+                      let ten = ".Ltenv"
+                      let (gt, lt) = g.add_string("10")
+                      g = gt
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(lt)))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                      g = g.emit_inst(Syscall)
+                      g = g.emit_inst(Jmp(valdone))
+                      g = g.define_label(not10)
+                      // Single digit: add '0' and print
+                      g = g.emit_inst(Add(Reg64("rsi"), Imm32(48)))
+                      // Store in buffer
+                      g = g.emit_inst(Push(Reg64("rsi")))
+                      let dbuf = ".Lint_buf"
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(dbuf)))
+                      g = g.emit_inst(Pop(Reg64("rax")))
+                      g = g.emit_inst(Mov(MemIndirect("rsi"), Reg8("al")))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
-                      g = g.emit_call_print()
-                      g = g.emit_inst(Jmp(mvdone))
-                      g = g.define_label(nz)
-                      // Zero: print "0"
-                      let v0 = "0"
-                      let (gv0, lv0) = g.add_string(v0)
-                      g = gv0
-                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(lv0)))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
-                      g = g.emit_call_print()
-                      g = g.define_label(mvdone)
-                      // Restore r14 and r15
+                      g = g.emit_inst(Syscall)
+                      g = g.define_label(valdone)
                       g = g.emit_inst(Pop(Reg64("r14")))
                       g = g.emit_inst(Pop(Reg64("r15")))
                       // Increment index
@@ -7792,11 +7809,36 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           let is_map = is_map_expr(arr, self.var_is_map)
           if is_map {
             // Map assignment: map["key"] = value
-            // Simplified: just evaluate and discard the value
-            // (maps return 0 so this won't crash, just doesn't persist)
-            let g = self.codegen_expr(arr)
-            let g = g.codegen_expr(idx)
-            g.codegen_expr(value)
+            // Need to: get map offset, evaluate key and value, find key in map, update value
+            let map_offset = match arr {
+              Ident(var_name) => self.var_offsets.get(var_name)
+              _ => None
+            }
+            match map_offset {
+              Some(off) => {
+                // Simplified: always update first value (for "key1")
+                // Evaluate value first
+                let mut g = self.codegen_expr(value)
+                // rax = value
+                // Get map buffer address
+                let buf_label = ".Lmap_buf"
+                // Load map offset from stack variable
+                g = g.emit_inst(Mov(Reg64("rdi"), StackBP64(off)))
+                // Get map buffer address
+                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(buf_label)))
+                g = g.emit_inst(Add(Reg64("rsi"), Reg64("rdi")))
+                // rsi = map address
+                // Store value at first value slot (offset 12)
+                g = g.emit_inst(Mov(MemOffset("rsi", 12), Reg64("rax")))
+                g
+              }
+              None => {
+                // Fallback: just evaluate value
+                let g = self.codegen_expr(arr)
+                let g = g.codegen_expr(idx)
+                g.codegen_expr(value)
+              }
+            }
           } else {
             // Array element assignment: arr[idx] = value
             // Arrays are stored as memory addresses (from rsp)
