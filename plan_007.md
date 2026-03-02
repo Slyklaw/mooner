@@ -1,44 +1,30 @@
 # Analysis: 007_basic_tuple
 
-## Issue
+## Status: IN PROGRESS
 
-The example uses tuple destructuring syntax:
-```moonbit
-let (a, b, c) = tuple
-```
+## Issues Fixed
 
-This syntax is **not implemented**. The parser:
-1. Sees `let` keyword
-2. Calls `parse_ident()` which expects an identifier
-3. Sees `(` (not an identifier), returns empty string `""`
-4. Creates `LetBind("", None, value, body)` - no variable created
+1. **Float parsing added**: 
+   - Added Float(Double) token type
+   - Updated lexer to detect floats (numbers with . or e/E)
+   - Updated parser to handle Float token
+   - Float expressions now work in tuples
 
-## Implementation Completed
-
-### Added AST Node
-- Added `LetTuple(Array[String], AST, AST)` to AST enum (line ~1015)
-
-### Parser Changes
-- Modified `parse_let()` to detect `LParen` after `let`
-- Parse comma-separated identifiers: `(a, b, c)`
-- Create `LetTuple(names, value, body)` node
-
-### Codegen Changes  
-- Added `LetTuple` case in codegen (lines ~7156-7260)
-- Extract elements from tuple variable at correct offsets
-- Allocate stack slots for destructured variables
-- Register variables in var_offsets, var_is_float, etc.
+2. **Float field detection**: 
+   - var_tuple_field_types now correctly tracks float fields in tuples
+   - Field access correctly identifies float fields
 
 ## Remaining Issues
 
-The example still fails to match official output due to:
+1. **Tuple printing shows `<tuple>`**: Need to implement proper tuple printing that iterates through elements
 
-1. **Float literals not supported**: `3.14` is parsed as `Int(3)` (truncated)
-   - Lexer treats all numbers as integers: `(Int(parse_int(num_str)), lexer2)`
-   - This affects tuple element values
+2. **Float printing broken**: 
+   - Custom float-to-string code is broken (only prints ".0")
+   - Using printf with %g has issues (outputs blank line)
 
-2. **Tuple printing shows `<tuple>` placeholder**: 
-   - println for tuples shows placeholder, not actual values
+3. **Array access in tuples**: Returns wrong value (not [1,2,3])
+
+4. **Tuple destructuring**: Returns wrong values
 
 ## Current Output
 
@@ -53,22 +39,20 @@ Official:
 Ours:
 <tuple>
 <tuple>
-314
-4200885
-0, 4200885, 4200301
+
+4200864
+1, 0, 4198562
 ```
 
-## Next Steps (if full support needed)
+## What Works
 
-1. **Add Float support** - Re-enable Float token, lexer parsing, and codegen
-2. **Fix tuple printing** - Implement proper tuple-to-string conversion
-3. **Debug element extraction** - Fine-tune offset calculations
+- Float literals (3.14, 2.1) are now parsed correctly
+- Tuples store float values correctly
+- Float field detection works
 
-## Effort Already Spent
+## Next Steps
 
-~2 hours on implementation
-~1 hour debugging
-
-## Recommendation
-
-The tuple destructuring parsing and basic codegen is implemented. To fully match official output, Float support needs to be re-added (significant effort).
+1. Fix tuple printing - iterate through elements and print each
+2. Fix float printing - use working float-to-string or printf properly
+3. Debug array access in tuples
+4. Debug tuple destructuring

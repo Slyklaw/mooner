@@ -34,7 +34,7 @@ pub enum Token {
   Ident(String)
   Int(Int)
   UInt(UInt)
-  // Float(Double) // Removed for self-hosting
+  Float(Double)
   String(String)
   // InterpolatedString(Array[(Bool, String)]) // Removed - causes parser hang
   Char(Char)
@@ -849,8 +849,14 @@ pub fn Lexer::next_token(self : Lexer) -> (Token, Lexer) {
         (is_keyword(ident), lexer2)
       } else if is_digit(c) {
         let (num_str, lexer2) = lexer.read_number()
-        // Floats removed for self-hosting - treat all numbers as integers
-        (Int(parse_int(num_str)), lexer2)
+        // Check if it's a float (contains . or e/E)
+        let has_dot = num_str.contains(".")
+        let has_exp = num_str.contains("e") || num_str.contains("E")
+        if has_dot || has_exp {
+          (Float(parse_double(num_str)), lexer2)
+        } else {
+          (Int(parse_int(num_str)), lexer2)
+        }
       } else if c == '"' {
         let (tok, lexer2) = lexer.read_string()
         (tok, lexer2)
@@ -1017,7 +1023,7 @@ pub fn tokenize(input : String) -> Array[Token] {
 pub enum AST {
   Unit
   Int(Int)
-  // Float(Double) // Removed for self-hosting
+  Float(Double)
   String(String)
   Char(Char)
   Bool(Bool)
@@ -1122,7 +1128,7 @@ fn Parser::parse_literal(self : Parser) -> (AST, Parser) {
     True => (Bool(true), self.advance())
     False => (Bool(false), self.advance())
     Int(i) => (Int(i), self.advance())
-    // Float(f) => (Float(f), self.advance()) // Removed for self-hosting
+    Float(f) => (Float(f), self.advance())
     String(s) => {
       // Check if string has interpolation \{expr}
       let ast = parse_string_interpolation(s)
@@ -1223,7 +1229,7 @@ fn Parser::parse_primary(self : Parser) -> (AST, Parser) {
   match tok {
     Ident(_)
     | Int(_)
-    // | Float(_) // Removed for self-hosting
+    | Float(_)
     | String(_)
     // | InterpolatedString(_) // Removed for self-hosting
     | Char(_)
@@ -4194,7 +4200,7 @@ fn CodeGen::add_float(self : CodeGen, f : Double) -> (CodeGen, String) {
 ///|
 fn is_float_expr(expr : AST, var_is_float : Map[String, Bool]) -> Bool {
   match expr {
-    // Float(_) => true // Removed for self-hosting
+    Float(_) => true
     Ident(name) => var_is_float.get(name) == Some(true)
     Binary(_, left, right) =>
       is_float_expr(left, var_is_float) || is_float_expr(right, var_is_float)
@@ -4424,6 +4430,19 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
   match expr {
     Int(n) => {
       let g = self.emit_inst(Mov(Reg64("rax"), Imm32(n)))
+      g
+    }
+    Float(f) => {
+      // For floats, emit code to call strtod to convert string to double
+      // First, create a string label with the float value
+      let float_str = f.to_string()
+      let (g, label) = self.add_string(float_str)
+      // Call strtod(strtod, NULL) to convert string to double
+      // strtod takes (const char* str, char** endptr)
+      let g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(label)))
+      let g = g.emit_inst(Mov(Reg64("rsi"), Imm32(0)))
+      let g = g.emit_inst(Call("strtod"))
+      // Result is in xmm0 (float return register)
       g
     }
     Bool(b) => {
@@ -6005,25 +6024,25 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     let is_bool = is_bool_expr(arg, g.var_is_bool)
                     let is_int = is_int_expr(arg, g.var_is_float, g.var_is_map)
                     let is_map = is_map_expr(arg, g.var_is_map)
-                    let is_tuple_float_field = match arg {
-                      FieldExpr(Ident(var_name), field) => {
-                        let idx = if field.length() > 0 {
-                          let c = field[0]
-                          if c >= '0' && c <= '9' {
-                            c.to_int() - 48
-                          } else {
-                            0
-                          }
-                        } else {
-                          0
-                        }
-                        match g.var_tuple_field_types.get(var_name) {
-                          Some(types) => idx < types.length() && types[idx]
-                          None => false
-                        }
-                      }
-                      _ => false
-                    }
+    let is_tuple_float_field = match arg {
+      FieldExpr(Ident(var_name), field) => {
+        let idx = if field.length() > 0 {
+          let c = field[0]
+          if c >= '0' && c <= '9' {
+            c.to_int() - 48
+          } else {
+            0
+          }
+        } else {
+          0
+        }
+        match g.var_tuple_field_types.get(var_name) {
+          Some(types) => idx < types.length() && types[idx]
+          None => false
+        }
+      }
+      _ => false
+    }
                     if is_arr {
                       g = g.codegen_expr(arg)
                       g = g.emit_inst(Push(Reg64("rbx")))
@@ -6143,57 +6162,28 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Pop(Reg64("rax")))
                       g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
                     } else if is_float || is_tuple_float_field {
+                      // Use printf with %g to print float
                       g = g.codegen_expr(arg)
-                      let flt_buf = ".Lflt_buf"
                       g = g.emit_inst(Push(Reg64("rbx")))
                       g = g.emit_inst(Push(Reg64("rcx")))
-                      g = g.emit_inst(Push(Reg64("r8")))
-                      g = g.emit_inst(Push(Reg64("r9")))
-                      g = g.emit_inst(Cvttsd2si(Reg64("rax"), Xmm("xmm0")))
-                      g = g.emit_inst(Mov(Reg64("r9"), Reg64("rax")))
-                      g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(flt_buf)))
-                      g = g.emit_inst(Add(Reg64("rbx"), Imm32(40)))
-                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
-                      let (g2, digit_loop) = g.new_label()
-                      let (g3, skip_zero) = g2.new_label()
-                      let (g4, skip_zero_end) = g3.new_label()
-                      g = g4
-                      g = g.emit_inst(Cmp(Reg64("r9"), Imm32(0)))
-                      g = g.emit_inst(Jne(digit_loop))
-                      g = g.emit_inst(Mov(Reg8("al"), Imm8(48)))
-                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
-                      g = g.emit_inst(Dec(Reg64("rbx")))
-                      g = g.emit_inst(Inc(Reg64("rcx")))
-                      g = g.emit_inst(Jmp(skip_zero_end))
-                      g = g.define_label(digit_loop)
-                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("r9")))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
-                      g = g.emit_inst(Mov(Reg64("r8"), Imm32(10)))
-                      g = g.emit_inst(Idiv(Reg64("r8")))
-                      g = g.emit_inst(Mov(Reg64("r9"), Reg64("rax")))
-                      g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
-                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("dl")))
-                      g = g.emit_inst(Dec(Reg64("rbx")))
-                      g = g.emit_inst(Inc(Reg64("rcx")))
-                      g = g.emit_inst(Cmp(Reg64("r9"), Imm32(0)))
-                      g = g.emit_inst(Jne(digit_loop))
-                      g = g.define_label(skip_zero)
-                      g = g.emit_inst(Inc(Reg64("rbx")))
-                      g = g.define_label(skip_zero_end)
-                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rbx")))
-                      g = g.emit_inst(Mov(Reg64("r8"), Reg64("rcx")))
-                      g = g.emit_inst(Add(Reg64("rbx"), Reg64("rcx")))
-                      g = g.emit_inst(Mov(Reg8("al"), Imm8(46)))
-                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
-                      g = g.emit_inst(Inc(Reg64("rbx")))
-                      g = g.emit_inst(Mov(Reg8("al"), Imm8(48)))
-                      g = g.emit_inst(Mov(MemIndirect("rbx"), Reg8("al")))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Reg64("r8")))
-                      g = g.emit_inst(Add(Reg64("rdx"), Imm32(2)))
-                      g = g.emit_inst(Pop(Reg64("r9")))
-                      g = g.emit_inst(Pop(Reg64("r8")))
+                      g = g.emit_inst(Push(Reg64("rsi")))
+                      g = g.emit_inst(Push(Reg64("rdi")))
+                      // xmm0 has the float, use printf to print it
+                      // printf(format, float_value)
+                      // Use %g for compact float output
+                      let fmt_label = ".Lflt_fmt"
+                      let (g2, fmt) = g.add_string("%g\n")
+                      g = g2
+                      g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(fmt)))
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1))) // one float argument
+                      g = g.emit_inst(Call("printf"))
+                      g = g.emit_inst(Pop(Reg64("rdi")))
+                      g = g.emit_inst(Pop(Reg64("rsi")))
                       g = g.emit_inst(Pop(Reg64("rcx")))
                       g = g.emit_inst(Pop(Reg64("rbx")))
+                      // Skip the normal print - we've already printed
+                      need_skip_print = true
+                      g = g.emit_inst(Jmp(skip_print_label))
                     } else if is_bool {
                       let (g2, true_label) = g.new_label()
                       let (g3, end_label) = g2.new_label()
@@ -6985,8 +6975,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         // Push elements in reverse order so first element ends up at lowest address
         let mut i = num_elems - 1
         while i >= 0 {
-          let elem_is_float = is_float_expr(elems[i], g.var_is_float)
-          g = g.codegen_expr(elems[i])
+          let elem = elems[i]
+          let elem_is_float = is_float_expr(elem, g.var_is_float)
+          g = g.codegen_expr(elem)
           if elem_is_float {
             // Float is in xmm0, push it to stack
             g = g.emit_inst(Sub(Reg64("rsp"), Imm32(8)))
