@@ -1,4 +1,4 @@
-///|
+///| Self-hosted MoonBit compiler - generates x86_64 ELF executables
 pub enum Token {
   Fn
   Let
@@ -482,8 +482,7 @@ fn Lexer::read_decimal_number(self : Lexer) -> (String, Lexer) {
 
 ///|
 fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
-  // Read content between #| and |# (simple version)
-  // Skip past the initial #|
+  // Read content between #| and |#
   let mut lexer = self.advance().advance() 
   let mut acc = ""
   let mut done = false
@@ -499,6 +498,13 @@ fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
           lexer = lexer.advance()
         }
       }
+      Some('\\') => {
+        // Handle escape sequences - but preserve the backslash
+        let (escaped, lex) = read_escape_seq(lexer.advance())
+        // In heredocs, we want literal backslash + escaped char
+        acc = acc + "\\" + escaped
+        lexer = lex
+      }
       Some(c) => {
         let c = char_at(lexer.input, lexer.pos).unwrap()
         acc = acc + c.to_string()
@@ -507,7 +513,7 @@ fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
       None => done = true
     }
   }
-  // Now dedent: remove leading #| from each line (including leading whitespace)
+  // Now dedent: remove leading #| from each line
   let lines = acc.split("\n")
   let mut result = ""
   for line in lines {
@@ -523,14 +529,18 @@ fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
       }
     }
     let line = line.substring(start=i)
-    if line.length() >= 2 && line[0] == '#' && line[1] == '|' {
+    // Skip empty lines
+    if line.length() == 0 {
+      result = result + "\n"
+    } else if line.length() >= 2 && line[0] == '#' && line[1] == '|' {
       // Strip the #| prefix
       let rest = line.substring(start=2)
       result = result + rest
+      result = result + "\n"
     } else {
       result = result + line
+      result = result + "\n"
     }
-    result = result + "\n"
   }
   // Remove trailing newline
   let result = if result.length() > 0 {

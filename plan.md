@@ -4,7 +4,7 @@
 
 | Example | Status | Issue |
 |---------|--------|-------|
-| 001_hello | FAIL | Multiline string causes crash (exit 34) |
+| 001_hello | FAIL | Multiline heredoc string crashes (exit 34) - related to backslash handling |
 | 002_variable | PASS | |
 | 003_basic_constants | PASS | |
 | 004_basic_function | PASS | |
@@ -18,7 +18,7 @@
 | 012_basic_test | FAIL | Test framework not supported |
 | 013_pattern_matching | FAIL | Pattern matching incomplete |
 
-**5 passed, 8 failed**
+**6 passed, 7 failed**
 
 ## Debugging Order
 
@@ -46,6 +46,22 @@
 ### Phase 5: Complex Issues
 
 8. **001_hello** - Multiline string crash (runtime issue)
+   - FIXED: Backslash escape sequences in heredocs - now treated as literal
+   - REMAINING: Issue with #| prefix stripping in dedent logic when lines have 4-space indentation
+
+## Recent Fixes
+
+- 005_basic_array: Fixed array indexing (off-by-one in codegen)
+- 006_basic_string: Added unicode escape `\u{XXXX}` support in lexer
+- 001_hello: Fixed backslash handling in heredocs (was treating \ as escape sequence)
+
+## Current Blocker
+
+001_hello - The heredoc lexer has issues with the dedent logic that strips `#|` prefix:
+- Works: Simple heredocs, or those with no indentation on content lines
+- Fails: Heredocs with 4-space indented content lines that have `#|` prefix
+- The issue is in the dedent logic (lines ~515-546 in compiler_combined.mbt)
+- The string appears to be generated correctly, but crashes at runtime with exit code 34
 
 ## Verification Command
 
