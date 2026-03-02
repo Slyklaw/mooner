@@ -1012,6 +1012,7 @@ pub enum AST {
   Block(Array[AST])
   Func(String, Array[(String, AST?)], AST?, AST)
   LetBind(String, AST?, AST, AST)
+  LetTuple(Array[String], AST, AST) // names, value, body
   IfExpr(AST, AST, AST?)
   MatchExpr(AST, Array[(AST, AST)])
   WhileLoop(AST, AST)
@@ -1612,21 +1613,64 @@ fn Parser::parse_let(self : Parser) -> (AST, Parser) {
   let p = self.skip(1)
   let is_mut = self_token_eq(p.current(), Mut)
   let p_after_mut = if is_mut { p.skip(1) } else { p }
-  let (name, p2) = p_after_mut.parse_ident()
-  let (annot, p3) = if self_token_eq(p2.current(), Colon) {
-    let p4 = p2.skip(1)
-    let (t, p5) = p4.parse_type()
-    (Some(t), p5)
+  // Check for tuple destructuring: let (a, b, c) = value
+  if self_token_eq(p_after_mut.current(), LParen) {
+    // Parse tuple destructuring
+    let p2 = p_after_mut.skip(1) // skip (
+    let mut names : Array[String] = []
+    let mut parser = p2
+    let mut done = false
+    while not(done) {
+      match parser.current() {
+        Ident(name) => {
+          names = names + [name]
+          parser = parser.advance()
+          if self_token_eq(parser.current(), Comma) {
+            parser = parser.skip(1)
+          } else if self_token_eq(parser.current(), RParen) {
+            parser = parser.skip(1)
+            done = true
+          } else {
+            done = true
+          }
+        }
+        RParen => {
+          parser = parser.skip(1)
+          done = true
+        }
+        _ => {
+          done = true
+        }
+      }
+    }
+    // Now expect =
+    if self_token_eq(parser.current(), Equal) {
+      let p3 = parser.skip(1)
+      let (value, p4) = p3.parse_expr()
+      let (body, p5) = p4.parse_expr()
+      (LetTuple(names, value, body), p5)
+    } else {
+      // Not a destructuring, treat as error - fallback
+      (LetBind("", None, Unit, Unit), parser)
+    }
   } else {
-    (None, p2)
-  }
-  if self_token_eq(p3.current(), Equal) {
-    let p4 = p3.skip(1)
-    let (value, p5) = p4.parse_expr()
-    let (body, p6) = p5.parse_expr()
-    (LetBind(name, annot, value, body), p6)
-  } else {
-    (LetBind(name, annot, Unit, Unit), p3)
+    // Original let binding
+    let (name, p2) = p_after_mut.parse_ident()
+    let (annot, p3) = if self_token_eq(p2.current(), Colon) {
+      let p4 = p2.skip(1)
+      let (t, p5) = p4.parse_type()
+      (Some(t), p5)
+    } else {
+      (None, p2)
+    }
+    if self_token_eq(p3.current(), Equal) {
+      let p4 = p3.skip(1)
+      let (value, p5) = p4.parse_expr()
+      let (body, p6) = p5.parse_expr()
+      (LetBind(name, annot, value, body), p6)
+    } else {
+      (LetBind(name, annot, Unit, Unit), p3)
+    }
   }
 }
 
@@ -7108,6 +7152,108 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         }
       }
       g3.codegen_expr(body)
+    }
+    LetTuple(names, value, body) => {
+      // Determine if source is a tuple variable or expression
+      let src_tuple_field_types = match value {
+        Ident(src_name) => self.var_tuple_field_types.get(src_name)
+        _ => None
+      }
+      let src_is_tuple_var = match value {
+        Ident(src_name) => self.var_is_tuple.get(src_name) == Some(true)
+        _ => false
+      }
+      // Evaluate the value expression first
+      // Result in rax: either address (for tuple var) or value
+      let g = self.codegen_expr(value)
+      // For each name, extract element and store on stack
+      let mut g2 = g
+      let mut current_offset = g.next_offset
+      // If tuple variable, get its stack offset
+      let tuple_stack_offset = match value {
+        Ident(src_name) => g.var_offsets.get(src_name)
+        _ => None
+      }
+      let mut name_idx = 0
+      while name_idx < names.length() {
+        let name = names[name_idx]
+        // Determine if this element is a float
+        let is_float = match src_tuple_field_types {
+          Some(types) => if name_idx < types.length() { types[name_idx] } else { false }
+          None => false
+        }
+        // Calculate offset for this element
+        // For tuple variable: element is at [rbp + tuple_offset + idx*8]
+        // First element is at tuple_offset itself
+        let elem_offset = name_idx * 8
+        if src_is_tuple_var {
+          match tuple_stack_offset {
+            Some(tuple_off) => {
+              // Element is at rbp + tuple_offset + elem_offset
+              let total_offset = tuple_off + elem_offset
+              if is_float {
+                g2 = g2.emit_inst(Movsd(Xmm("xmm0"), StackBP64(total_offset)))
+                g2 = g2.emit_inst(PushXmm("xmm0"))
+                current_offset = current_offset - 8
+              } else {
+                g2 = g2.emit_inst(Mov(Reg64("rax"), StackBP64(total_offset)))
+                g2 = g2.emit_inst(Push(Reg64("rax")))
+                current_offset = current_offset - 8
+              }
+            }
+            None => {
+              // Fallback - shouldn't happen
+              g2 = g2.emit_inst(Push(Reg64("rax")))
+              current_offset = current_offset - 8
+            }
+          }
+        } else {
+          // Tuple literal - elements are on stack at rbp - 8, rbp - 16, etc.
+          // We need to pop them in reverse order and re-push
+          // Actually, for tuple literal, the elements were already pushed
+          // We need to adjust: for element i, it's at rbp - (i+1)*8
+          let lit_elem_offset = -8 * (name_idx + 1)
+          if is_float {
+            // Load float from stack and push
+            g2 = g2.emit_inst(Movsd(Xmm("xmm0"), StackBP64(lit_elem_offset)))
+            g2 = g2.emit_inst(PushXmm("xmm0"))
+            current_offset = current_offset - 8
+          } else {
+            // Load from stack and push
+            g2 = g2.emit_inst(Mov(Reg64("rcx"), StackBP64(lit_elem_offset)))
+            g2 = g2.emit_inst(Push(Reg64("rcx")))
+            current_offset = current_offset - 8
+          }
+        }
+        // Register this variable
+        let new_offsets = g2.var_offsets
+        new_offsets[name] = current_offset
+        let new_floats = g2.var_is_float
+        new_floats[name] = is_float
+        let new_strings = g2.var_is_string
+        new_strings[name] = false
+        let new_chars = g2.var_is_char
+        new_chars[name] = false
+        let new_bools = g2.var_is_bool
+        new_bools[name] = false
+        let new_tuples = g2.var_is_tuple
+        new_tuples[name] = false
+        let new_maps = g2.var_is_map
+        new_maps[name] = false
+        g2 = {
+          ..g2,
+          var_offsets: new_offsets,
+          var_is_float: new_floats,
+          var_is_string: new_strings,
+          var_is_char: new_chars,
+          var_is_bool: new_bools,
+          var_is_tuple: new_tuples,
+          var_is_map: new_maps,
+          next_offset: current_offset,
+        }
+        name_idx = name_idx + 1
+      }
+      g2.codegen_expr(body)
     }
     Func(name, _params, _ret, body) =>
       if name == "main" {

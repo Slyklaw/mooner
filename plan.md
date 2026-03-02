@@ -10,7 +10,7 @@
 | 004_basic_function | PASS | |
 | 005_basic_array | PASS | Fixed array indexing off-by-one |
 | 006_basic_string | PASS | Fixed string interpolation - properly handles `\{expr}` syntax |
-| 007_basic_tuple | FAIL | Tuple destructuring `let (a,b,c)=tuple` not implemented - variables not created |
+| 007_basic_tuple | PARTIAL | Tuple destructuring `let (a,b,c)=tuple` now parses and codegen runs, but output wrong due to Float not supported |
 | 008_basic_map | FAIL | Map not supported |
 | 009_basic_control_flows | PASS | |
 | 010_basic_struct | PASS | |
@@ -18,7 +18,7 @@
 | 012_basic_test | FAIL | Test framework not supported |
 | 013_pattern_matching | FAIL | Pattern matching incomplete |
 
-**9 passed, 4 failed**
+**9 passed, 4 failed (1 partial)**
 
 ## Debugging Order
 
