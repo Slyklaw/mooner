@@ -32,11 +32,18 @@
 
 ## Attempted: Full Map Printing
 
-Attempted to implement full map printing with loop through entries, but:
-- Complex string handling needed (keys, values, commas)
-- Would require converting ints to strings
-- Crashed due to complexity
-- Reverted to placeholder
+Tried to implement full map printing with loop through entries:
+- Printed opening brace "{"
+- Attempted to iterate through entries
+- Count keys and print as strings
+- Print ": " separator
+- Print integer values
+- Print ", " between entries
+- Print closing brace "}"
+
+**Result**: Crashed (segfault) - complex loop logic with many registers
+
+The map printing requires careful register management and the complex x86_64 code caused issues. Reverted to placeholder.
 
 ## Current Output
 
@@ -53,6 +60,26 @@ Ours:
 true
 <map>
 ```
+
+## What Works vs Doesn't Work
+
+| Feature | Status |
+|---------|--------|
+| Map creation `{ "key1": 1, "key2": 2 }` | ✓ Works |
+| Map access `m[k]` | ✓ Works |
+| Map equality `==` | ✓ Works |
+| Map update | ✓ Works |
+| Map printing | ✗ Shows `<map>` placeholder |
+
+## Attempted Full Map Printing
+
+Multiple attempts to print full map content failed due to:
+- Complex x86_64 code with many registers
+- String handling for keys
+- Integer-to-string conversion for values
+- Loop logic for multiple entries
+
+Reverted to simple placeholder `<map>`.
 
 ## Next Steps for Full Map Printing
 

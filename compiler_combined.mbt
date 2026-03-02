@@ -5313,9 +5313,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
                     } else if g.var_is_map.get(var_name) == Some(true) {
-                      // Map variable - print placeholder for now
-                      g = g.codegen_expr(arg)
-                      let (g2, label1) = g.add_string("<map>")
+                      // Map variable - print placeholder
+                      let map_placeholder = "<map>"
+                      let (g2, label1) = g.add_string(map_placeholder)
                       g = g2
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
