@@ -483,27 +483,52 @@ fn Lexer::read_decimal_number(self : Lexer) -> (String, Lexer) {
 ///|
 fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
   // Read content between #| and |#
+  // Note: MoonBit heredoc uses #| to START and #| to END (same marker)
   let mut lexer = self.advance().advance() 
   let mut acc = ""
   let mut done = false
   while not(done) {
     match char_at(lexer.input, lexer.pos) {
-      Some('|') => {
-        if char_at(lexer.input, lexer.pos + 1) == Some('#') {
-          lexer = lexer.advance().advance()
-          done = true
+      Some('#') => {
+        if char_at(lexer.input, lexer.pos + 1) == Some('|') {
+          // Check if this #| is the end marker or a dedent prefix
+          // End marker: #| followed by newline (or end of input)
+          // Dedent prefix: #| followed by content (space, char, etc.)
+          let next_is_newline = char_at(lexer.input, lexer.pos + 2) == Some('\n')
+          let next_is_end = char_at(lexer.input, lexer.pos + 2) == None
+          if next_is_newline || next_is_end {
+            // This is the end marker
+            lexer = lexer.advance().advance()
+            done = true
+          } else {
+            // This is a dedent prefix - include #| in content for now
+            let c = char_at(lexer.input, lexer.pos).unwrap()
+            acc = acc + c.to_string()
+            lexer = lexer.advance()
+          }
         } else {
           let c = char_at(lexer.input, lexer.pos).unwrap()
           acc = acc + c.to_string()
           lexer = lexer.advance()
         }
       }
+      Some('\n') => {
+        found_newline = true
+        let c = char_at(lexer.input, lexer.pos).unwrap()
+        acc = acc + c.to_string()
+        lexer = lexer.advance()
+      }
+      Some('|') => {
+        // This is just a pipe character, not the end marker
+        let c = char_at(lexer.input, lexer.pos).unwrap()
+        acc = acc + c.to_string()
+        lexer = lexer.advance()
+      }
       Some('\\') => {
-        // Handle escape sequences - but preserve the backslash
-        let (escaped, lex) = read_escape_seq(lexer.advance())
-        // In heredocs, we want literal backslash + escaped char
-        acc = acc + "\\" + escaped
-        lexer = lex
+        // In heredocs, backslash is literal - don't process escape sequences
+        let c = char_at(lexer.input, lexer.pos).unwrap()
+        acc = acc + c.to_string()
+        lexer = lexer.advance()
       }
       Some(c) => {
         let c = char_at(lexer.input, lexer.pos).unwrap()
@@ -514,7 +539,7 @@ fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
     }
   }
   // Now dedent: remove leading #| from each line
-  let lines = acc.split("\n")
+  let lines = acc.split("\n").collect()
   let mut result = ""
   for line in lines {
     let line = line.to_string()
@@ -529,18 +554,14 @@ fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
       }
     }
     let line = line.substring(start=i)
-    // Skip empty lines
-    if line.length() == 0 {
-      result = result + "\n"
-    } else if line.length() >= 2 && line[0] == '#' && line[1] == '|' {
+    if line.length() >= 2 && line[0] == '#' && line[1] == '|' {
       // Strip the #| prefix
       let rest = line.substring(start=2)
       result = result + rest
-      result = result + "\n"
     } else {
       result = result + line
-      result = result + "\n"
     }
+    result = result + "\n"
   }
   // Remove trailing newline
   let result = if result.length() > 0 {

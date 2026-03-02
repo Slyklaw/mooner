@@ -4,7 +4,7 @@
 
 | Example | Status | Issue |
 |---------|--------|-------|
-| 001_hello | FAIL | Multiline heredoc string crashes (exit 34) - related to backslash handling |
+| 001_hello | PASS | Fixed heredoc syntax - correctly handles #| start/end markers |
 | 002_variable | PASS | |
 | 003_basic_constants | PASS | |
 | 004_basic_function | PASS | |
@@ -18,7 +18,7 @@
 | 012_basic_test | FAIL | Test framework not supported |
 | 013_pattern_matching | FAIL | Pattern matching incomplete |
 
-**6 passed, 7 failed**
+**7 passed, 6 failed**
 
 ## Debugging Order
 
@@ -45,23 +45,16 @@
 
 ### Phase 5: Complex Issues
 
-8. **001_hello** - Multiline string crash (runtime issue)
-   - FIXED: Backslash escape sequences in heredocs - now treated as literal
-   - REMAINING: Issue with #| prefix stripping in dedent logic when lines have 4-space indentation
+8. **001_hello** - Multiline string crash
+   - FIXED: MoonBit heredoc uses #| for both start AND end markers
+   - Fixed lexer to detect end marker (#| followed by newline) vs dedent prefix (#| followed by content)
+   - Also handles backslash as literal in heredocs
 
 ## Recent Fixes
 
 - 005_basic_array: Fixed array indexing (off-by-one in codegen)
 - 006_basic_string: Added unicode escape `\u{XXXX}` support in lexer
-- 001_hello: Fixed backslash handling in heredocs (was treating \ as escape sequence)
-
-## Current Blocker
-
-001_hello - The heredoc lexer has issues with the dedent logic that strips `#|` prefix:
-- Works: Simple heredocs, or those with no indentation on content lines
-- Fails: Heredocs with 4-space indented content lines that have `#|` prefix
-- The issue is in the dedent logic (lines ~515-546 in compiler_combined.mbt)
-- The string appears to be generated correctly, but crashes at runtime with exit code 34
+- 001_hello: Fixed heredoc syntax - uses #| for start/end, correctly detects end marker
 
 ## Verification Command
 
@@ -88,16 +81,16 @@ done
 
 ## Tasks
 
-- [ ] 005_basic_array: Fix array indexing
+- [x] 005_basic_array: Fix array indexing
 - [ ] 006_basic_string: Implement string interpolation
 - [ ] 007_basic_tuple: Fix float tuple printing
 - [ ] 008_basic_map: Add map support
 - [ ] 011_basic_enum: Fix string interpolation in derive
 - [ ] 012_basic_test: Add test framework support
 - [ ] 013_pattern_matching: Complete pattern matching
-- [x] 001_hello: Multiline string - lexer fix applied, runtime crash needs investigation
+- [x] 001_hello: Fixed heredoc syntax (#| for start/end, detect end marker vs dedent prefix)
 
 ---
 
 *Created: 2026-03-01*
-*Updated: 2026-03-01 - Moved 001_hello to Phase 5, added 005_basic_array to Phase 1*
+*Updated: 2026-03-02 - Fixed 001_hello heredoc, now 7 passed, 6 failed*
