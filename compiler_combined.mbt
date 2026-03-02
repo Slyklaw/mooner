@@ -6131,7 +6131,26 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       }
       _ => false
     }
-                    if is_arr {
+    let is_tuple_array_field = match arg {
+      FieldExpr(Ident(var_name), field) => {
+        let idx = if field.length() > 0 {
+          let c = field[0]
+          if c >= '0' && c <= '9' {
+            c.to_int() - 48
+          } else {
+            0
+          }
+        } else {
+          0
+        }
+        match g.var_tuple_field_is_array.get(var_name) {
+          Some(is_arrays) => idx < is_arrays.length() && is_arrays[idx]
+          None => false
+        }
+      }
+      _ => false
+    }
+                    if is_arr || is_tuple_array_field {
                       g = g.codegen_expr(arg)
                       g = g.emit_inst(Push(Reg64("rbx")))
                       g = g.emit_inst(Push(Reg64("r12")))
