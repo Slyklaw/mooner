@@ -11,14 +11,14 @@
 | 005_basic_array | PASS | Fixed array indexing off-by-one |
 | 006_basic_string | PASS | Fixed string interpolation - properly handles `\{expr}` syntax |
 | 007_basic_tuple | PARTIAL | Tuple destructuring `let (a,b,c)=tuple` now parses and codegen runs, but output wrong due to Float not supported |
-| 008_basic_map | PARTIAL | Map access `m[k]` and equality `==` work! Printing shows `<map>` placeholder instead of content |
+| 008_basic_map | PASS | Map creation, access, equality, update, and printing all work! |
 | 009_basic_control_flows | PASS | |
 | 010_basic_struct | PASS | |
 | 011_basic_enum | PASS | Fixed by string interpolation fix in 006 |
 | 012_basic_test | FAIL | Test framework not supported |
 | 013_pattern_matching | FAIL | Pattern matching incomplete |
 
-**9 passed, 3 failed (2 partial)**
+**10 passed, 2 failed (1 partial)**
 
 ## Debugging Order
 
@@ -52,6 +52,7 @@
 
 ## Recent Fixes
 
+- 008_basic_map: Complete! Map creation, access, equality, update, and printing all work
 - 005_basic_array: Fixed array indexing (off-by-one in codegen)
 - 006_basic_string: Added unicode escape `\u{XXXX}` support in lexer
 - 001_hello: Fixed heredoc syntax - uses #| for start/end, correctly detects end marker
@@ -84,7 +85,7 @@ done
 - [x] 005_basic_array: Fix array indexing
 - [ ] 006_basic_string: Implement string interpolation
 - [ ] 007_basic_tuple: Fix float tuple printing
-- [ ] 008_basic_map: Add map support
+- [x] 008_basic_map: Add map support (complete!)
 - [ ] 011_basic_enum: Fix string interpolation in derive
 - [ ] 012_basic_test: Add test framework support
 - [ ] 013_pattern_matching: Complete pattern matching
@@ -93,4 +94,4 @@ done
 ---
 
 *Created: 2026-03-01*
-*Updated: 2026-03-02 - Fixed 001_hello heredoc, now 7 passed, 6 failed*
+*Updated: 2026-03-02 - Fixed 008_basic_map, now 10 passed*
