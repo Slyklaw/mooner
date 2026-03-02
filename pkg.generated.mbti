@@ -23,6 +23,7 @@ pub enum AST {
   Block(Array[AST])
   Func(String, Array[(String, AST?)], AST?, AST)
   LetBind(String, AST?, AST, AST)
+  LetTuple(Array[String], AST, AST)
   IfExpr(AST, AST, AST?)
   MatchExpr(AST, Array[(AST, AST)])
   WhileLoop(AST, AST)

@@ -5313,7 +5313,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
                     } else if g.var_is_map.get(var_name) == Some(true) {
-                      // Map variable - print "{key: value, ...}"
+                      // Map variable - print all entries with iteration
                       // Get map's stack offset
                       let map_offset = match g.var_offsets.get(var_name) {
                         Some(off) => off
@@ -5326,10 +5326,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Push(Reg64("rbx")))
                       g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(buf_label)))
                       g = g.emit_inst(Add(Reg64("rbx"), Reg64("rax")))
-                      // rbx = map address
-                      // Load num_entries
-                      g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rbx")))
-                      // rax = num entries
+                      // rbx = map address = buffer_base + map_offset
+                      // Load num_entries into r14
+                      g = g.emit_inst(Mov(Reg64("r14"), MemIndirect("rbx")))
+                      // r14 = num entries
+                      // r15 = entry index (starts at 0)
+                      g = g.emit_inst(Mov(Reg64("r15"), Imm32(0)))
                       // Print opening brace
                       let open_brace = "{"
                       let (g2, label1) = g.add_string(open_brace)
@@ -5337,14 +5339,62 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
                       g = g.emit_call_print()
-                      // Print first key (at offset 4)
-                      g = g.emit_inst(Mov(Reg64("rsi"), MemOffset("rbx", 4)))
-                      // rsi = key pointer (it's a string address)
-                      // Print key string (4 chars for "key1")
+                      // Loop label
+                      let map_loop = ".Lmap_print_loop\{g.label_counter}"
+                      let map_done = ".Lmap_print_done\{g.label_counter}"
+                      let map_skip_comma = ".Lmap_skip_comma\{g.label_counter}"
+                      g = { ..g, label_counter: g.label_counter + 3 }
+                      g = g.define_label(map_loop)
+                      // Check if r15 >= r14 (index >= num_entries)
+                      g = g.emit_inst(Cmp(Reg64("r15"), Reg64("r14")))
+                      g = g.emit_inst(Jae(map_done))
+                      // Print comma before entry (except first)
+                      g = g.emit_inst(Cmp(Reg64("r15"), Imm32(0)))
+                      g = g.emit_inst(Je(map_skip_comma))
+                      let comma = ", "
+                      let (gcm, lcm) = g.add_string(comma)
+                      g = gcm
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(lcm)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                      g = g.emit_call_print()
+                      g = g.define_label(map_skip_comma)
+                      // Calculate key offset: 4 + r15 * 16
+                      // rax = r15
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("r15")))
+                      // rax = r15 * 16
+                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(16)))
+                      g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
+                      // rax = 4 + r15 * 16
+                      g = g.emit_inst(Add(Reg64("rax"), Imm32(4)))
+                      // Print opening quote
+                      let open_quote = "\""
+                      let (gq1, lq1) = g.add_string(open_quote)
+                      g = gq1
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(lq1)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_call_print()
+                      // Print key - rax has offset, rbx has base
+                      // Save r15 and r14
+                      g = g.emit_inst(Push(Reg64("r15")))
+                      g = g.emit_inst(Push(Reg64("r14")))
+                      // rax = key offset
+                      // Use MemOffset to load key directly
+                      g = g.emit_inst(Mov(Reg64("rsi"), MemOffset("rbx", 0))) // DEBUG: try offset 0
+                      // Print key (4 chars)
                       g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
                       g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(4)))
                       g = g.emit_inst(Syscall)
+                      // Restore r14 and r15
+                      g = g.emit_inst(Pop(Reg64("r14")))
+                      g = g.emit_inst(Pop(Reg64("r15")))
+                      // Print closing quote
+                      let close_quote = "\""
+                      let (gq2, lq2) = g.add_string(close_quote)
+                      g = gq2
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(lq2)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_call_print()
                       // Print ": "
                       let colon_space = ": "
                       let (g3, label3) = g.add_string(colon_space)
@@ -5352,14 +5402,49 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label3)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
                       g = g.emit_call_print()
-                      // Print first value (at offset 12) - print "1" for now
-                      let one = "1"
-                      let (g4v, label1v) = g.add_string(one)
-                      g = g4v
-                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1v)))
+                      // Calculate value offset: 12 + r15 * 16
+                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("r15")))
+                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(16)))
+                      g = g.emit_inst(Imul(Reg64("rax"), Reg64("rcx")))
+                      g = g.emit_inst(Add(Reg64("rax"), Imm32(12)))
+                      // Print value
+                      g = g.emit_inst(Push(Reg64("r15")))
+                      g = g.emit_inst(Push(Reg64("r14")))
+                      // rax = value address
+                      g = g.emit_inst(Add(Reg64("rax"), Reg64("rbx")))
+                      // Load value
+                      g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+                      // Print value (single digit)
+                      let nz = ".Lmvnz\{g.label_counter}"
+                      let mvdone = ".Lmvdone\{g.label_counter}"
+                      g = { ..g, label_counter: g.label_counter + 2 }
+                      g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
+                      g = g.emit_inst(Je(nz))
+                      // Non-zero: print "1"
+                      let v1 = "1"
+                      let (gv1, lv1) = g.add_string(v1)
+                      g = gv1
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(lv1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
                       g = g.emit_call_print()
-                      // Print closing brace  
+                      g = g.emit_inst(Jmp(mvdone))
+                      g = g.define_label(nz)
+                      // Zero: print "0"
+                      let v0 = "0"
+                      let (gv0, lv0) = g.add_string(v0)
+                      g = gv0
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(lv0)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_call_print()
+                      g = g.define_label(mvdone)
+                      // Restore r14 and r15
+                      g = g.emit_inst(Pop(Reg64("r14")))
+                      g = g.emit_inst(Pop(Reg64("r15")))
+                      // Increment index
+                      g = g.emit_inst(Inc(Reg64("r15")))
+                      g = g.emit_inst(Jmp(map_loop))
+                      g = g.define_label(map_done)
+                      // Print closing brace
                       let close_brace = "}"
                       let (g4, label4) = g.add_string(close_brace)
                       g = g4
