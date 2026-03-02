@@ -1,4 +1,5 @@
-///| Self-hosted MoonBit compiler - generates x86_64 ELF executables
+///|
+/// Self-hosted MoonBit compiler - generates x86_64 ELF executables
 pub enum Token {
   Fn
   Let
@@ -484,17 +485,18 @@ fn Lexer::read_decimal_number(self : Lexer) -> (String, Lexer) {
 fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
   // Read content between #| and |#
   // Note: MoonBit heredoc uses #| to START and #| to END (same marker)
-  let mut lexer = self.advance().advance() 
+  let mut lexer = self.advance().advance()
   let mut acc = ""
   let mut done = false
   while not(done) {
     match char_at(lexer.input, lexer.pos) {
-      Some('#') => {
+      Some('#') =>
         if char_at(lexer.input, lexer.pos + 1) == Some('|') {
           // Check if this #| is the end marker or a dedent prefix
           // End marker: #| followed by newline (or end of input)
           // Dedent prefix: #| followed by content (space, char, etc.)
-          let next_is_newline = char_at(lexer.input, lexer.pos + 2) == Some('\n')
+          let next_is_newline = char_at(lexer.input, lexer.pos + 2) ==
+            Some('\n')
           let next_is_end = char_at(lexer.input, lexer.pos + 2) == None
           if next_is_newline || next_is_end {
             // This is the end marker
@@ -511,7 +513,6 @@ fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
           acc = acc + c.to_string()
           lexer = lexer.advance()
         }
-      }
       Some('\n') => {
         let c = char_at(lexer.input, lexer.pos).unwrap()
         acc = acc + c.to_string()
@@ -579,6 +580,7 @@ fn Lexer::read_string(self : Lexer) -> (Token, Lexer) {
   (String(s), lex)
 }
 
+///|
 fn read_string_loop(lexer : Lexer, acc : String) -> (String, Lexer) {
   let c = char_at(lexer.input, lexer.pos)
   match c {
@@ -593,7 +595,10 @@ fn read_string_loop(lexer : Lexer, acc : String) -> (String, Lexer) {
         let next = char_at(lexer.input, lexer.pos + 1).unwrap()
         // Debug
         println("INTERP: found backslash-brace, c='\{c}', next='\{next}'")
-        read_string_loop(lexer.advance().advance(), acc + c.to_string() + next.to_string())
+        read_string_loop(
+          lexer.advance().advance(),
+          acc + c.to_string() + next.to_string(),
+        )
       } else {
         let (next, lex) = read_escape_seq(lexer.advance())
         read_string_loop(lex, acc + next)
@@ -604,6 +609,7 @@ fn read_string_loop(lexer : Lexer, acc : String) -> (String, Lexer) {
   }
 }
 
+///|
 fn read_escape_seq(lexer : Lexer) -> (String, Lexer) {
   let c = char_at(lexer.input, lexer.pos)
   match c {
@@ -612,7 +618,7 @@ fn read_escape_seq(lexer : Lexer) -> (String, Lexer) {
     Some('r') => ("\r", lexer.advance())
     Some('\\') => ("\\", lexer.advance())
     Some('"') => ("\"", lexer.advance())
-    Some('u') => {
+    Some('u') =>
       // Unicode escape: \u{XXXX}
       if char_at(lexer.input, lexer.pos + 1) == Some('{') {
         let mut lex = lexer.advance().advance() // skip 'u' and '{'
@@ -635,12 +641,12 @@ fn read_escape_seq(lexer : Lexer) -> (String, Lexer) {
       } else {
         ("u", lexer.advance())
       }
-    }
     Some(c) => (c.to_string(), lexer.advance())
     None => ("", lexer)
   }
 }
 
+///|
 fn unicode_to_utf8(code : Int) -> String {
   if code < 0x80 {
     // 1-byte sequence
@@ -655,14 +661,19 @@ fn unicode_to_utf8(code : Int) -> String {
     let b1 = 0xE0 + (code >> 12)
     let b2 = 0x80 + ((code >> 6) & 0x3F)
     let b3 = 0x80 + (code & 0x3F)
-    Char::from_int(b1).to_string() + Char::from_int(b2).to_string() + Char::from_int(b3).to_string()
+    Char::from_int(b1).to_string() +
+    Char::from_int(b2).to_string() +
+    Char::from_int(b3).to_string()
   } else {
     // 4-byte sequence
     let b1 = 0xF0 + (code >> 18)
     let b2 = 0x80 + ((code >> 12) & 0x3F)
     let b3 = 0x80 + ((code >> 6) & 0x3F)
     let b4 = 0x80 + (code & 0x3F)
-    Char::from_int(b1).to_string() + Char::from_int(b2).to_string() + Char::from_int(b3).to_string() + Char::from_int(b4).to_string()
+    Char::from_int(b1).to_string() +
+    Char::from_int(b2).to_string() +
+    Char::from_int(b3).to_string() +
+    Char::from_int(b4).to_string()
   }
 }
 
@@ -685,6 +696,7 @@ fn Lexer::read_char(self : Lexer) -> (Char, Lexer) {
   (ch, lex2)
 }
 
+///|
 fn Lexer::read_escape_char(self : Lexer) -> Char {
   let c = char_at(self.input, self.pos)
   let lexer = self.advance()
@@ -1000,6 +1012,7 @@ pub fn tokenize(input : String) -> Array[Token] {
 
   tokens
 }
+
 ///|
 pub enum AST {
   Unit
@@ -1638,9 +1651,7 @@ fn Parser::parse_let(self : Parser) -> (AST, Parser) {
           parser = parser.skip(1)
           done = true
         }
-        _ => {
-          done = true
-        }
+        _ => done = true
       }
     }
     // Now expect =
@@ -2211,10 +2222,11 @@ fn parse_string_interpolation(s : String) -> AST {
     // Use to_char() to compare characters properly
     if i + 1 < s.length() {
       match (s[i].to_char(), s[i + 1].to_char()) {
-        (Some(c1), Some(c2)) => if c1 == '\\' && c2 == '{' {
-          has_interpolation = true
-          break
-        }
+        (Some(c1), Some(c2)) =>
+          if c1 == '\\' && c2 == '{' {
+            has_interpolation = true
+            break
+          }
         _ => ()
       }
     }
@@ -2249,13 +2261,14 @@ fn parse_string_interpolation(s : String) -> AST {
       let mut expr_str = ""
       while i < s.length() {
         match s[i].to_char() {
-          Some(c) => if c == '}' {
-            i = i + 1
-            break
-          } else {
-            expr_str = expr_str + c.to_string()
-            i = i + 1
-          }
+          Some(c) =>
+            if c == '}' {
+              i = i + 1
+              break
+            } else {
+              expr_str = expr_str + c.to_string()
+              i = i + 1
+            }
           None => break
         }
       }
@@ -2392,6 +2405,7 @@ pub fn parse(tokens : Array[Token]) -> AST {
   let parser = Parser::new(tokens)
   parser.parse()
 }
+
 ///|
 pub enum Operand {
   Imm(Int)
@@ -2621,44 +2635,80 @@ fn sib(scale : Int, index : Int, base : Int) -> Byte {
 
 ///|
 fn reg_code_lookup(reg : String) -> Int {
-  if reg == "rax" { 0 }
-  else if reg == "rcx" { 1 }
-  else if reg == "rdx" { 2 }
-  else if reg == "rbx" { 3 }
-  else if reg == "rsp" { 4 }
-  else if reg == "rbp" { 5 }
-  else if reg == "rsi" { 6 }
-  else if reg == "rdi" { 7 }
-  else if reg == "r8" { 0 }
-  else if reg == "r9" { 1 }
-  else if reg == "r10" { 2 }
-  else if reg == "r11" { 3 }
-  else if reg == "r12" { 4 }
-  else if reg == "r13" { 5 }
-  else if reg == "r14" { 6 }
-  else if reg == "r15" { 7 }
-  else { 0 }
+  if reg == "rax" {
+    0
+  } else if reg == "rcx" {
+    1
+  } else if reg == "rdx" {
+    2
+  } else if reg == "rbx" {
+    3
+  } else if reg == "rsp" {
+    4
+  } else if reg == "rbp" {
+    5
+  } else if reg == "rsi" {
+    6
+  } else if reg == "rdi" {
+    7
+  } else if reg == "r8" {
+    0
+  } else if reg == "r9" {
+    1
+  } else if reg == "r10" {
+    2
+  } else if reg == "r11" {
+    3
+  } else if reg == "r12" {
+    4
+  } else if reg == "r13" {
+    5
+  } else if reg == "r14" {
+    6
+  } else if reg == "r15" {
+    7
+  } else {
+    0
+  }
 }
 
 ///|
 fn xmm_reg_code_lookup(reg : String) -> Int {
-  if reg == "xmm0" { 0 }
-  else if reg == "xmm1" { 1 }
-  else if reg == "xmm2" { 2 }
-  else if reg == "xmm3" { 3 }
-  else if reg == "xmm4" { 4 }
-  else if reg == "xmm5" { 5 }
-  else if reg == "xmm6" { 6 }
-  else if reg == "xmm7" { 7 }
-  else if reg == "xmm8" { 0 }
-  else if reg == "xmm9" { 1 }
-  else if reg == "xmm10" { 2 }
-  else if reg == "xmm11" { 3 }
-  else if reg == "xmm12" { 4 }
-  else if reg == "xmm13" { 5 }
-  else if reg == "xmm14" { 6 }
-  else if reg == "xmm15" { 7 }
-  else { 0 }
+  if reg == "xmm0" {
+    0
+  } else if reg == "xmm1" {
+    1
+  } else if reg == "xmm2" {
+    2
+  } else if reg == "xmm3" {
+    3
+  } else if reg == "xmm4" {
+    4
+  } else if reg == "xmm5" {
+    5
+  } else if reg == "xmm6" {
+    6
+  } else if reg == "xmm7" {
+    7
+  } else if reg == "xmm8" {
+    0
+  } else if reg == "xmm9" {
+    1
+  } else if reg == "xmm10" {
+    2
+  } else if reg == "xmm11" {
+    3
+  } else if reg == "xmm12" {
+    4
+  } else if reg == "xmm13" {
+    5
+  } else if reg == "xmm14" {
+    6
+  } else if reg == "xmm15" {
+    7
+  } else {
+    0
+  }
 }
 
 // ============ END LOOKUP TABLES ============
@@ -2675,23 +2725,41 @@ fn reg_code(reg : String) -> Int {
 
 ///|
 fn CodeGen::emit_reg64_opcode(self : CodeGen, reg : String) -> CodeGen {
-  if reg == "rax" { self.emit_byte(0xB8) }
-  else if reg == "rcx" { self.emit_byte(0xB9) }
-  else if reg == "rdx" { self.emit_byte(0xBA) }
-  else if reg == "rbx" { self.emit_byte(0xBB) }
-  else if reg == "rsp" { self.emit_byte(0xBC) }
-  else if reg == "rbp" { self.emit_byte(0xBD) }
-  else if reg == "rsi" { self.emit_byte(0xBE) }
-  else if reg == "rdi" { self.emit_byte(0xBF) }
-  else if reg == "r8" { self.emit_bytes([0x49, 0xB8]) }
-  else if reg == "r9" { self.emit_bytes([0x49, 0xB9]) }
-  else if reg == "r10" { self.emit_bytes([0x49, 0xBA]) }
-  else if reg == "r11" { self.emit_bytes([0x49, 0xBB]) }
-  else if reg == "r12" { self.emit_bytes([0x49, 0xBC]) }
-  else if reg == "r13" { self.emit_bytes([0x49, 0xBD]) }
-  else if reg == "r14" { self.emit_bytes([0x49, 0xBE]) }
-  else if reg == "r15" { self.emit_bytes([0x49, 0xBF]) }
-  else { self }
+  if reg == "rax" {
+    self.emit_byte(0xB8)
+  } else if reg == "rcx" {
+    self.emit_byte(0xB9)
+  } else if reg == "rdx" {
+    self.emit_byte(0xBA)
+  } else if reg == "rbx" {
+    self.emit_byte(0xBB)
+  } else if reg == "rsp" {
+    self.emit_byte(0xBC)
+  } else if reg == "rbp" {
+    self.emit_byte(0xBD)
+  } else if reg == "rsi" {
+    self.emit_byte(0xBE)
+  } else if reg == "rdi" {
+    self.emit_byte(0xBF)
+  } else if reg == "r8" {
+    self.emit_bytes([0x49, 0xB8])
+  } else if reg == "r9" {
+    self.emit_bytes([0x49, 0xB9])
+  } else if reg == "r10" {
+    self.emit_bytes([0x49, 0xBA])
+  } else if reg == "r11" {
+    self.emit_bytes([0x49, 0xBB])
+  } else if reg == "r12" {
+    self.emit_bytes([0x49, 0xBC])
+  } else if reg == "r13" {
+    self.emit_bytes([0x49, 0xBD])
+  } else if reg == "r14" {
+    self.emit_bytes([0x49, 0xBE])
+  } else if reg == "r15" {
+    self.emit_bytes([0x49, 0xBF])
+  } else {
+    self
+  }
 }
 
 ///|
@@ -5249,17 +5317,27 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Push(Reg64("rbx")))
                       // Preload all labels we need (before any MemOffset)
                       // Push in reverse order: close, comma, one, colon, quote, open
-                      g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(".Lmap_brace_close")))
+                      g = g.emit_inst(
+                        Lea(Reg64("rbx"), RipRel32(".Lmap_brace_close")),
+                      )
                       g = g.emit_inst(Push(Reg64("rbx"))) // [close]
-                      g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(".Lmap_comma_space")))
+                      g = g.emit_inst(
+                        Lea(Reg64("rbx"), RipRel32(".Lmap_comma_space")),
+                      )
                       g = g.emit_inst(Push(Reg64("rbx"))) // [close, comma]
                       g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(".Lone_char")))
                       g = g.emit_inst(Push(Reg64("rbx"))) // [close, comma, one]
-                      g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(".Lmap_colon_space")))
+                      g = g.emit_inst(
+                        Lea(Reg64("rbx"), RipRel32(".Lmap_colon_space")),
+                      )
                       g = g.emit_inst(Push(Reg64("rbx"))) // [close, comma, one, colon]
-                      g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(".Lquote_char")))
+                      g = g.emit_inst(
+                        Lea(Reg64("rbx"), RipRel32(".Lquote_char")),
+                      )
                       g = g.emit_inst(Push(Reg64("rbx"))) // [close, comma, one, colon, quote]
-                      g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(".Lmap_brace_open")))
+                      g = g.emit_inst(
+                        Lea(Reg64("rbx"), RipRel32(".Lmap_brace_open")),
+                      )
                       g = g.emit_inst(Push(Reg64("rbx"))) // [close, comma, one, colon, quote, open]
                       // Now do map stuff
                       g = g.codegen_expr(arg)
@@ -6798,26 +6876,26 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         // Value is now at offset 12 (key at offset 4)
         g = g.emit_inst(Mov(Reg64("rax"), MemOffset("rdi", 12)))
         g
+      } else {
+        // Array or string indexing
+        // Pop the address
+        g = g.emit_inst(Pop(Reg64("rcx")))
+        // rcx = array/string address, rax = index
+        if is_str {
+          // String: add index to address, load byte
+          g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+          let g2 = g.emit_inst(Movzx(Reg64("rax"), MemIndirect("rcx")))
+          g2
         } else {
-          // Array or string indexing
-          // Pop the address
-          g = g.emit_inst(Pop(Reg64("rcx")))
-          // rcx = array/string address, rax = index
-          if is_str {
-            // String: add index to address, load byte
-            g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
-            let g2 = g.emit_inst(Movzx(Reg64("rax"), MemIndirect("rcx")))
-            g2
-          } else {
-            // Array: address + index * 8 + 8 (skip length field)
-            g = g.emit_inst(Mov(Reg64("rsi"), Imm32(8)))
-            g = g.emit_inst(Imul(Reg64("rax"), Reg64("rsi")))
-            g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
-            g = g.emit_inst(Add(Reg64("rcx"), Imm32(8))) // skip length field
-            let g2 = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rcx")))
-            g2
-          }
+          // Array: address + index * 8 + 8 (skip length field)
+          g = g.emit_inst(Mov(Reg64("rsi"), Imm32(8)))
+          g = g.emit_inst(Imul(Reg64("rax"), Reg64("rsi")))
+          g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+          g = g.emit_inst(Add(Reg64("rcx"), Imm32(8))) // skip length field
+          let g2 = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rcx")))
+          g2
         }
+      }
     }
     Tuple(elems) => {
       let num_elems = elems.length()
@@ -7179,7 +7257,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         let name = names[name_idx]
         // Determine if this element is a float
         let is_float = match src_tuple_field_types {
-          Some(types) => if name_idx < types.length() { types[name_idx] } else { false }
+          Some(types) =>
+            if name_idx < types.length() {
+              types[name_idx]
+            } else {
+              false
+            }
           None => false
         }
         // Calculate offset for this element
@@ -8229,6 +8312,7 @@ pub fn codegen(ast : AST) -> Bytes {
   }
   Bytes::from_array(code)
 }
+
 ///|
 pub fn compile_file(
   input_path : String,
