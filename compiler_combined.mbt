@@ -584,8 +584,20 @@ fn read_string_loop(lexer : Lexer, acc : String) -> (String, Lexer) {
   match c {
     Some('"') => (acc, lexer.advance())
     Some('\\') => {
-      let (next, lex) = read_escape_seq(lexer.advance())
-      read_string_loop(lex, acc + next)
+      // Check if this is a string interpolation \{expr}
+      // Don't treat it as an escape sequence - preserve both \ and { for parser
+      let next_c = char_at(lexer.input, lexer.pos + 1)
+      if next_c == Some('{') {
+        // This is string interpolation - keep both backslash and brace
+        let c = char_at(lexer.input, lexer.pos).unwrap()
+        let next = char_at(lexer.input, lexer.pos + 1).unwrap()
+        // Debug
+        println("INTERP: found backslash-brace, c='\{c}', next='\{next}'")
+        read_string_loop(lexer.advance().advance(), acc + c.to_string() + next.to_string())
+      } else {
+        let (next, lex) = read_escape_seq(lexer.advance())
+        read_string_loop(lex, acc + next)
+      }
     }
     Some(c) => read_string_loop(lexer.advance(), acc + c.to_string())
     None => (acc, lexer)
@@ -1097,7 +1109,11 @@ fn Parser::parse_literal(self : Parser) -> (AST, Parser) {
     False => (Bool(false), self.advance())
     Int(i) => (Int(i), self.advance())
     // Float(f) => (Float(f), self.advance()) // Removed for self-hosting
-    String(s) => (String(s), self.advance())
+    String(s) => {
+      // Check if string has interpolation \{expr}
+      let ast = parse_string_interpolation(s)
+      (ast, self.advance())
+    }
     // InterpolatedString removed for self-hosting
     Char(c) => (Char(c), self.advance())
     Ident(name) => (Ident(name), self.advance())
@@ -2137,6 +2153,134 @@ fn Parser::parse_binary(self : Parser, min_prec : Int) -> (AST, Parser) {
     }
   }
   (left_expr, parser)
+}
+
+///|
+fn parse_string_interpolation(s : String) -> AST {
+  // Debug: print the actual string we're parsing
+  let debug_msg = "parse_string_interpolation got: [\{s}]"
+  println(debug_msg)
+  // Check if string has interpolation \{expr}
+  let mut has_interpolation = false
+  let mut i = 0
+  while i < s.length() {
+    // Use to_char() to compare characters properly
+    if i + 1 < s.length() {
+      match (s[i].to_char(), s[i + 1].to_char()) {
+        (Some(c1), Some(c2)) => if c1 == '\\' && c2 == '{' {
+          has_interpolation = true
+          break
+        }
+        _ => ()
+      }
+    }
+    i = i + 1
+  }
+  if not(has_interpolation) {
+    return String(s)
+  }
+  // Parse interpolation: "text \{expr} text \{expr2} text"
+  let mut parts : Array[AST] = []
+  let mut current_text = ""
+  let mut i = 0
+  while i < s.length() {
+    // Check for \{ interpolation marker with bounds check
+    let is_interpolation = if i + 1 < s.length() {
+      match (s[i].to_char(), s[i + 1].to_char()) {
+        (Some(c1), Some(c2)) => c1 == '\\' && c2 == '{'
+        _ => false
+      }
+    } else {
+      false
+    }
+    if is_interpolation {
+      // Save current text part
+      if current_text.length() > 0 {
+        parts = parts + [String(current_text)]
+        current_text = ""
+      }
+      // Skip '\{
+      i = i + 2
+      // Parse expression until }
+      let mut expr_str = ""
+      while i < s.length() {
+        match s[i].to_char() {
+          Some(c) => if c == '}' {
+            i = i + 1
+            break
+          } else {
+            expr_str = expr_str + c.to_string()
+            i = i + 1
+          }
+          None => break
+        }
+      }
+      // Debug
+      println("EXPR_STR: [\{expr_str}]")
+      // Parse the expression
+      let expr = parse_interpolation_expr(expr_str)
+      parts = parts + [expr]
+    } else {
+      // Regular character
+      match s[i].to_char() {
+        Some(c) => {
+          current_text = current_text + c.to_string()
+          i = i + 1
+        }
+        None => break
+      }
+    }
+  }
+  // Add remaining text
+  if current_text.length() > 0 {
+    parts = parts + [String(current_text)]
+  }
+  // Build StringConcat from parts
+  if parts.length() == 1 {
+    parts[0]
+  } else {
+    StringConcat(parts)
+  }
+}
+
+///|
+fn parse_interpolation_expr(expr_str : String) -> AST {
+  // Simple expression parser for interpolation
+  // Handle: ident, expr.field, expr.field.field
+  let expr_str = expr_str.trim()
+  // Check for field access (e.g., "r" in RGB case, or "pos.x")
+  let has_dot = {
+    let mut i = 0
+    let mut found = false
+    while i < expr_str.length() {
+      if expr_str[i] == '.' {
+        found = true
+        break
+      }
+      i = i + 1
+    }
+    found
+  }
+  if has_dot {
+    let parts = expr_str.split(".").collect()
+    if parts.length() == 2 {
+      let base = parts[0].trim().to_string()
+      let field = parts[1].trim().to_string()
+      // Single field access
+      FieldExpr(Ident(base), field)
+    } else if parts.length() == 3 {
+      // Double field access
+      let base = parts[0].trim().to_string()
+      let field1 = parts[1].trim().to_string()
+      let field2 = parts[2].trim().to_string()
+      FieldExpr(FieldExpr(Ident(base), field1), field2)
+    } else {
+      Ident(expr_str.to_string())
+    }
+  } else {
+    // Simple identifier
+    Ident(expr_str.to_string())
+  }
 }
 
 ///|
@@ -4373,10 +4517,27 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         let left_is_string = is_string_expr(left, self.var_is_string)
         if left_is_string {
           // string + expr: convert expr to string, then do string + string concat
-          // Convert right to int_to_string(right)
-          let right_as_string = CallExpr(Ident("int_to_string"), [right])
-          let concat_expr = Binary("+", left, right_as_string)
-          self.codegen_expr(concat_expr)
+          // Check if right is already a string variable
+          let right_is_string_var = match right {
+            Ident(name) => {
+              let is_str = self.var_is_string.get(name) == Some(true)
+              // Debug
+              let info = "Checking '\{name}' is_string_var: \{is_str}"
+              println(info)
+              is_str
+            }
+            _ => false
+          }
+          if right_is_string_var {
+            // Both are strings - just concatenate
+            let concat_expr = Binary("+", left, right)
+            self.codegen_expr(concat_expr)
+          } else {
+            // Convert right to string
+            let right_as_string = CallExpr(Ident("int_to_string"), [right])
+            let concat_expr = Binary("+", left, right_as_string)
+            self.codegen_expr(concat_expr)
+          }
         } else {
           // expr + string: convert expr to string, then do string + string concat
           let left_as_string = CallExpr(Ident("int_to_string"), [left])
