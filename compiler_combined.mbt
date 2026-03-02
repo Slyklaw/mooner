@@ -513,7 +513,6 @@ fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
         }
       }
       Some('\n') => {
-        found_newline = true
         let c = char_at(lexer.input, lexer.pos).unwrap()
         acc = acc + c.to_string()
         lexer = lexer.advance()
