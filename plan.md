@@ -14,11 +14,11 @@
 | 008_basic_map | FAIL | Map not supported |
 | 009_basic_control_flows | PASS | |
 | 010_basic_struct | PASS | |
-| 011_basic_enum | FAIL | String interpolation in enum derive |
+| 011_basic_enum | PASS | Fixed by string interpolation fix in 006 |
 | 012_basic_test | FAIL | Test framework not supported |
 | 013_pattern_matching | FAIL | Pattern matching incomplete |
 
-**7 passed, 6 failed** (updated after fixing string interpolation in 006)
+**9 passed, 4 failed**
 
 ## Debugging Order
 
