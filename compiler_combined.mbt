@@ -4433,17 +4433,20 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g
     }
     Float(f) => {
-      // For floats, emit code to call strtod to convert string to double
-      // First, create a string label with the float value
+      // For floats, emit code to load the float value from a data section
+      // Create a label with the float bytes
       let float_str = f.to_string()
-      let (g, label) = self.add_string(float_str)
-      // Call strtod(strtod, NULL) to convert string to double
-      // strtod takes (const char* str, char** endptr)
-      let g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(label)))
+      let label = ".Lfloat_\{self.label_counter}"
+      // Add as a string - we'll interpret it as bytes
+      let (g, _label) = self.add_string(float_str)
+      // Load the address
+      let g = g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
+      // Convert string to double using strtod
+      let g = g.emit_inst(Mov(Reg64("rdi"), Reg64("rax")))
       let g = g.emit_inst(Mov(Reg64("rsi"), Imm32(0)))
       let g = g.emit_inst(Call("strtod"))
-      // Result is in xmm0 (float return register)
-      g
+      // Result is in xmm0
+      { ..g, label_counter: g.label_counter + 1 }
     }
     Bool(b) => {
       let g = self.emit_inst(Mov(Reg64("rax"), Imm32(if b { 1 } else { 0 })))
@@ -4489,7 +4492,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         Some(offset) =>
           if self.var_is_float.get(name) == Some(true) {
             let g = self.emit_inst(Movsd(Xmm("xmm0"), StackBP64(offset)))
-            let g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
             g
           } else if self.var_array_len.get(name) != None {
             // Array - load the address from stack (rbp + offset)

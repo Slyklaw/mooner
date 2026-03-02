@@ -14,17 +14,17 @@
    - var_tuple_field_types now correctly tracks float fields in tuples
    - Field access correctly identifies float fields
 
-## Remaining Issues
+## Current Technical Issues
 
-1. **Tuple printing shows `<tuple>`**: Need to implement proper tuple printing that iterates through elements
+1. **Float runtime not working**:
+   - Tried using strtod() to parse float strings
+   - Tried embedding float constants directly
+   - Float values still print as 0.0 or blank
+   - The issue is likely in how floats are stored/loaded from the stack
+   - Or in how printf is called with float arguments
 
-2. **Float printing broken**: 
-   - Custom float-to-string code is broken (only prints ".0")
-   - Using printf with %g has issues (outputs blank line)
-
-3. **Array access in tuples**: Returns wrong value (not [1,2,3])
-
-4. **Tuple destructuring**: Returns wrong values
+2. **Tuple printing shows `<tuple>`**: 
+   - Placeholder still in place
 
 ## Current Output
 
@@ -40,19 +40,24 @@ Ours:
 <tuple>
 <tuple>
 
-4200864
+4200863
 1, 0, 4198562
 ```
 
-## What Works
+## What's Working
 
-- Float literals (3.14, 2.1) are now parsed correctly
-- Tuples store float values correctly
+- Float literal parsing (3.14 -> Float(3.14))
+- Float token and AST
+- Tuple stores field types correctly [true, false, false]
 - Float field detection works
+- Basic codegen structure for floats
 
-## Next Steps
+## Root Cause
 
-1. Fix tuple printing - iterate through elements and print each
-2. Fix float printing - use working float-to-string or printf properly
-3. Debug array access in tuples
-4. Debug tuple destructuring
+The float runtime has fundamental issues that require deeper debugging of:
+1. How float values are stored in let bindings
+2. How float values are loaded from variables  
+3. How printf is called with float arguments
+4. The ABI conventions for float passing
+
+This is a complex issue that requires stepping back and potentially using a different approach for float support.
