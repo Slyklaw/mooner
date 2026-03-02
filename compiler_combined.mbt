@@ -2519,6 +2519,7 @@ pub struct CodeGen {
   var_is_tuple : Map[String, Bool]
   var_is_map : Map[String, Bool]
   var_tuple_field_types : Map[String, Array[Bool]]
+  var_tuple_field_is_array : Map[String, Array[Bool]]
   var_array_len : Map[String, Int]
   var_types : Map[String, String]
   var_struct_fields : Map[String, Array[String]]
@@ -2558,6 +2559,7 @@ fn CodeGen::new() -> CodeGen {
     var_is_tuple: Map::new(),
     var_is_map: Map::new(),
     var_tuple_field_types: Map::new(),
+    var_tuple_field_is_array: Map::new(),
     var_array_len: Map::new(),
     var_types: Map::new(),
     var_struct_fields: Map::new(),
@@ -4241,6 +4243,36 @@ fn is_float_field_expr(
 }
 
 ///|
+fn is_array_field_expr(
+  expr : AST,
+  var_tuple_field_is_array : Map[String, Array[Bool]],
+) -> Bool {
+  match expr {
+    FieldExpr(Ident(var_name), field) => {
+      let idx = if field.length() > 0 {
+        let c = field[0]
+        if c >= '0' && c <= '9' {
+          c.to_int() - 48
+        } else {
+          -1
+        }
+      } else {
+        -1
+      }
+      if idx >= 0 {
+        match var_tuple_field_is_array.get(var_name) {
+          Some(is_arrays) => idx < is_arrays.length() && is_arrays[idx]
+          None => false
+        }
+      } else {
+        false
+      }
+    }
+    _ => false
+  }
+}
+
+///|
 fn is_int_expr(
   expr : AST,
   var_is_float : Map[String, Bool],
@@ -5327,12 +5359,25 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
                       g = g.define_label(end_label)
                     } else if g.var_is_tuple.get(var_name) == Some(true) {
-                      // Tuple variable - print placeholder for now
+                      // Tuple variable - print placeholder with element count
                       g = g.codegen_expr(arg)
-                      let (g2, label1) = g.add_string("<tuple>")
+                      // Get number of elements
+                      let num_elems = match g.var_tuple_field_types.get(var_name) {
+                        Some(types) => types.length()
+                        None => 2
+                      }
+                      // Build placeholder string based on element count
+                      let placeholder = if num_elems == 2 {
+                        "(..)"
+                      } else if num_elems == 3 {
+                        "(...)"
+                      } else {
+                        "(..)"
+                      }
+                      let (g2, label1) = g.add_string(placeholder)
                       g = g2
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(placeholder.length())))
                     } else if g.var_is_map.get(var_name) == Some(true) {
                       // Map variable - print all entries with iteration
                       // Get map's stack offset
@@ -7065,6 +7110,14 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           }
         _ => false
       }
+      let field_is_array = match obj {
+        Ident(var_name) =>
+          match self.var_tuple_field_is_array.get(var_name) {
+            Some(is_arrays) => idx < is_arrays.length() && is_arrays[idx]
+            None => false
+          }
+        _ => false
+      }
       // For structs: base_offset is the offset from rbp to field 0
       // Field idx is at base_offset + idx * 8
       let total_offset = base_offset + idx * 8
@@ -7152,6 +7205,24 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             i = i + 1
           }
           Some(types)
+        }
+        _ => None
+      }
+      // Compute which tuple fields are arrays
+      let tuple_field_is_array = match value {
+        Tuple(elems) => {
+          let mut is_arrays : Array[Bool] = []
+          let mut i = 0
+          while i < elems.length() {
+            let is_arr = match elems[i] {
+              ArrayLit(_) => true
+              Ident(name) => self.var_array_len.get(name) != None
+              _ => false
+            }
+            is_arrays = is_arrays + [is_arr]
+            i = i + 1
+          }
+          Some(is_arrays)
         }
         _ => None
       }
@@ -7284,6 +7355,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           Some(types) => new_tuple_field_types[name] = types
           None => ()
         }
+        let new_tuple_field_is_array = g2.var_tuple_field_is_array
+        match tuple_field_is_array {
+          Some(is_arrays) => new_tuple_field_is_array[name] = is_arrays
+          None => ()
+        }
         let new_next_offset = offset - 8
         {
           ..g2,
@@ -7295,6 +7371,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_is_tuple: new_tuples,
           var_is_map: new_maps,
           var_tuple_field_types: new_tuple_field_types,
+          var_tuple_field_is_array: new_tuple_field_is_array,
           var_array_len: new_array_lens,
           var_types: new_types,
           var_struct_fields: new_struct_fields,
@@ -7307,6 +7384,10 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       // Determine if source is a tuple variable or expression
       let src_tuple_field_types = match value {
         Ident(src_name) => self.var_tuple_field_types.get(src_name)
+        _ => None
+      }
+      let src_tuple_field_is_array = match value {
+        Ident(src_name) => self.var_tuple_field_is_array.get(src_name)
         _ => None
       }
       let src_is_tuple_var = match value {
@@ -7341,6 +7422,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         // For tuple variable: element is at [rbp + tuple_offset + idx*8]
         // First element is at tuple_offset itself
         let elem_offset = name_idx * 8
+        // Save the offset BEFORE push (like LetBind does)
+        let reg_offset = current_offset
         if src_is_tuple_var {
           match tuple_stack_offset {
             Some(tuple_off) => {
@@ -7349,17 +7432,14 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               if is_float {
                 g2 = g2.emit_inst(Movsd(Xmm("xmm0"), StackBP64(total_offset)))
                 g2 = g2.emit_inst(PushXmm("xmm0"))
-                current_offset = current_offset - 8
               } else {
                 g2 = g2.emit_inst(Mov(Reg64("rax"), StackBP64(total_offset)))
                 g2 = g2.emit_inst(Push(Reg64("rax")))
-                current_offset = current_offset - 8
               }
             }
             None => {
               // Fallback - shouldn't happen
               g2 = g2.emit_inst(Push(Reg64("rax")))
-              current_offset = current_offset - 8
             }
           }
         } else {
@@ -7372,17 +7452,17 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             // Load float from stack and push
             g2 = g2.emit_inst(Movsd(Xmm("xmm0"), StackBP64(lit_elem_offset)))
             g2 = g2.emit_inst(PushXmm("xmm0"))
-            current_offset = current_offset - 8
           } else {
             // Load from stack and push
             g2 = g2.emit_inst(Mov(Reg64("rcx"), StackBP64(lit_elem_offset)))
             g2 = g2.emit_inst(Push(Reg64("rcx")))
-            current_offset = current_offset - 8
           }
         }
-        // Register this variable
+        // Decrement offset AFTER push (like LetBind does)
+        current_offset = current_offset - 8
+        // Register this variable using the offset saved BEFORE push
         let new_offsets = g2.var_offsets
-        new_offsets[name] = current_offset
+        new_offsets[name] = reg_offset
         let new_floats = g2.var_is_float
         new_floats[name] = is_float
         let new_strings = g2.var_is_string

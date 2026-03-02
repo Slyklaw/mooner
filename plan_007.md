@@ -8,23 +8,23 @@
    - Added Float(Double) token type
    - Updated lexer to detect floats (numbers with . or e/E)
    - Updated parser to handle Float token
-   - Float expressions now work in tuples
 
 2. **Float field detection**: 
-   - var_tuple_field_types now correctly tracks float fields in tuples
+   - var_tuple_field_types correctly tracks float fields in tuples
    - Field access correctly identifies float fields
 
-## Current Technical Issues
+3. **Simple tuple access works**:
+   - Integer tuples: t.0, t.1, t.2 work correctly
 
-1. **Float runtime not working**:
-   - Tried using strtod() to parse float strings
-   - Tried embedding float constants directly
-   - Float values still print as 0.0 or blank
-   - The issue is likely in how floats are stored/loaded from the stack
-   - Or in how printf is called with float arguments
+## Remaining Issues
 
-2. **Tuple printing shows `<tuple>`**: 
-   - Placeholder still in place
+1. **Float fields print blank**: Float runtime is broken - values not stored/loaded correctly
+
+2. **Tuple printing shows `<tuple>`**: Placeholder still in place
+
+3. **Array in tuple shows address**: tuple.2 returns address instead of [1,2,3]
+
+4. **Tuple destructuring**: Wrong values
 
 ## Current Output
 
@@ -40,24 +40,25 @@ Ours:
 <tuple>
 <tuple>
 
-4200863
-1, 0, 4198562
+4200865
+4200865, 0, 4198565
 ```
 
-## What's Working
+## What Works
 
 - Float literal parsing (3.14 -> Float(3.14))
 - Float token and AST
 - Tuple stores field types correctly [true, false, false]
-- Float field detection works
-- Basic codegen structure for floats
+- Float field detection
+- Integer tuple element access works
+
+## What's Broken
+
+- Float printing (blank) - runtime issue
+- Tuple printing - needs iteration implementation
+- Array in tuple - shows address instead of values
+- Tuple destructuring
 
 ## Root Cause
 
-The float runtime has fundamental issues that require deeper debugging of:
-1. How float values are stored in let bindings
-2. How float values are loaded from variables  
-3. How printf is called with float arguments
-4. The ABI conventions for float passing
-
-This is a complex issue that requires stepping back and potentially using a different approach for float support.
+The float runtime has fundamental issues. Array detection in tuples also needs to be implemented.
