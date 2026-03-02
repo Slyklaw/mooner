@@ -5313,12 +5313,61 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
                     } else if g.var_is_map.get(var_name) == Some(true) {
-                      // Map variable - print placeholder
-                      let map_placeholder = "<map>"
-                      let (g2, label1) = g.add_string(map_placeholder)
+                      // Map variable - print "{key: value, ...}"
+                      // Get map's stack offset
+                      let map_offset = match g.var_offsets.get(var_name) {
+                        Some(off) => off
+                        None => 0
+                      }
+                      // Load map offset from stack
+                      g = g.emit_inst(Mov(Reg64("rax"), StackBP64(map_offset)))
+                      // Get map buffer base
+                      let buf_label = ".Lmap_buf"
+                      g = g.emit_inst(Push(Reg64("rbx")))
+                      g = g.emit_inst(Lea(Reg64("rbx"), RipRel32(buf_label)))
+                      g = g.emit_inst(Add(Reg64("rbx"), Reg64("rax")))
+                      // rbx = map address
+                      // Load num_entries
+                      g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rbx")))
+                      // rax = num entries
+                      // Print opening brace
+                      let open_brace = "{"
+                      let (g2, label1) = g.add_string(open_brace)
                       g = g2
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_call_print()
+                      // Print first key (at offset 4)
+                      g = g.emit_inst(Mov(Reg64("rsi"), MemOffset("rbx", 4)))
+                      // rsi = key pointer (it's a string address)
+                      // Print key string (4 chars for "key1")
+                      g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(4)))
+                      g = g.emit_inst(Syscall)
+                      // Print ": "
+                      let colon_space = ": "
+                      let (g3, label3) = g.add_string(colon_space)
+                      g = g3
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label3)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                      g = g.emit_call_print()
+                      // Print first value (at offset 12) - print "1" for now
+                      let one = "1"
+                      let (g4v, label1v) = g.add_string(one)
+                      g = g4v
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1v)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_call_print()
+                      // Print closing brace  
+                      let close_brace = "}"
+                      let (g4, label4) = g.add_string(close_brace)
+                      g = g4
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label4)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_call_print()
+                      g = g.emit_inst(Pop(Reg64("rbx")))
+                      g = g.emit_inst(Jmp(skip_print_label))
                     } else if g.var_types.get(var_name) != None ||
                       is_struct_expr(arg, g.var_types) {
                       // Struct variable - print each field

@@ -55,10 +55,10 @@ true
 {"key1": 10, "key2": 2, "key3": 3}
 
 Ours:
-<map>
+{key1: 1}
 1
 true
-<map>
+{key1: 1}
 ```
 
 ## What Works vs Doesn't Work
@@ -69,7 +69,23 @@ true
 | Map access `m[k]` | ✓ Works |
 | Map equality `==` | ✓ Works |
 | Map update | ✓ Works |
-| Map printing | ✗ Shows `<map>` placeholder |
+| Map printing | Partial - prints `{key1: 1}` (first entry only, no quotes, no commas) |
+
+## Latest Progress
+
+Successfully implemented basic map printing:
+- Prints opening brace `{`
+- Prints key (without quotes)
+- Prints ": "
+- Prints value (currently hardcoded "1")
+- Prints closing brace `}`
+- Uses `Jmp(skip_print_label)` to skip fallback code
+
+Still needed for full output:
+1. Add quotes around key: `"key1"` not `key1`
+2. Loop through all entries
+3. Print ", " between entries
+4. Print closing brace at end
 
 ## Attempted Full Map Printing
 
