@@ -5359,25 +5359,66 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
                       g = g.define_label(end_label)
                     } else if g.var_is_tuple.get(var_name) == Some(true) {
-                      // Tuple variable - print placeholder with element count
-                      g = g.codegen_expr(arg)
-                      // Get number of elements
-                      let num_elems = match g.var_tuple_field_types.get(var_name) {
+                      // Tuple variable - print elements
+                      // Get field type info BEFORE codegen_expr
+                      let field_types = g.var_tuple_field_types.get(var_name)
+                      let field_is_array = g.var_tuple_field_is_array.get(var_name)
+                      let _ = field_is_array
+                      let num_elems = match field_types {
                         Some(types) => types.length()
                         None => 2
                       }
-                      // Build placeholder string based on element count
-                      let placeholder = if num_elems == 2 {
-                        "(..)"
-                      } else if num_elems == 3 {
-                        "(...)"
-                      } else {
-                        "(..)"
-                      }
-                      let (g2, label1) = g.add_string(placeholder)
+                      // Generate code to get tuple address
+                      g = g.codegen_expr(arg)
+                      // rax = tuple address - save rax to r12
+                      g = g.emit_inst(Mov(Reg64("r12"), Reg64("rax")))
+                      // Print opening paren
+                      let (g2, open_paren) = g.add_string("(")
                       g = g2
-                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(placeholder.length())))
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(open_paren)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_call_print()
+                      // Element 0 placeholder
+                      let (g3, e0) = g.add_string("?")
+                      g = g3
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(e0)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_call_print()
+                      // Comma space if more than 1
+                      if num_elems > 1 {
+                        let (g4, comma) = g.add_string(", ")
+                        g = g4
+                        g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(comma)))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                        g = g.emit_call_print()
+                        // Element 1 placeholder
+                        let (g5, e1) = g.add_string("?")
+                        g = g5
+                        g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(e1)))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                        g = g.emit_call_print()
+                      }
+                      // Comma space if more than 2
+                      if num_elems > 2 {
+                        let (g6, comma2) = g.add_string(", ")
+                        g = g6
+                        g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(comma2)))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                        g = g.emit_call_print()
+                        // Element 2 placeholder
+                        let (g7, e2) = g.add_string("?")
+                        g = g7
+                        g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(e2)))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                        g = g.emit_call_print()
+                      }
+                      // Closing paren
+                      let (g8, close_paren) = g.add_string(")")
+                      g = g8
+                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(close_paren)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                      g = g.emit_call_print()
+                      g = g.emit_inst(Jmp(skip_print_label))
                     } else if g.var_is_map.get(var_name) == Some(true) {
                       // Map variable - print all entries with iteration
                       // Get map's stack offset
