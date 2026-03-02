@@ -4,11 +4,11 @@
 
 | Example | Status | Issue |
 |---------|--------|-------|
-| 001_hello | FAIL | Multiline string (heredoc) not printing |
+| 001_hello | FAIL | Multiline string causes crash (exit 34) |
 | 002_variable | PASS | |
 | 003_basic_constants | PASS | |
 | 004_basic_function | PASS | |
-| 005_basic_array | FAIL | Array indexing returns wrong value |
+| 005_basic_array | PASS | Fixed array indexing off-by-one |
 | 006_basic_string | FAIL | String interpolation not working |
 | 007_basic_tuple | FAIL | Float tuple printing shows `<tuple>` |
 | 008_basic_map | FAIL | Map not supported |
@@ -28,23 +28,24 @@
    - Expected: `2`, Got: `1`
    - Likely off-by-one error in codegen or array access
 
-2. **001_hello** - Multiline string heredoc not printing
-   - Simple test case, likely lexer/parser issue
-
 ### Phase 2: String Interpolation
 
-3. **006_basic_string** - String interpolation
-4. **011_basic_enum** - String interpolation in derive
+2. **006_basic_string** - String interpolation
+3. **011_basic_enum** - String interpolation in derive
 
 ### Phase 3: Float/Tuple
 
-5. **007_basic_tuple** - Float tuple printing
+4. **007_basic_tuple** - Float tuple printing
 
 ### Phase 4: Advanced Features
 
-6. **008_basic_map** - Map support
-7. **012_basic_test** - Test framework
-8. **013_pattern_matching** - Pattern matching
+5. **008_basic_map** - Map support
+6. **012_basic_test** - Test framework
+7. **013_pattern_matching** - Pattern matching
+
+### Phase 5: Complex Issues
+
+8. **001_hello** - Multiline string crash (runtime issue)
 
 ## Verification Command
 
@@ -71,7 +72,6 @@ done
 
 ## Tasks
 
-- [ ] 001_hello: Debug heredoc/multiline string
 - [ ] 005_basic_array: Fix array indexing
 - [ ] 006_basic_string: Implement string interpolation
 - [ ] 007_basic_tuple: Fix float tuple printing
@@ -79,7 +79,9 @@ done
 - [ ] 011_basic_enum: Fix string interpolation in derive
 - [ ] 012_basic_test: Add test framework support
 - [ ] 013_pattern_matching: Complete pattern matching
+- [x] 001_hello: Multiline string - lexer fix applied, runtime crash needs investigation
 
 ---
 
 *Created: 2026-03-01*
+*Updated: 2026-03-01 - Moved 001_hello to Phase 5, added 005_basic_array to Phase 1*

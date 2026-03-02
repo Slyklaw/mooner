@@ -482,23 +482,63 @@ fn Lexer::read_decimal_number(self : Lexer) -> (String, Lexer) {
 
 ///|
 fn Lexer::read_multiline_string(self : Lexer) -> (String, Lexer) {
-  // Simplified: just skip to |# for self-hosting
-  let mut lexer = self
+  // Read content between #| and |# (simple version)
+  // Skip past the initial #|
+  let mut lexer = self.advance().advance() 
+  let mut acc = ""
   let mut done = false
   while not(done) {
     match char_at(lexer.input, lexer.pos) {
-      Some('|') =>
+      Some('|') => {
         if char_at(lexer.input, lexer.pos + 1) == Some('#') {
           lexer = lexer.advance().advance()
           done = true
         } else {
+          let c = char_at(lexer.input, lexer.pos).unwrap()
+          acc = acc + c.to_string()
           lexer = lexer.advance()
         }
-      Some(_) => lexer = lexer.advance()
+      }
+      Some(c) => {
+        let c = char_at(lexer.input, lexer.pos).unwrap()
+        acc = acc + c.to_string()
+        lexer = lexer.advance()
+      }
       None => done = true
     }
   }
-  ("", lexer)
+  // Now dedent: remove leading #| from each line (including leading whitespace)
+  let lines = acc.split("\n")
+  let mut result = ""
+  for line in lines {
+    let line = line.to_string()
+    // Skip leading whitespace
+    let mut i = 0
+    while i < line.length() {
+      let c = line[i]
+      if c == ' ' {
+        i = i + 1
+      } else {
+        break
+      }
+    }
+    let line = line.substring(start=i)
+    if line.length() >= 2 && line[0] == '#' && line[1] == '|' {
+      // Strip the #| prefix
+      let rest = line.substring(start=2)
+      result = result + rest
+    } else {
+      result = result + line
+    }
+    result = result + "\n"
+  }
+  // Remove trailing newline
+  let result = if result.length() > 0 {
+    result.substring(start=0, end=result.length() - 1)
+  } else {
+    result
+  }
+  (result, lexer)
 }
 
 ///|
@@ -6474,25 +6514,26 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         // Value is now at offset 12 (key at offset 4)
         g = g.emit_inst(Mov(Reg64("rax"), MemOffset("rdi", 12)))
         g
-      } else {
-        // Array or string indexing
-        // Pop the address
-        g = g.emit_inst(Pop(Reg64("rcx")))
-        // rcx = array/string address, rax = index
-        if is_str {
-          // String: add index to address, load byte
-          g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
-          let g2 = g.emit_inst(Movzx(Reg64("rax"), MemIndirect("rcx")))
-          g2
         } else {
-          // Array: index * 8 + address + 8
-          g = g.emit_inst(Mov(Reg64("rsi"), Imm32(8)))
-          g = g.emit_inst(Imul(Reg64("rax"), Reg64("rsi")))
-          g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
-          let g2 = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rcx")))
-          g2
+          // Array or string indexing
+          // Pop the address
+          g = g.emit_inst(Pop(Reg64("rcx")))
+          // rcx = array/string address, rax = index
+          if is_str {
+            // String: add index to address, load byte
+            g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+            let g2 = g.emit_inst(Movzx(Reg64("rax"), MemIndirect("rcx")))
+            g2
+          } else {
+            // Array: address + index * 8 + 8 (skip length field)
+            g = g.emit_inst(Mov(Reg64("rsi"), Imm32(8)))
+            g = g.emit_inst(Imul(Reg64("rax"), Reg64("rsi")))
+            g = g.emit_inst(Add(Reg64("rcx"), Reg64("rax")))
+            g = g.emit_inst(Add(Reg64("rcx"), Imm32(8))) // skip length field
+            let g2 = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rcx")))
+            g2
+          }
         }
-      }
     }
     Tuple(elems) => {
       let num_elems = elems.length()
