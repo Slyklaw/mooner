@@ -6489,12 +6489,15 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Pop(Reg64("rax")))
                       g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
                     } else if is_float || is_tuple_float_field {
-                      // For float values, use placeholder for now
-                      // The float_to_string infrastructure is complex
-                      let (g_float, float_label) = g.add_string("3.14")
+                      // For float values, extract the float value from AST if it's a literal
+                      let float_str = match arg {
+                        Float(f) => f.to_string()
+                        _ => "0.0"
+                      }
+                      let (g_float, float_label) = g.add_string(float_str)
                       g = g_float
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(float_label)))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(4)))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(float_str.length())))
                     } else if is_bool {
                       let (g2, true_label) = g.new_label()
                       let (g3, end_label) = g2.new_label()
@@ -6801,12 +6804,16 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               }
             "float_to_string" =>
               if args.length() == 1 {
-                // For now, just return a test string
+                // Extract float value from AST if it's a Float literal
+                let float_str = match args[0] {
+                  Float(f) => f.to_string()
+                  _ => "0.0"
+                }
                 let mut g = self
-                let (g2, label) = g.add_string("3.14")
+                let (g2, label) = g.add_string(float_str)
                 g = g2
                 g = g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
-                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(4)))
+                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(float_str.length())))
                 g
               } else {
                 self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
