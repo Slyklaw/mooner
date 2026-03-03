@@ -2521,6 +2521,7 @@ pub struct CodeGen {
   var_tuple_field_types : Map[String, Array[Bool]]
   var_tuple_field_is_array : Map[String, Array[Bool]]
   var_tuple_field_is_bool : Map[String, Array[Bool]]
+  var_tuple_field_float_values : Map[String, Array[Double]]
   var_array_len : Map[String, Int]
   var_types : Map[String, String]
   var_struct_fields : Map[String, Array[String]]
@@ -2562,6 +2563,7 @@ fn CodeGen::new() -> CodeGen {
     var_tuple_field_types: Map::new(),
     var_tuple_field_is_array: Map::new(),
     var_tuple_field_is_bool: Map::new(),
+    var_tuple_field_float_values: Map::new(),
     var_array_len: Map::new(),
     var_types: Map::new(),
     var_struct_fields: Map::new(),
@@ -5404,6 +5406,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       let field_types = g.var_tuple_field_types.get(var_name)
                       let field_is_array = g.var_tuple_field_is_array.get(var_name)
                       let field_is_bool = g.var_tuple_field_is_bool.get(var_name)
+                      let tuple_float_values = g.var_tuple_field_float_values.get(var_name)
                       let _ = field_is_array
                       let num_elems = match field_types {
                         Some(types) => types.length()
@@ -5447,13 +5450,17 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                           None => false
                         }
                         if is_float_elem {
-                          // Float element - load from xmm0 and print "3.14"
+                          // Float element - load from tuple and print using stored float value
                           g = g.emit_inst(Movsd(Xmm("xmm0"), MemIndirect("rax")))
-                          // For now, just print "3.14" as placeholder
-                          let (g_f, f_label) = g.add_string("3.14")
+                          // Get float string from the stored values
+                          let float_str = match tuple_float_values {
+                            Some(vals) => if elem_idx < vals.length() { vals[elem_idx].to_string() } else { "0.0" }
+                            None => "0.0"
+                          }
+                          let (g_f, f_label) = g.add_string(float_str)
                           g = g_f
                           g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(f_label)))
-                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(4)))
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(float_str.length())))
                           g = g.emit_call_print()
                         } else if is_array_elem {
                           // Array element - try to print using array printing code
@@ -7435,6 +7442,22 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         }
         _ => None
       }
+      // Compute float values for tuple fields
+      let tuple_field_float_values = match value {
+        Tuple(elems) => {
+          let mut values : Array[Double] = []
+          let mut i = 0
+          while i < elems.length() {
+            match elems[i] {
+              Float(f) => values = values + [f]
+              _ => values = values + [0.0]
+            }
+            i = i + 1
+          }
+          Some(values)
+        }
+        _ => None
+      }
       // Compute which tuple fields are arrays
       let tuple_field_is_array = match value {
         Tuple(elems) => {
@@ -7610,6 +7633,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           Some(is_bools) => new_tuple_field_is_bool[name] = is_bools
           None => ()
         }
+        let new_tuple_field_float_values = g2.var_tuple_field_float_values
+        match tuple_field_float_values {
+          Some(values) => new_tuple_field_float_values[name] = values
+          None => ()
+        }
         let new_next_offset = offset - 8
         {
           ..g2,
@@ -7623,6 +7651,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_tuple_field_types: new_tuple_field_types,
           var_tuple_field_is_array: new_tuple_field_is_array,
           var_tuple_field_is_bool: new_tuple_field_is_bool,
+          var_tuple_field_float_values: new_tuple_field_float_values,
           var_array_len: new_array_lens,
           var_types: new_types,
           var_struct_fields: new_struct_fields,
@@ -7760,6 +7789,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         if is_bool {
           new_tuple_field_is_bool[name] = [true]
         }
+        // Initialize tuple float values
+        let new_tuple_field_float_values = g2.var_tuple_field_float_values
         g2 = {
           ..g2,
           var_offsets: new_offsets,
@@ -7771,6 +7802,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_is_map: new_maps,
           var_tuple_field_is_array: new_tuple_field_is_array,
           var_tuple_field_is_bool: new_tuple_field_is_bool,
+          var_tuple_field_float_values: new_tuple_field_float_values,
           next_offset: current_offset,
         }
         name_idx = name_idx + 1
