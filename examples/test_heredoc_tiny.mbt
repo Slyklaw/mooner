@@ -1,6 +1,0 @@
-fn main {
-  let greeting =
-    hello
-    world
-  println(greeting)
-}
