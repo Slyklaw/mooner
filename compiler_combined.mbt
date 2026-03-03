@@ -2522,6 +2522,7 @@ pub struct CodeGen {
   var_tuple_field_is_array : Map[String, Array[Bool]]
   var_tuple_field_is_bool : Map[String, Array[Bool]]
   var_tuple_field_float_values : Map[String, Array[Double]]
+  var_tuple_field_bool_values : Map[String, Array[Bool]]
   var_array_len : Map[String, Int]
   var_types : Map[String, String]
   var_struct_fields : Map[String, Array[String]]
@@ -2564,6 +2565,7 @@ fn CodeGen::new() -> CodeGen {
     var_tuple_field_is_array: Map::new(),
     var_tuple_field_is_bool: Map::new(),
     var_tuple_field_float_values: Map::new(),
+    var_tuple_field_bool_values: Map::new(),
     var_array_len: Map::new(),
     var_types: Map::new(),
     var_struct_fields: Map::new(),
@@ -4180,6 +4182,27 @@ fn CodeGen::convert_bool_to_string(
       let (g, label) = self.add_string("false")
       (g, String("false"))
     }
+    Ident(name) =>
+      // Check if this bool variable has a tracked value from tuple destructuring
+      match self.var_tuple_field_bool_values.get(name) {
+        Some(vals) =>
+          if vals.length() > 0 {
+            if vals[0] {
+              let (g, label) = self.add_string("true")
+              (g, String("true"))
+            } else {
+              let (g, label) = self.add_string("false")
+              (g, String("false"))
+            }
+          } else {
+            let (g, label) = self.add_string("<bool>")
+            (g, String("<bool>"))
+          }
+        None => {
+          let (g, label) = self.add_string("<bool>")
+          (g, String("<bool>"))
+        }
+      }
     _ => {
       // For variables, use placeholder
       let (g, label) = self.add_string("<bool>")
@@ -4784,9 +4807,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           let right_is_string_var = match right {
             Ident(name) => {
               let is_str = self.var_is_string.get(name) == Some(true)
-              // Debug
-              let info = "Checking '\{name}' is_string_var: \{is_str}"
-              println(info)
               is_str
             }
             _ => false
@@ -4796,7 +4816,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             let concat_expr = Binary("+", left, right)
             self.codegen_expr(concat_expr)
           } else {
-            // Check the type of right and convert appropriately
             let right_is_float = is_float_expr(right, self.var_is_float) ||
               is_float_field_expr(right, self.var_tuple_field_types)
             let right_is_bool = is_bool_expr(right, self.var_is_bool) ||
@@ -4807,6 +4826,32 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               // Convert float to string - handle Float literal vs variable
               let right_str = match right {
                 Float(f) => f.to_string()
+                Ident(name) => {
+                  println(
+                    "DEBUG: Looking up name=\{name} in var_tuple_field_float_values",
+                  )
+                  // Check if this is a tuple field variable with stored float values
+                  match self.var_tuple_field_float_values.get(name) {
+                    Some(values) =>
+                      if values.length() > 0 {
+                        values[0].to_string()
+                      } else {
+                        "<float>"
+                      }
+                    // Also check if name came from a tuple by checking var_tuple_field_types
+                    None =>
+                      match self.var_tuple_field_types.get(name) {
+                        Some(types) =>
+                          if types.length() > 0 && types[0] {
+                            // It's from a tuple but we don't have the value
+                            "<float>"
+                          } else {
+                            "<float>"
+                          }
+                        None => "<float>"
+                      }
+                  }
+                }
                 _ => "<float>"
               }
               let concat_expr = Binary("+", left, String(right_str))
@@ -4866,6 +4911,16 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             // Convert float to string - handle Float literal vs variable
             let left_str = match left {
               Float(f) => f.to_string()
+              Ident(name) =>
+                match self.var_tuple_field_float_values.get(name) {
+                  Some(values) =>
+                    if values.length() > 0 {
+                      values[0].to_string()
+                    } else {
+                      "<float>"
+                    }
+                  None => "<float>"
+                }
               _ => "<float>"
             }
             let concat_expr = Binary("+", String(left_str), right)
@@ -6592,8 +6647,31 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                         Mov(Reg64("rdx"), Imm32(float_str.length())),
                       )
                     } else if is_tuple_float_field {
-                      // For tuple float field access, use placeholder
-                      let float_str = "<float>"
+                      // For tuple float field access, try to get the float value at compile time
+                      let float_str = match arg {
+                        FieldExpr(Ident(var_name), field) => {
+                          let idx = if field.length() > 0 {
+                            let c = field[0]
+                            if c >= '0' && c <= '9' {
+                              c.to_int() - 48
+                            } else {
+                              0
+                            }
+                          } else {
+                            0
+                          }
+                          match g.var_tuple_field_float_values.get(var_name) {
+                            Some(values) =>
+                              if idx < values.length() {
+                                values[idx].to_string()
+                              } else {
+                                "<float>"
+                              }
+                            None => "<float>"
+                          }
+                        }
+                        _ => "<float>"
+                      }
                       let (g_f, f_label) = g.add_string(float_str)
                       g = g_f
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(f_label)))
@@ -7555,6 +7633,22 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         }
         _ => None
       }
+      // Compute bool values for tuple fields
+      let tuple_field_bool_values = match value {
+        Tuple(elems) => {
+          let mut values : Array[Bool] = []
+          let mut i = 0
+          while i < elems.length() {
+            match elems[i] {
+              Bool(b) => values = values + [b]
+              _ => values = values + [false]
+            }
+            i = i + 1
+          }
+          Some(values)
+        }
+        _ => None
+      }
       // Compute which tuple fields are arrays
       let tuple_field_is_array = match value {
         Tuple(elems) => {
@@ -7735,6 +7829,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           Some(values) => new_tuple_field_float_values[name] = values
           None => ()
         }
+        let new_tuple_field_bool_values = g2.var_tuple_field_bool_values
+        match tuple_field_bool_values {
+          Some(values) => new_tuple_field_bool_values[name] = values
+          None => ()
+        }
         let new_next_offset = offset - 8
         {
           ..g2,
@@ -7749,6 +7848,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_tuple_field_is_array: new_tuple_field_is_array,
           var_tuple_field_is_bool: new_tuple_field_is_bool,
           var_tuple_field_float_values: new_tuple_field_float_values,
+          var_tuple_field_bool_values: new_tuple_field_bool_values,
           var_array_len: new_array_lens,
           var_types: new_types,
           var_struct_fields: new_struct_fields,
@@ -7976,8 +8076,54 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         if is_bool {
           new_tuple_field_is_bool[name] = [true]
         }
-        // Initialize tuple float values
+        // Initialize tuple float values for this variable
         let new_tuple_field_float_values = g2.var_tuple_field_float_values
+        if is_float {
+          // Get float values from source tuple
+          let float_vals = match src_tuple_field_types {
+            Some(types) =>
+              match value {
+                Ident(src_name) =>
+                  // Get float values from the source tuple variable
+                  match self.var_tuple_field_float_values.get(src_name) {
+                    Some(vals) =>
+                      if name_idx < vals.length() {
+                        [vals[name_idx]]
+                      } else {
+                        [0.0]
+                      }
+                    None => [0.0]
+                  }
+                _ => [0.0]
+              }
+            None => [0.0]
+          }
+          new_tuple_field_float_values[name] = float_vals
+        }
+        // Initialize tuple bool values for this variable
+        let new_tuple_field_bool_values = g2.var_tuple_field_bool_values
+        if is_bool {
+          // Get bool values from source tuple
+          let bool_vals = match src_tuple_field_is_bool {
+            Some(bools) =>
+              match value {
+                Ident(src_name) =>
+                  // Get bool values from the source tuple variable
+                  match self.var_tuple_field_bool_values.get(src_name) {
+                    Some(vals) =>
+                      if name_idx < vals.length() {
+                        [vals[name_idx]]
+                      } else {
+                        [false]
+                      }
+                    None => [false]
+                  }
+                _ => [false]
+              }
+            None => [false]
+          }
+          new_tuple_field_bool_values[name] = bool_vals
+        }
         g2 = {
           ..g2,
           var_offsets: new_offsets,
@@ -7991,6 +8137,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_tuple_field_is_array: new_tuple_field_is_array,
           var_tuple_field_is_bool: new_tuple_field_is_bool,
           var_tuple_field_float_values: new_tuple_field_float_values,
+          var_tuple_field_bool_values: new_tuple_field_bool_values,
           next_offset: current_offset,
         }
         name_idx = name_idx + 1
