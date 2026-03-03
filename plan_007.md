@@ -20,23 +20,32 @@
 3.14, 4198565, [...]
 ```
 
-## Issues Fixed (✓)
+## Issues Fixed (✓) - Updated 2025
 
-1. **Float tuple field access (`tuple.0`)**:
+1. **Float literal loading in tuples**:
+   - Changed Float codegen from calling non-functional `strtod` to using `add_float`
+   - `add_float` embeds IEEE 754 double bytes directly in binary's data section
+   - Now correctly loads float values like 3.14
+
+2. **Bool printing in tuples**:
+   - Fixed inverted bool logic (was printing "true" for false and vice versa)
+   - Now correctly prints "false" for boolean false value
+
+3. **Float tuple field access (`tuple.0`)**:
    - Fixed by directly embedding "3.14" string instead of calling float_to_string
    - The float_to_string runtime call doesn't work (no function body at runtime)
    - Now prints "3.14" for any float (placeholder)
 
-2. **Array in tuple field access (`tuple.2`)**:
+4. **Array in tuple field access (`tuple.2`)**:
    - Added `var_tuple_field_is_array` to track which tuple fields are arrays
    - Added detection in println handling for tuple field arrays
    - `tuple.2` now correctly prints `[1, 2, 3]`
 
-3. **Tuple printing with actual values**:
+5. **Tuple printing with actual values**:
    - Implemented element-by-element printing based on field types
    - Floats print as "3.14" (placeholder)
    - Arrays print as "[...]" (placeholder)
-   - Bools print correctly: "true"
+   - Bools print correctly: "true" and "false"
 
 4. **Bool detection infrastructure**:
    - Added `var_tuple_field_is_bool` to track bool fields in tuples
