@@ -5369,8 +5369,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Call("float_to_string"))
                       // rax = string, rdx = length
                       g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
-                    } else if g.var_is_string.get(var_name) == Some(true) {
-                      // String variable - evaluate and print
+                    } else if g.var_is_bool.get(var_name) == Some(true) {
+                      // Bool variable - print "true" or "false"
                       g = g.codegen_expr(arg)
                       let (g2, true_label) = g.new_label()
                       let (g3, end_label) = g2.new_label()
@@ -5388,6 +5388,16 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_false)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
                       g = g.define_label(end_label)
+                    } else if g.var_is_string.get(var_name) == Some(true) {
+                      // String variable - print the string
+                      g = g.codegen_expr(arg)
+                      // rax contains the string address
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                      // Get string length
+                      g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+                      g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rax")))
+                      // Restore string address for printing
+                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
                       } else if g.var_is_tuple.get(var_name) == Some(true) {
                       // Tuple variable - print elements
                       // Get field type info BEFORE codegen_expr
