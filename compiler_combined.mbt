@@ -2523,6 +2523,7 @@ pub struct CodeGen {
   var_tuple_field_is_bool : Map[String, Array[Bool]]
   var_tuple_field_float_values : Map[String, Array[Double]]
   var_tuple_field_bool_values : Map[String, Array[Bool]]
+  var_tuple_field_array_values : Map[String, Array[Array[Int]]]
   var_array_len : Map[String, Int]
   var_types : Map[String, String]
   var_struct_fields : Map[String, Array[String]]
@@ -2566,6 +2567,7 @@ fn CodeGen::new() -> CodeGen {
     var_tuple_field_is_bool: Map::new(),
     var_tuple_field_float_values: Map::new(),
     var_tuple_field_bool_values: Map::new(),
+    var_tuple_field_array_values: Map::new(),
     var_array_len: Map::new(),
     var_types: Map::new(),
     var_struct_fields: Map::new(),
@@ -4862,10 +4864,43 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               let concat_expr = Binary("+", left, right_val)
               g.codegen_expr(concat_expr)
             } else if right_is_array {
-              // For array, use placeholder "[...]"
-              let arr_placeholder = AST::String("[...]")
-              let concat_expr = Binary("+", left, arr_placeholder)
-              self.codegen_expr(concat_expr)
+              // For array in interpolation, try to use tracked array values
+              let arr_values = match right {
+                Ident(name) => self.var_tuple_field_array_values.get(name)
+                _ => None
+              }
+              match arr_values {
+                Some(vals) => {
+                  // vals is Array[Array[Int]], get the first element
+                  let arr_elements = if vals.length() > 0 {
+                    vals[0]
+                  } else {
+                    Array::make(0, 0)
+                  }
+                  // Build a string from the tracked array values
+                  let arr_str = {
+                    let mut s = "["
+                    let mut i = 0
+                    while i < arr_elements.length() {
+                      if i > 0 {
+                        s = s + ", "
+                      }
+                      s = s + arr_elements[i].to_string()
+                      i = i + 1
+                    }
+                    s = s + "]"
+                    s
+                  }
+                  let concat_expr = Binary("+", left, String(arr_str))
+                  self.codegen_expr(concat_expr)
+                }
+                None => {
+                  // Fallback to placeholder
+                  let arr_placeholder = AST::String("[...]")
+                  let concat_expr = Binary("+", left, arr_placeholder)
+                  self.codegen_expr(concat_expr)
+                }
+              }
             } else {
               // Convert right to string
               let right_as_string = CallExpr(Ident("int_to_string"), [right])
@@ -4930,9 +4965,41 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             let concat_expr = Binary("+", left_val, right)
             g.codegen_expr(concat_expr)
           } else if left_is_array {
-            let arr_placeholder = AST::String("[...]")
-            let concat_expr = Binary("+", arr_placeholder, right)
-            self.codegen_expr(concat_expr)
+            // For array on left side, try to use tracked array values
+            let arr_values = match left {
+              Ident(name) => self.var_tuple_field_array_values.get(name)
+              _ => None
+            }
+            match arr_values {
+              Some(vals) => {
+                // vals is Array[Array[Int]], get the first element
+                let arr_elements = if vals.length() > 0 {
+                  vals[0]
+                } else {
+                  Array::make(0, 0)
+                }
+                let arr_str = {
+                  let mut s = "["
+                  let mut i = 0
+                  while i < arr_elements.length() {
+                    if i > 0 {
+                      s = s + ", "
+                    }
+                    s = s + arr_elements[i].to_string()
+                    i = i + 1
+                  }
+                  s = s + "]"
+                  s
+                }
+                let concat_expr = Binary("+", String(arr_str), right)
+                self.codegen_expr(concat_expr)
+              }
+              None => {
+                let arr_placeholder = AST::String("[...]")
+                let concat_expr = Binary("+", arr_placeholder, right)
+                self.codegen_expr(concat_expr)
+              }
+            }
           } else {
             let left_as_string = CallExpr(Ident("int_to_string"), [left])
             let concat_expr = Binary("+", left_as_string, right)
@@ -7649,6 +7716,34 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         }
         _ => None
       }
+      // Compute array values for tuple fields (extract integers from array literals)
+      let tuple_field_array_values = match value {
+        Tuple(elems) => {
+          let mut values : Array[Array[Int]] = []
+          let mut i = 0
+          while i < elems.length() {
+            let arr_vals : Array[Int] = match elems[i] {
+              ArrayLit(elems2) => {
+                let mut ints : Array[Int] = []
+                let mut j = 0
+                while j < elems2.length() {
+                  match elems2[j] {
+                    Int(n) => ints = ints + [n]
+                    _ => ()
+                  }
+                  j = j + 1
+                }
+                ints
+              }
+              _ => Array::make(0, 0)
+            }
+            values = values + [arr_vals]
+            i = i + 1
+          }
+          Some(values)
+        }
+        _ => None
+      }
       // Compute which tuple fields are arrays
       let tuple_field_is_array = match value {
         Tuple(elems) => {
@@ -7834,6 +7929,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           Some(values) => new_tuple_field_bool_values[name] = values
           None => ()
         }
+        let new_tuple_field_array_values = g2.var_tuple_field_array_values
+        match tuple_field_array_values {
+          Some(values) => new_tuple_field_array_values[name] = values
+          None => ()
+        }
         let new_next_offset = offset - 8
         {
           ..g2,
@@ -7849,6 +7949,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_tuple_field_is_bool: new_tuple_field_is_bool,
           var_tuple_field_float_values: new_tuple_field_float_values,
           var_tuple_field_bool_values: new_tuple_field_bool_values,
+          var_tuple_field_array_values: new_tuple_field_array_values,
           var_array_len: new_array_lens,
           var_types: new_types,
           var_struct_fields: new_struct_fields,
@@ -8124,6 +8225,26 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           }
           new_tuple_field_bool_values[name] = bool_vals
         }
+        // Initialize tuple array values for this variable
+        let new_tuple_field_array_values = g2.var_tuple_field_array_values
+        if is_array {
+          // Get array values from source tuple
+          let arr_vals : Array[Array[Int]] = match value {
+            Ident(src_name) =>
+              // Get array values from the source tuple variable
+              match self.var_tuple_field_array_values.get(src_name) {
+                Some(vals) =>
+                  if name_idx < vals.length() {
+                    [vals[name_idx]]
+                  } else {
+                    [Array::make(0, 0)]
+                  }
+                None => [Array::make(0, 0)]
+              }
+            _ => [Array::make(0, 0)]
+          }
+          new_tuple_field_array_values[name] = arr_vals
+        }
         g2 = {
           ..g2,
           var_offsets: new_offsets,
@@ -8138,6 +8259,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_tuple_field_is_bool: new_tuple_field_is_bool,
           var_tuple_field_float_values: new_tuple_field_float_values,
           var_tuple_field_bool_values: new_tuple_field_bool_values,
+          var_tuple_field_array_values: new_tuple_field_array_values,
           next_offset: current_offset,
         }
         name_idx = name_idx + 1
