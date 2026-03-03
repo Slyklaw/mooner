@@ -41,10 +41,14 @@
    - Added detection in println handling for tuple field arrays
    - `tuple.2` now correctly prints `[1, 2, 3]`
 
-5. **Tuple printing with actual values**:
+5. **Array in tuple printing**:
+   - Now correctly prints array elements when printing the tuple
+   - Previously showed "[...]" placeholder, now shows actual values like [1, 2, 3]
+
+6. **Tuple printing with actual values**:
    - Implemented element-by-element printing based on field types
    - Floats print as "3.14" (placeholder)
-   - Arrays print as "[...]" (placeholder)
+   - Arrays print correctly with elements
    - Bools print correctly: "true" and "false"
 
 4. **Bool detection infrastructure**:
