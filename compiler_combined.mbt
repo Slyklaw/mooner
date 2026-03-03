@@ -5410,7 +5410,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       let _ = field_is_array
                       let num_elems = match field_types {
                         Some(types) => types.length()
-                        None => 2
+                        None => 3
                       }
                       // Generate code to get tuple address
                       g = g.codegen_expr(arg)
@@ -5573,21 +5573,23 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                           // Bool element - print "true" or "false"
                           g = g.emit_inst(Push(Reg64("rbx")))
                           g = g.emit_inst(Mov(Reg64("rbx"), MemIndirect("rax")))
+                          let bool_true = ".Lbool_true"
+                          let bool_done = ".Lbool_done"
                           g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
-                          let (g_true, true_label) = g.new_label()
-                          let (g_false, false_label) = g_true.new_label()
-                          g = g.emit_inst(Je(true_label)) // if value == 0 (false), jump
-                          let (g_t, s_true) = g.add_string("true")
-                          g = g_t
-                          g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_true)))
-                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(4)))
-                          g = g.emit_inst(Jmp(false_label))
-                          g = g.define_label(true_label)
+                          g = g.emit_inst(Jne(bool_true))
+                          // value is 0 (false), print "false"
                           let (g_f, s_false) = g.add_string("false")
                           g = g_f
                           g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_false)))
                           g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
-                          g = g.define_label(false_label)
+                          g = g.emit_inst(Jmp(bool_done))
+                          g = g.define_label(bool_true)
+                          // value is non-zero (true), print "true"
+                          let (g_t, s_true) = g.add_string("true")
+                          g = g_t
+                          g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_true)))
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(4)))
+                          g = g.define_label(bool_done)
                           g = g.emit_inst(Pop(Reg64("rbx")))
                           g = g.emit_call_print()
                         } else {
