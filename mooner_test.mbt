@@ -8,33 +8,41 @@
 // This file contains placeholder tests that verify the compiler API works.
 // Actual E2E comparison is done via run_e2e_tests.sh
 
+///|
 test "compile_file returns ok for valid input" {
   let input_path = "examples/mbt_examples/001_hello.mbt"
   let output_path = "/tmp/mooner_test_001.exe"
 
   let result = @mooner.compile_file(input_path, output_path)
-  assert_true(match result {
-    Ok(_) => true
-    Err(_) => false
-  })
+  assert_true(
+    match result {
+      Ok(_) => true
+      Err(_) => false
+    },
+  )
 }
 
+///|
 test "tokenize produces tokens" {
   let input = "fn main { println(1) }"
   let tokens = @mooner.tokenize(input)
   assert_true(tokens.length() > 0)
 }
 
+///|
 test "parse produces AST" {
   let input = "fn main { println(1) }"
   let tokens = @mooner.tokenize(input)
   let ast = @mooner.parse(tokens)
-  assert_true(match ast {
-    AST::Func(_) => true
-    _ => false
-  })
+  assert_true(
+    match ast {
+      AST::Func(_) => true
+      _ => false
+    },
+  )
 }
 
+///|
 test "codegen produces bytes" {
   let input = "fn main { println(1) }"
   let tokens = @mooner.tokenize(input)
