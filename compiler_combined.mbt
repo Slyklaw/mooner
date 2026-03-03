@@ -7742,14 +7742,51 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       // Determine if source is a tuple variable or expression
       let src_tuple_field_types = match value {
         Ident(src_name) => self.var_tuple_field_types.get(src_name)
+        Tuple(elems) => {
+          let mut types : Array[Bool] = []
+          let mut i = 0
+          while i < elems.length() {
+            types = types + [is_float_expr(elems[i], self.var_is_float)]
+            i = i + 1
+          }
+          Some(types)
+        }
         _ => None
       }
       let src_tuple_field_is_array = match value {
         Ident(src_name) => self.var_tuple_field_is_array.get(src_name)
+        Tuple(elems) => {
+          let mut arrays : Array[Bool] = []
+          let mut i = 0
+          while i < elems.length() {
+            let is_arr = match elems[i] {
+              ArrayLit(_) => true
+              Ident(name) => self.var_array_len.get(name) != None
+              _ => false
+            }
+            arrays = arrays + [is_arr]
+            i = i + 1
+          }
+          Some(arrays)
+        }
         _ => None
       }
       let src_tuple_field_is_bool = match value {
         Ident(src_name) => self.var_tuple_field_is_bool.get(src_name)
+        Tuple(elems) => {
+          let mut bools : Array[Bool] = []
+          let mut i = 0
+          while i < elems.length() {
+            let is_b = match elems[i] {
+              Bool(_) => true
+              Ident(name) => self.var_is_bool.get(name) == Some(true)
+              _ => false
+            }
+            bools = bools + [is_b]
+            i = i + 1
+          }
+          Some(bools)
+        }
         _ => None
       }
       let src_is_tuple_var = match value {

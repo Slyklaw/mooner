@@ -16,6 +16,7 @@ pub fn tokenize(String) -> Array[Token]
 pub enum AST {
   Unit
   Int(Int)
+  Float(Double)
   String(String)
   Char(Char)
   Bool(Bool)
@@ -65,6 +66,9 @@ pub struct CodeGen {
   var_is_tuple : Map[String, Bool]
   var_is_map : Map[String, Bool]
   var_tuple_field_types : Map[String, Array[Bool]]
+  var_tuple_field_is_array : Map[String, Array[Bool]]
+  var_tuple_field_is_bool : Map[String, Array[Bool]]
+  var_tuple_field_float_values : Map[String, Array[Double]]
   var_array_len : Map[String, Int]
   var_types : Map[String, String]
   var_struct_fields : Map[String, Array[String]]
@@ -147,6 +151,7 @@ pub enum Token {
   Ident(String)
   Int(Int)
   UInt(UInt)
+  Float(Double)
   String(String)
   Char(Char)
   Plus
