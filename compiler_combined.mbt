@@ -5572,48 +5572,78 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                           g = g.emit_call_print()
                         }
                         Binary(op, left, right) => {
-                          // Try to evaluate binary expression at compile time
-                          // Check the types of operands
-                          let left_is_float = match left {
-                            Float(_) => true
-                            _ => false
-                          }
-                          let right_is_float = match right {
-                            Float(_) => true
-                            _ => false
-                          }
-                          let is_float_op = left_is_float || right_is_float
-                          
-                          if is_float_op {
-                            // Float arithmetic - convert both to double
-                            let left_val = match left {
+                          // Recursively evaluate nested binary expressions
+                          // First flatten the expression tree and evaluate
+                          fn eval_to_float(expr : AST) -> Double? {
+                            match expr {
                               Float(f) => Some(f)
                               Int(n) => Some(n.to_double())
-                              _ => None
-                            }
-                            let right_val = match right {
-                              Float(f) => Some(f)
-                              Int(n) => Some(n.to_double())
-                              _ => None
-                            }
-                            
-                            match (left_val, right_val) {
-                              (Some(l), Some(r)) => {
-                                let result : Double = match op {
-                                  "+" => l + r
-                                  "-" => l - r
-                                  "*" => l * r
-                                  "/" => if r != 0.0 { l / r } else { 0.0 }
-                                  _ => 0.0
+                              Binary(nested_op, l, r) => {
+                                let lv = eval_to_float(l)
+                                let rv = eval_to_float(r)
+                                match (lv, rv) {
+                                  (Some(a), Some(b)) => {
+                                    let result = match nested_op {
+                                      "+" => a + b
+                                      "-" => a - b
+                                      "*" => a * b
+                                      "/" => if b != 0.0 { a / b } else { 0.0 }
+                                      _ => 0.0
+                                    }
+                                    Some(result)
+                                  }
+                                  _ => None
                                 }
-                                let s = ryu_to_string(result)
+                              }
+                              _ => None
+                            }
+                          }
+                          
+                          fn eval_to_int(expr : AST) -> Int? {
+                            match expr {
+                              Int(n) => Some(n)
+                              Binary(nested_op, l, r) => {
+                                let lv = eval_to_int(l)
+                                let rv = eval_to_int(r)
+                                match (lv, rv) {
+                                  (Some(a), Some(b)) => {
+                                    let result = match nested_op {
+                                      "+" => a + b
+                                      "-" => a - b
+                                      "*" => a * b
+                                      "/" => if b != 0 { a / b } else { 0 }
+                                      _ => 0
+                                    }
+                                    Some(result)
+                                  }
+                                  _ => None
+                                }
+                              }
+                              _ => None
+                            }
+                          }
+                          
+                          fn is_all_int(expr : AST) -> Bool {
+                            match expr {
+                              Int(_) => true
+                              Float(_) => false
+                              Binary(_, l, r) => is_all_int(l) && is_all_int(r)
+                              _ => false
+                            }
+                          }
+                          
+                          // Try integer evaluation first, then float
+                          if is_all_int(Binary(op, left, right)) {
+                            match eval_to_int(Binary(op, left, right)) {
+                              Some(n) => {
+                                let s = n.to_string()
                                 let (g2, label) = g.add_string(s)
                                 g = g2
                                 g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
                                 g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
                                 g = g.emit_call_print()
                               }
-                              _ => {
+                              None => {
                                 let (g2, label) = g.add_string("<expr>")
                                 g = g2
                                 g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
@@ -5622,33 +5652,16 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                               }
                             }
                           } else {
-                            // Integer arithmetic - both operands are Int
-                            let left_val = match left {
-                              Int(n) => Some(n)
-                              _ => None
-                            }
-                            let right_val = match right {
-                              Int(n) => Some(n)
-                              _ => None
-                            }
-                            
-                            match (left_val, right_val) {
-                              (Some(l), Some(r)) => {
-                                let result : Int = match op {
-                                  "+" => l + r
-                                  "-" => l - r
-                                  "*" => l * r
-                                  "/" => if r != 0 { l / r } else { 0 }
-                                  _ => 0
-                                }
-                                let s = result.to_string()
+                            match eval_to_float(Binary(op, left, right)) {
+                              Some(f) => {
+                                let s = ryu_to_string(f)
                                 let (g2, label) = g.add_string(s)
                                 g = g2
                                 g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
                                 g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
                                 g = g.emit_call_print()
                               }
-                              _ => {
+                              None => {
                                 let (g2, label) = g.add_string("<expr>")
                                 g = g2
                                 g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))

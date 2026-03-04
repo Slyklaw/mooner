@@ -72,13 +72,18 @@
 - **Float arithmetic**: `"{1.0/3.0}"` → `"0.3333333333333333"`
 - **Integer arithmetic**: `"{10/3}"` → `"3"` (integer division)
 - **Mixed operators**: `"{2.0 + 3.0}"`, `"{10 - 4}"`, `"{6 * 7}"` all work
+- **Chained expressions**: `"{1.0 + 2.0 + 3.0}"` → `"6"`, `"{2 * 3 * 4}"` → `"24"`
 - **Operator precedence**: `*`, `/` have higher precedence than `+`, `-`
 - **Proper type handling**: Integer vs float arithmetic produces correct results
+- **Recursive evaluation**: Nested binary expressions are fully evaluated at compile time
 
 **Example:**
 ```moonbit
-println("1.0/3.0: \{1.0/3.0}")  // Output: 1.0/3.0: 0.3333333333333333
-println("10/3: \{10/3}")        // Output: 10/3: 3
+println("1.0/3.0: \{1.0/3.0}")          // Output: 1.0/3.0: 0.3333333333333333
+println("10/3: \{10/3}")                // Output: 10/3: 3
+println("1.0 + 2.0 + 3.0: \{1.0 + 2.0 + 3.0}")  // Output: 1.0 + 2.0 + 3.0: 6
+println("2 * 3 * 4: \{2 * 3 * 4}")      // Output: 2 * 3 * 4: 24
+println("10 + 2 * 5: \{10 + 2 * 5}")    // Output: 10 + 2 * 5: 20 (precedence!)
 ```
 
 ### Example 007 - Fully Working!
@@ -141,10 +146,16 @@ done
 ### In Progress / Future
 
 - [ ] 012_basic_test: Add test framework support (expected to fail)
-- [ ] Chained binary expressions: `"{1.0 + 2.0 + 3.0}"` (currently shows `<expr>`)
-- [ ] Binary expressions with variables: `"{x + 5}"` (currently shows `<expr>`)
+- [x] **Chained binary expressions**: `"{1.0 + 2.0 + 3.0}"`, `"{10 + 5 + 3}"` - COMPLETE!
+  - Recursive evaluation of expression trees
+  - Proper handling of mixed int/float chained expressions
+  - Examples: `1.0 + 2.0 + 3.0 = 6`, `2 * 3 * 4 = 24`
+  
+- [ ] **Binary expressions with variables**: `"{x + 5}"` (currently shows `<expr>`)
+  - Requires runtime evaluation or compile-time constant propagation
+  - Future enhancement: track variable values at compile time
 
 ---
 
 *Created: 2026-03-01*
-*Updated: 2026-03-03 - Binary expressions in interpolation now working! Added support for +, -, *, / with proper integer/float arithmetic*
+*Updated: 2026-03-03 - Chained binary expressions now working! Added recursive evaluation for complex expression trees with proper operator precedence*
