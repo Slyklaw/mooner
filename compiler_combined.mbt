@@ -5510,6 +5510,171 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                           g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
                           g = g.emit_call_print()
                         }
+                        Ident(var_name) => {
+                          // Check variable type and print accordingly
+                          if g.var_is_float.get(var_name) == Some(true) {
+                            // Float variable - try to get compile-time value, fallback to placeholder
+                            match g.var_tuple_field_float_values.get(var_name) {
+                              Some(float_vals) => {
+                                if float_vals.length() > 0 {
+                                  let s = ryu_to_string(float_vals[0])
+                                  let (g2, label) = g.add_string(s)
+                                  g = g2
+                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                                  g = g.emit_call_print()
+                                } else {
+                                  let (g2, label) = g.add_string("<float>")
+                                  g = g2
+                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                                  g = g.emit_call_print()
+                                }
+                              }
+                              None => {
+                                let (g2, label) = g.add_string("<float>")
+                                g = g2
+                                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                                g = g.emit_call_print()
+                              }
+                            }
+                          } else if g.var_is_bool.get(var_name) == Some(true) {
+                            // Bool variable
+                            let (g2, true_label) = g.new_label()
+                            let (g3, false_label) = g.new_label()
+                            let (g4, end_label) = g.new_label()
+                            g = g4
+                            // Load bool from stack
+                            match g.var_offsets.get(var_name) {
+                              Some(offset) => {
+                                g = g.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
+                              }
+                              None => ()
+                            }
+                            g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
+                            g = g.emit_inst(Jne(true_label))
+                            // Print false
+                            let (g5, s_false) = g.add_string("false")
+                            g = g5
+                            g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_false)))
+                            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
+                            g = g.emit_call_print()
+                            g = g.emit_inst(Jmp(end_label))
+                            // Print true
+                            g = g.define_label(true_label)
+                            let (g6, s_true) = g.add_string("true")
+                            g = g6
+                            g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_true)))
+                            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(4)))
+                            g = g.emit_call_print()
+                            g = g.define_label(end_label)
+                          } else if g.var_array_len.get(var_name) != None {
+                            // Array variable - print elements inline
+                            // Get the array values if they're tracked
+                            match g.var_tuple_field_array_values.get(var_name) {
+                              Some(arr_vals) => {
+                                if arr_vals.length() > 0 {
+                                  let elements = arr_vals[0]
+                                  // Print opening bracket
+                                  let (g2, open_label) = g.add_string("[")
+                                  g = g2
+                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(open_label)))
+                                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                                  g = g.emit_call_print()
+                                  // Print each element
+                                  let mut elem_idx = 0
+                                  while elem_idx < elements.length() {
+                                    if elem_idx > 0 {
+                                      // Print comma and space
+                                      let (g3, comma_label) = g.add_string(", ")
+                                      g = g3
+                                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(comma_label)))
+                                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                                      g = g.emit_call_print()
+                                    }
+                                    // Print element value
+                                    let elem_str = elements[elem_idx].to_string()
+                                    let (g4, elem_label) = g.add_string(elem_str)
+                                    g = g4
+                                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(elem_label)))
+                                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(elem_str.length())))
+                                    g = g.emit_call_print()
+                                    elem_idx = elem_idx + 1
+                                  }
+                                  // Print closing bracket
+                                  let (g5, close_label) = g.add_string("]")
+                                  g = g5
+                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(close_label)))
+                                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
+                                  g = g.emit_call_print()
+                                } else {
+                                  // Empty array
+                                  let (g2, arr_label) = g.add_string("[]")
+                                  g = g2
+                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(arr_label)))
+                                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                                  g = g.emit_call_print()
+                                }
+                              }
+                              None => {
+                                // Array but no tracked values
+                                let (g2, arr_label) = g.add_string("[...]")
+                                g = g2
+                                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(arr_label)))
+                                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
+                                g = g.emit_call_print()
+                              }
+                            }
+                          } else {
+                            // Integer or other variable - print as int
+                            g = g.codegen_expr(part)
+                            // rax contains the value, convert to string and print
+                            let buf_label = ".Lint_buf"
+                            let (g2, digit_loop) = g.new_label()
+                            let (g3, done_label) = g2.new_label()
+                            let (g4, skip_zero) = g3.new_label()
+                            let (g5, skip_zero_end) = g4.new_label()
+                            g = g5
+                            g = g.emit_inst(Push(Reg64("rbx")))
+                            g = g.emit_inst(Push(Reg64("rcx")))
+                            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                            g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                            g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                            g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                            g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                            g = g.emit_inst(Je(done_label))
+                            g = g.define_label(digit_loop)
+                            g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                            g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                            g = g.emit_inst(Idiv(Reg64("rsi")))
+                            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                            g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                            g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+                            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                            g = g.emit_inst(Dec(Reg64("rdi")))
+                            g = g.emit_inst(Inc(Reg64("rcx")))
+                            g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                            g = g.emit_inst(Jne(digit_loop))
+                            g = g.define_label(done_label)
+                            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                            g = g.emit_inst(Jne(skip_zero))
+                            g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
+                            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                            g = g.emit_inst(Inc(Reg64("rcx")))
+                            g = g.define_label(skip_zero)
+                            g = g.emit_inst(Inc(Reg64("rdi")))
+                            g = g.define_label(skip_zero_end)
+                            g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
+                            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(30)))
+                            g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                            g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                            g = g.emit_inst(Syscall)
+                            g = g.emit_inst(Pop(Reg64("rcx")))
+                            g = g.emit_inst(Pop(Reg64("rbx")))
+                          }
+                        }
                         _ => {
                           // For other expressions, show placeholder
                           let (g2, label) = g.add_string("<expr>")
