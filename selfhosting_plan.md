@@ -76,6 +76,8 @@
 - **Operator precedence**: `*`, `/` have higher precedence than `+`, `-`
 - **Proper type handling**: Integer vs float arithmetic produces correct results
 - **Recursive evaluation**: Nested binary expressions are fully evaluated at compile time
+- **Variables (integers)**: `"{x + 5}"` where x=10 → `"15"` - Runtime evaluation!
+- **Variables (floats)**: `"{a / b}"` shows `<float-expr>` - Requires runtime float-to-string
 
 **Example:**
 ```moonbit
@@ -84,6 +86,10 @@ println("10/3: \{10/3}")                // Output: 10/3: 3
 println("1.0 + 2.0 + 3.0: \{1.0 + 2.0 + 3.0}")  // Output: 1.0 + 2.0 + 3.0: 6
 println("2 * 3 * 4: \{2 * 3 * 4}")      // Output: 2 * 3 * 4: 24
 println("10 + 2 * 5: \{10 + 2 * 5}")    // Output: 10 + 2 * 5: 20 (precedence!)
+
+let x = 10
+println("x + 5: \{x + 5}")              // Output: x + 5: 15 (runtime eval!)
+println("x * 2: \{x * 2}")              // Output: x * 2: 20
 ```
 
 ### Example 007 - Fully Working!
@@ -150,12 +156,14 @@ done
   - Recursive evaluation of expression trees
   - Proper handling of mixed int/float chained expressions
   - Examples: `1.0 + 2.0 + 3.0 = 6`, `2 * 3 * 4 = 24`
-  
-- [ ] **Binary expressions with variables**: `"{x + 5}"` (currently shows `<expr>`)
-  - Requires runtime evaluation or compile-time constant propagation
-  - Future enhancement: track variable values at compile time
+
+- [x] **Binary expressions with variables**: `"{x + 5}"` - PARTIAL!
+  - Integer expressions: Runtime evaluation works! `x + 5` where x=10 → 15
+  - Float expressions: Shows `<float-expr>` - needs runtime float-to-string conversion
+  - Supports: `+`, `-`, `*`, `/` with proper integer arithmetic
+  - Example: `let x = 10; println("{x + 5}")` → `x + 5: 15`
 
 ---
 
 *Created: 2026-03-01*
-*Updated: 2026-03-03 - Chained binary expressions now working! Added recursive evaluation for complex expression trees with proper operator precedence*
+*Updated: 2026-03-03 - Binary expressions with variables now working for integers! Runtime code generation for variable-based expressions*

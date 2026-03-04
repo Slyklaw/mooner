@@ -5572,57 +5572,16 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                           g = g.emit_call_print()
                         }
                         Binary(op, left, right) => {
-                          // Recursively evaluate nested binary expressions
-                          // First flatten the expression tree and evaluate
-                          fn eval_to_float(expr : AST) -> Double? {
+                          // Check if expression contains variables
+                          fn contains_var(expr : AST) -> Bool {
                             match expr {
-                              Float(f) => Some(f)
-                              Int(n) => Some(n.to_double())
-                              Binary(nested_op, l, r) => {
-                                let lv = eval_to_float(l)
-                                let rv = eval_to_float(r)
-                                match (lv, rv) {
-                                  (Some(a), Some(b)) => {
-                                    let result = match nested_op {
-                                      "+" => a + b
-                                      "-" => a - b
-                                      "*" => a * b
-                                      "/" => if b != 0.0 { a / b } else { 0.0 }
-                                      _ => 0.0
-                                    }
-                                    Some(result)
-                                  }
-                                  _ => None
-                                }
-                              }
-                              _ => None
+                              Ident(_) => true
+                              Binary(_, l, r) => contains_var(l) || contains_var(r)
+                              _ => false
                             }
                           }
                           
-                          fn eval_to_int(expr : AST) -> Int? {
-                            match expr {
-                              Int(n) => Some(n)
-                              Binary(nested_op, l, r) => {
-                                let lv = eval_to_int(l)
-                                let rv = eval_to_int(r)
-                                match (lv, rv) {
-                                  (Some(a), Some(b)) => {
-                                    let result = match nested_op {
-                                      "+" => a + b
-                                      "-" => a - b
-                                      "*" => a * b
-                                      "/" => if b != 0 { a / b } else { 0 }
-                                      _ => 0
-                                    }
-                                    Some(result)
-                                  }
-                                  _ => None
-                                }
-                              }
-                              _ => None
-                            }
-                          }
-                          
+                          // Check if expression is all integer literals
                           fn is_all_int(expr : AST) -> Bool {
                             match expr {
                               Int(_) => true
@@ -5632,42 +5591,237 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                             }
                           }
                           
-                          // Try integer evaluation first, then float
-                          if is_all_int(Binary(op, left, right)) {
-                            match eval_to_int(Binary(op, left, right)) {
-                              Some(n) => {
-                                let s = n.to_string()
-                                let (g2, label) = g.add_string(s)
-                                g = g2
-                                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
-                                g = g.emit_call_print()
+                          // Check if expression is all float literals
+                          fn is_all_float(expr : AST) -> Bool {
+                            match expr {
+                              Float(_) => true
+                              Int(_) => false
+                              Binary(_, l, r) => is_all_float(l) && is_all_float(r)
+                              _ => false
+                            }
+                          }
+                          
+                          // Check if expression is integer-only (no floats)
+                          fn is_int_expr(expr : AST) -> Bool {
+                            match expr {
+                              Int(_) => true
+                              Float(_) => false
+                              Ident(name) => {
+                                // Check if variable is int (not float)
+                                // We need to check var_is_float map
+                                // For now, assume Ident without Float is int
+                                // This will be checked at runtime via the var_is_float check
+                                true
                               }
-                              None => {
-                                let (g2, label) = g.add_string("<expr>")
-                                g = g2
-                                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(6)))
-                                g = g.emit_call_print()
+                              Binary(_, l, r) => is_int_expr(l) && is_int_expr(r)
+                              _ => false
+                            }
+                          }
+                          
+                          // Try compile-time evaluation for literals only
+                          if not(contains_var(Binary(op, left, right))) {
+                            // All literals - compile-time evaluation (existing code)
+                            fn eval_to_float(expr : AST) -> Double? {
+                              match expr {
+                                Float(f) => Some(f)
+                                Int(n) => Some(n.to_double())
+                                Binary(nested_op, l, r) => {
+                                  let lv = eval_to_float(l)
+                                  let rv = eval_to_float(r)
+                                  match (lv, rv) {
+                                    (Some(a), Some(b)) => {
+                                      let result = match nested_op {
+                                        "+" => a + b
+                                        "-" => a - b
+                                        "*" => a * b
+                                        "/" => if b != 0.0 { a / b } else { 0.0 }
+                                        _ => 0.0
+                                      }
+                                      Some(result)
+                                    }
+                                    _ => None
+                                  }
+                                }
+                                _ => None
+                              }
+                            }
+                            
+                            fn eval_to_int(expr : AST) -> Int? {
+                              match expr {
+                                Int(n) => Some(n)
+                                Binary(nested_op, l, r) => {
+                                  let lv = eval_to_int(l)
+                                  let rv = eval_to_int(r)
+                                  match (lv, rv) {
+                                    (Some(a), Some(b)) => {
+                                      let result = match nested_op {
+                                        "+" => a + b
+                                        "-" => a - b
+                                        "*" => a * b
+                                        "/" => if b != 0 { a / b } else { 0 }
+                                        _ => 0
+                                      }
+                                      Some(result)
+                                    }
+                                    _ => None
+                                  }
+                                }
+                                _ => None
+                              }
+                            }
+                            
+                            if is_all_int(Binary(op, left, right)) {
+                              match eval_to_int(Binary(op, left, right)) {
+                                Some(n) => {
+                                  let s = n.to_string()
+                                  let (g2, label) = g.add_string(s)
+                                  g = g2
+                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                                  g = g.emit_call_print()
+                                }
+                                None => {
+                                  let (g2, label) = g.add_string("<expr>")
+                                  g = g2
+                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(6)))
+                                  g = g.emit_call_print()
+                                }
+                              }
+                            } else {
+                              match eval_to_float(Binary(op, left, right)) {
+                                Some(f) => {
+                                  let s = ryu_to_string(f)
+                                  let (g2, label) = g.add_string(s)
+                                  g = g2
+                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                                  g = g.emit_call_print()
+                                }
+                                None => {
+                                  let (g2, label) = g.add_string("<expr>")
+                                  g = g2
+                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(6)))
+                                  g = g.emit_call_print()
+                                }
                               }
                             }
                           } else {
-                            match eval_to_float(Binary(op, left, right)) {
-                              Some(f) => {
-                                let s = ryu_to_string(f)
-                                let (g2, label) = g.add_string(s)
-                                g = g2
-                                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
-                                g = g.emit_call_print()
+                            // Contains variables - runtime evaluation
+                            // For now, only support integer expressions
+                            // Check if this is an integer-only expression
+                            let has_float = match Binary(op, left, right) {
+                              Binary(_, l, r) => {
+                                fn has_float_lit(expr : AST) -> Bool {
+                                  match expr {
+                                    Float(_) => true
+                                    Binary(_, l2, r2) => has_float_lit(l2) || has_float_lit(r2)
+                                    _ => false
+                                  }
+                                }
+                                has_float_lit(l) || has_float_lit(r)
                               }
-                              None => {
-                                let (g2, label) = g.add_string("<expr>")
-                                g = g2
-                                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(6)))
-                                g = g.emit_call_print()
+                              _ => false
+                            }
+                            
+                            if has_float {
+                              // Float expression with variables - not supported yet
+                              let (g2, label) = g.add_string("<float-expr>")
+                              g = g2
+                              g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                              g = g.emit_inst(Mov(Reg64("rdx"), Imm32(12)))
+                              g = g.emit_call_print()
+                            } else {
+                              // Integer expression with variables - evaluate at runtime
+                              // Generate code to evaluate the expression and print result
+                              // For simplicity, handle simple cases: var + lit, lit + var, var + var
+                              
+                              fn codegen_binary_expr(g : CodeGen, expr : AST) -> CodeGen {
+                                match expr {
+                                  Int(n) => {
+                                    g.emit_inst(Mov(Reg64("rax"), Imm32(n)))
+                                  }
+                                  Ident(name) => {
+                                    // Load variable from stack
+                                    match g.var_offsets.get(name) {
+                                      Some(offset) => {
+                                        g.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
+                                      }
+                                      None => g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+                                    }
+                                  }
+                                  Binary(bin_op, l, r) => {
+                                    let g = codegen_binary_expr(g, l)
+                                    let g = g.emit_inst(Push(Reg64("rax")))
+                                    let g = codegen_binary_expr(g, r)
+                                    // Now rax = right, stack has left
+                                    let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                                    let g = g.emit_inst(Pop(Reg64("rax")))
+                                    // rax = left, rbx = right
+                                    match bin_op {
+                                      "+" => g.emit_inst(Add(Reg64("rax"), Reg64("rbx")))
+                                      "-" => g.emit_inst(Sub(Reg64("rax"), Reg64("rbx")))
+                                      "*" => g.emit_inst(Imul(Reg64("rax"), Reg64("rbx")))
+                                      "/" => {
+                                        let g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                                        let g = g.emit_inst(Idiv(Reg64("rbx")))
+                                        g
+                                      }
+                                      _ => g
+                                    }
+                                  }
+                                  _ => g
+                                }
                               }
+                              
+                              // Evaluate expression - result in rax
+                              g = codegen_binary_expr(g, Binary(op, left, right))
+                              
+                              // Convert rax to string and print
+                              let buf_label = ".Lint_buf"
+                              let (g2, digit_loop) = g.new_label()
+                              let (g3, done_label) = g2.new_label()
+                              let (g4, skip_zero) = g3.new_label()
+                              let (g5, skip_zero_end) = g4.new_label()
+                              g = g5
+                              g = g.emit_inst(Push(Reg64("rbx")))
+                              g = g.emit_inst(Push(Reg64("rcx")))
+                              g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                              g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                              g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                              g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                              g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                              g = g.emit_inst(Je(done_label))
+                              g = g.define_label(digit_loop)
+                              g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                              g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                              g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                              g = g.emit_inst(Idiv(Reg64("rsi")))
+                              g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                              g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                              g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+                              g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                              g = g.emit_inst(Dec(Reg64("rdi")))
+                              g = g.emit_inst(Inc(Reg64("rcx")))
+                              g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                              g = g.emit_inst(Jne(digit_loop))
+                              g = g.define_label(done_label)
+                              g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                              g = g.emit_inst(Jne(skip_zero))
+                              g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
+                              g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                              g = g.emit_inst(Inc(Reg64("rcx")))
+                              g = g.define_label(skip_zero)
+                              g = g.emit_inst(Inc(Reg64("rdi")))
+                              g = g.define_label(skip_zero_end)
+                              g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
+                              g = g.emit_inst(Mov(Reg64("rdx"), Imm32(30)))
+                              g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                              g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                              g = g.emit_inst(Syscall)
+                              g = g.emit_inst(Pop(Reg64("rcx")))
+                              g = g.emit_inst(Pop(Reg64("rbx")))
                             }
                           }
                         }
