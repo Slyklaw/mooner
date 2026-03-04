@@ -67,6 +67,20 @@
 - **Array variables**: Print tracked array values like `"[1, 2, 3]"`
 - **Expression parsing**: Updated `parse_interpolation_expr()` to parse numeric literals (float/int) in addition to identifiers
 
+### Binary Expressions in Interpolation - COMPLETE!
+
+- **Float arithmetic**: `"{1.0/3.0}"` → `"0.3333333333333333"`
+- **Integer arithmetic**: `"{10/3}"` → `"3"` (integer division)
+- **Mixed operators**: `"{2.0 + 3.0}"`, `"{10 - 4}"`, `"{6 * 7}"` all work
+- **Operator precedence**: `*`, `/` have higher precedence than `+`, `-`
+- **Proper type handling**: Integer vs float arithmetic produces correct results
+
+**Example:**
+```moonbit
+println("1.0/3.0: \{1.0/3.0}")  // Output: 1.0/3.0: 0.3333333333333333
+println("10/3: \{10/3}")        // Output: 10/3: 3
+```
+
 ### Example 007 - Fully Working!
 
 Tuple destructuring with string interpolation now works:
@@ -119,13 +133,18 @@ done
 - [x] 011_basic_enum: Fixed via string interpolation in 006
 - [x] 013_pattern_matching: Complete pattern matching - COMPLETE!
 - [x] 001_hello: Fixed heredoc syntax - COMPLETE!
+- [x] **Binary expressions in interpolation**: `"{1.0/3.0}"`, `"{10 + 5}"`, etc. - COMPLETE!
+  - Simple binary expressions with numeric literals now work
+  - Proper integer vs float arithmetic (10/3 = 3, 10.0/3.0 = 3.333...)
+  - Supports: +, -, *, / operators
 
 ### In Progress / Future
 
 - [ ] 012_basic_test: Add test framework support (expected to fail)
-- [ ] Binary expressions in interpolation: `"{1.0/3.0}"` (currently shows `<expr>`)
+- [ ] Chained binary expressions: `"{1.0 + 2.0 + 3.0}"` (currently shows `<expr>`)
+- [ ] Binary expressions with variables: `"{x + 5}"` (currently shows `<expr>`)
 
 ---
 
 *Created: 2026-03-01*
-*Updated: 2026-03-03 - All examples except 012 (test framework) now passing! Added Ryu float-to-string conversion, improved string interpolation for tuple destructuring*
+*Updated: 2026-03-03 - Binary expressions in interpolation now working! Added support for +, -, *, / with proper integer/float arithmetic*

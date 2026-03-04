@@ -2309,8 +2309,69 @@ fn parse_string_interpolation(s : String) -> AST {
 ///|
 fn parse_interpolation_expr(expr_str : String) -> AST {
   // Simple expression parser for interpolation
-  // Handle: float literal, int literal, ident, expr.field
-  let expr_str = expr_str.trim()
+  // Handle: binary expressions, float literal, int literal, ident, expr.field
+  let expr_str = expr_str.trim().to_string()
+  
+  // Check for binary operators (+, -, *, /)
+  let mut found_op_pos = -1
+  let mut found_op_char = '+'
+  let mut found_op_prec = 1
+  let mut paren_depth = 0
+  let mut i = 0
+  
+  // Scan for binary operators (respecting parentheses)
+  while i < expr_str.length() {
+    match expr_str[i].to_char() {
+      Some(c) => {
+        if c == '(' {
+          paren_depth = paren_depth + 1
+        } else if c == ')' {
+          paren_depth = paren_depth - 1
+        } else if paren_depth == 0 {
+          // Check for binary operators
+          let is_op = c == '+' || c == '-' || c == '*' || c == '/'
+          if is_op {
+            let prec = if c == '*' || c == '/' { 2 } else { 1 }
+            
+            // For '-', make sure it's not unary
+            let is_unary = if c == '-' {
+              if i == 0 {
+                true  // At start
+              } else {
+                // Check if previous char is an operator
+                match expr_str[i - 1].to_char() {
+                  Some(prev) => prev == '+' || prev == '-' || prev == '*' || prev == '/' || prev == '('
+                  None => false
+                }
+              }
+            } else {
+              false
+            }
+            
+            if not(is_unary) {
+              // Binary operator found
+              if found_op_pos < 0 || prec <= found_op_prec {
+                found_op_pos = i
+                found_op_char = c
+                found_op_prec = prec
+              }
+            }
+          }
+        }
+      }
+      None => ()
+    }
+    i = i + 1
+  }
+  
+  // If we found a binary operator, parse as binary expression
+  if found_op_pos >= 0 {
+    let left_str = expr_str.substring(start=0, end=found_op_pos).trim().to_string()
+    let right_str = expr_str.substring(start=found_op_pos + 1).trim().to_string()
+    let left = parse_interpolation_expr(left_str)
+    let right = parse_interpolation_expr(right_str)
+    return Binary(found_op_char.to_string(), left, right)
+  }
   
   // Check for field access (e.g., "pos.x", "tuple.0")
   let has_dot = {
@@ -5510,6 +5571,93 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                           g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
                           g = g.emit_call_print()
                         }
+                        Binary(op, left, right) => {
+                          // Try to evaluate binary expression at compile time
+                          // Check the types of operands
+                          let left_is_float = match left {
+                            Float(_) => true
+                            _ => false
+                          }
+                          let right_is_float = match right {
+                            Float(_) => true
+                            _ => false
+                          }
+                          let is_float_op = left_is_float || right_is_float
+                          
+                          if is_float_op {
+                            // Float arithmetic - convert both to double
+                            let left_val = match left {
+                              Float(f) => Some(f)
+                              Int(n) => Some(n.to_double())
+                              _ => None
+                            }
+                            let right_val = match right {
+                              Float(f) => Some(f)
+                              Int(n) => Some(n.to_double())
+                              _ => None
+                            }
+                            
+                            match (left_val, right_val) {
+                              (Some(l), Some(r)) => {
+                                let result : Double = match op {
+                                  "+" => l + r
+                                  "-" => l - r
+                                  "*" => l * r
+                                  "/" => if r != 0.0 { l / r } else { 0.0 }
+                                  _ => 0.0
+                                }
+                                let s = ryu_to_string(result)
+                                let (g2, label) = g.add_string(s)
+                                g = g2
+                                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                                g = g.emit_call_print()
+                              }
+                              _ => {
+                                let (g2, label) = g.add_string("<expr>")
+                                g = g2
+                                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(6)))
+                                g = g.emit_call_print()
+                              }
+                            }
+                          } else {
+                            // Integer arithmetic - both operands are Int
+                            let left_val = match left {
+                              Int(n) => Some(n)
+                              _ => None
+                            }
+                            let right_val = match right {
+                              Int(n) => Some(n)
+                              _ => None
+                            }
+                            
+                            match (left_val, right_val) {
+                              (Some(l), Some(r)) => {
+                                let result : Int = match op {
+                                  "+" => l + r
+                                  "-" => l - r
+                                  "*" => l * r
+                                  "/" => if r != 0 { l / r } else { 0 }
+                                  _ => 0
+                                }
+                                let s = result.to_string()
+                                let (g2, label) = g.add_string(s)
+                                g = g2
+                                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                                g = g.emit_call_print()
+                              }
+                              _ => {
+                                let (g2, label) = g.add_string("<expr>")
+                                g = g2
+                                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(6)))
+                                g = g.emit_call_print()
+                              }
+                            }
+                          }
+                        }
                         Ident(var_name) => {
                           // Check variable type and print accordingly
                           if g.var_is_float.get(var_name) == Some(true) {
@@ -5569,6 +5717,14 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                             g = g.emit_inst(Mov(Reg64("rdx"), Imm32(4)))
                             g = g.emit_call_print()
                             g = g.define_label(end_label)
+                          } else if g.var_is_string.get(var_name) == Some(true) {
+                            // String variable - for now print placeholder
+                            // TODO: Track string values at compile time for interpolation
+                            let (g2, label) = g.add_string("<string>")
+                            g = g2
+                            g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
+                            g = g.emit_call_print()
                           } else if g.var_array_len.get(var_name) != None {
                             // Array variable - print elements inline
                             // Get the array values if they're tracked
