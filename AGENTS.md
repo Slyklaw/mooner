@@ -120,5 +120,9 @@ done
 
 ## Project Components
 
-- `compiler_combined.mbt` - Combined compiler (Lexer, Parser, Type Checker, Code Generator)
+- `lexer.mbt` - Tokenizer (Token enum, Lexer struct, lexing functions)
+- `parser.mbt` - Parser (AST enum, Parser struct, expression parsing)
+- `codegen.mbt` - Code Generator (x86_64 instruction types, CodeGen struct, code generation)
+- `double_ryu_nonjs.mbt` - Ryu float-to-string algorithm for IEEE 754 doubles
+- `compiler.mbt` - Entry point and ELF header generation
 - `cmd/main/main.mbt` - CLI entry point

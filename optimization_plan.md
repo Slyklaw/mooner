@@ -12,7 +12,7 @@
   - `parser.mbt` (~1700 lines) - AST types and parser
   - `codegen.mbt` (~7300 lines) - x86_64 code generation
   - `double_ryu_nonjs.mbt` (~650 lines) - Ryu float-to-string
-  - `compiler_combined.mbt` (~120 lines) - Entry point
+  - `compiler.mbt` (~120 lines) - Entry point
 - Large CodeGen struct (28+ fields)
 
 ### Recent Achievements
@@ -46,7 +46,7 @@ Add tests to validate compiler behavior:
 
 ### Priority 2: Refactoring
 - Extract type-tracking maps from CodeGen into separate `TypeInfo` struct
-- Split `compiler_combined.mbt` into logical sections with clear boundaries
+- Split `compiler.mbt` into logical sections with clear boundaries
 - Refactor large functions (println handling is ~500 lines)
 - Add inline documentation for complex algorithms
 
@@ -56,7 +56,7 @@ Split monolithic file into separate modules:
 - ✅ `parser.mbt` - AST generation and parsing (45KB, ~1700 lines)
 - ✅ `codegen.mbt` - Code generation (297KB, ~7300 lines)
 - ✅ `double_ryu_nonjs.mbt` - Ryu float-to-string algorithm (21KB)
-- ✅ `compiler_combined.mbt` - Entry point only (3.8KB, ~120 lines)
+- ✅ `compiler.mbt` - Entry point only (3.8KB, ~120 lines)
 
 **Result:** Codebase split from 1 monolithic file (~10,700 lines) into 5 focused modules
 
