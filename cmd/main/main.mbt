@@ -2,7 +2,7 @@
 /// Entry point for the CLI
 /// Run with `moon run cmd/main` from the project root
 fn main {
-  let args = @sys.get_cli_args()
+  let args = @env.args()
   if args.length() < 2 {
     return
   }

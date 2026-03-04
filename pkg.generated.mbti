@@ -69,6 +69,8 @@ pub struct CodeGen {
   var_tuple_field_is_array : Map[String, Array[Bool]]
   var_tuple_field_is_bool : Map[String, Array[Bool]]
   var_tuple_field_float_values : Map[String, Array[Double]]
+  var_tuple_field_bool_values : Map[String, Array[Bool]]
+  var_tuple_field_array_values : Map[String, Array[Array[Int]]]
   var_array_len : Map[String, Int]
   var_types : Map[String, String]
   var_struct_fields : Map[String, Array[String]]

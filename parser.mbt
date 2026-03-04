@@ -1,3 +1,4 @@
+///|
 pub enum AST {
   Unit
   Int(Int)
@@ -204,14 +205,8 @@ fn Parser::parse_array(self : Parser) -> (AST, Parser) {
 fn Parser::parse_primary(self : Parser) -> (AST, Parser) {
   let tok = self.current()
   match tok {
-    Ident(_)
-    | Int(_)
-    | Float(_)
-    | String(_)
-    | Char(_)
-    | True
-    | False
-    | Unit => self.parse_literal()
+    Ident(_) | Int(_) | Float(_) | String(_) | Char(_) | True | False | Unit =>
+      self.parse_literal()
     LParen => self.parse_tuple_or_parens()
     LBracket => self.parse_array()
     If => self.parse_if()
@@ -1282,18 +1277,18 @@ fn parse_interpolation_expr(expr_str : String) -> AST {
   // Simple expression parser for interpolation
   // Handle: binary expressions, float literal, int literal, ident, expr.field
   let expr_str = expr_str.trim().to_string()
-  
+
   // Check for binary operators (+, -, *, /)
   let mut found_op_pos = -1
   let mut found_op_char = '+'
   let mut found_op_prec = 1
   let mut paren_depth = 0
   let mut i = 0
-  
+
   // Scan for binary operators (respecting parentheses)
   while i < expr_str.length() {
     match expr_str[i].to_char() {
-      Some(c) => {
+      Some(c) =>
         if c == '(' {
           paren_depth = paren_depth + 1
         } else if c == ')' {
@@ -1303,22 +1298,27 @@ fn parse_interpolation_expr(expr_str : String) -> AST {
           let is_op = c == '+' || c == '-' || c == '*' || c == '/'
           if is_op {
             let prec = if c == '*' || c == '/' { 2 } else { 1 }
-            
+
             // For '-', make sure it's not unary
             let is_unary = if c == '-' {
               if i == 0 {
-                true  // At start
+                true // At start
               } else {
                 // Check if previous char is an operator
                 match expr_str[i - 1].to_char() {
-                  Some(prev) => prev == '+' || prev == '-' || prev == '*' || prev == '/' || prev == '('
+                  Some(prev) =>
+                    prev == '+' ||
+                    prev == '-' ||
+                    prev == '*' ||
+                    prev == '/' ||
+                    prev == '('
                   None => false
                 }
               }
             } else {
               false
             }
-            
+
             if not(is_unary) {
               // Binary operator found
               if found_op_pos < 0 || prec <= found_op_prec {
@@ -1329,21 +1329,26 @@ fn parse_interpolation_expr(expr_str : String) -> AST {
             }
           }
         }
-      }
       None => ()
     }
     i = i + 1
   }
-  
+
   // If we found a binary operator, parse as binary expression
   if found_op_pos >= 0 {
-    let left_str = expr_str.substring(start=0, end=found_op_pos).trim().to_string()
-    let right_str = expr_str.substring(start=found_op_pos + 1).trim().to_string()
+    let left_str = expr_str
+      .substring(start=0, end=found_op_pos)
+      .trim()
+      .to_string()
+    let right_str = expr_str
+      .substring(start=found_op_pos + 1)
+      .trim()
+      .to_string()
     let left = parse_interpolation_expr(left_str)
     let right = parse_interpolation_expr(right_str)
     return Binary(found_op_char.to_string(), left, right)
   }
-  
+
   // Check for field access (e.g., "pos.x", "tuple.0")
   let has_dot = {
     let mut i = 0
@@ -1357,16 +1362,16 @@ fn parse_interpolation_expr(expr_str : String) -> AST {
     }
     found
   }
-  
+
   if has_dot {
     // Check if it's a numeric literal with decimal (e.g., "3.14") 
     // vs field access (e.g., "tuple.0" or "pos.x")
     let parts = expr_str.split(".").to_array()
-    
+
     if parts.length() == 2 {
       let first_part = parts[0].trim()
       let second_part = parts[1].trim()
-      
+
       // Check if both parts are numeric (e.g., "3.14", "-1.5")
       let first_is_numeric = {
         let mut all_digits = true
@@ -1381,7 +1386,7 @@ fn parse_interpolation_expr(expr_str : String) -> AST {
         }
         all_digits && first_part.length() > 0
       }
-      
+
       let second_is_numeric = {
         let mut all_digits = true
         let mut i = 0
@@ -1395,20 +1400,20 @@ fn parse_interpolation_expr(expr_str : String) -> AST {
         }
         all_digits && second_part.length() > 0
       }
-      
+
       if first_is_numeric && second_is_numeric {
         // It's a float literal like "3.14"
         // Parse manually to avoid errors
         let mut result = 0.0
         let mut is_negative = false
         let mut i = 0
-        
+
         // Handle negative
         if first_part.length() > 0 && first_part[0] == '-' {
           is_negative = true
           i = 1
         }
-        
+
         // Parse integer part
         let mut int_part = 0
         while i < first_part.length() {
@@ -1418,7 +1423,7 @@ fn parse_interpolation_expr(expr_str : String) -> AST {
           }
           i = i + 1
         }
-        
+
         // Parse fractional part
         let mut frac_part = 0.0
         let mut frac_divisor = 1.0
@@ -1431,12 +1436,12 @@ fn parse_interpolation_expr(expr_str : String) -> AST {
           }
           j = j + 1
         }
-        
+
         result = int_part.to_double() + frac_part / frac_divisor
         if is_negative {
           result = -result
         }
-        
+
         Float(result)
       } else {
         // It's field access like "tuple.0" or "pos.x"
@@ -1465,20 +1470,22 @@ fn parse_interpolation_expr(expr_str : String) -> AST {
         }
         i = i + 1
       }
-      all_digits && expr_str.length() > 0 && (expr_str.length() > 1 || (expr_str[0] >= '0' && expr_str[0] <= '9'))
+      all_digits &&
+      expr_str.length() > 0 &&
+      (expr_str.length() > 1 || (expr_str[0] >= '0' && expr_str[0] <= '9'))
     }
-    
+
     if is_integer {
       // Parse integer
       let mut result = 0
       let mut is_negative = false
       let mut i = 0
-      
+
       if expr_str.length() > 0 && expr_str[0] == '-' {
         is_negative = true
         i = 1
       }
-      
+
       while i < expr_str.length() {
         let c = expr_str[i]
         if c >= '0' && c <= '9' {
@@ -1486,11 +1493,11 @@ fn parse_interpolation_expr(expr_str : String) -> AST {
         }
         i = i + 1
       }
-      
+
       if is_negative {
         result = -result
       }
-      
+
       Int(result)
     } else {
       // Simple identifier

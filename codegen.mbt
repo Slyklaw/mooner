@@ -1,3 +1,4 @@
+///|
 pub struct CodeGen {
   code : Array[Byte]
   labels : Map[String, Int]
@@ -2131,7 +2132,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         let mut converted_parts : Array[AST] = []
         for part in parts {
           match part {
-            Float(f) => converted_parts = converted_parts + [String(ryu_to_string(f))]
+            Float(f) =>
+              converted_parts = converted_parts + [String(ryu_to_string(f))]
             _ => converted_parts = converted_parts + [part]
           }
         }
@@ -2336,7 +2338,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               // Convert float to string - handle Float literal vs variable
               let right_str = match right {
                 Float(f) => ryu_to_string(f)
-                Ident(name) => {
+                Ident(name) =>
                   // Check if this is a tuple field variable with stored float values
                   match self.var_tuple_field_float_values.get(name) {
                     Some(values) =>
@@ -2358,7 +2360,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                         None => "<float>"
                       }
                   }
-                }
                 _ => "<float>"
               }
               let concat_expr = Binary("+", left, String(right_str))
@@ -2883,11 +2884,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                           fn contains_var(expr : AST) -> Bool {
                             match expr {
                               Ident(_) => true
-                              Binary(_, l, r) => contains_var(l) || contains_var(r)
+                              Binary(_, l, r) =>
+                                contains_var(l) || contains_var(r)
                               _ => false
                             }
                           }
-                          
+
                           // Check if expression is all integer literals
                           fn is_all_int(expr : AST) -> Bool {
                             match expr {
@@ -2897,34 +2899,35 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                               _ => false
                             }
                           }
-                          
+
                           // Check if expression is all float literals
                           fn is_all_float(expr : AST) -> Bool {
                             match expr {
                               Float(_) => true
                               Int(_) => false
-                              Binary(_, l, r) => is_all_float(l) && is_all_float(r)
+                              Binary(_, l, r) =>
+                                is_all_float(l) && is_all_float(r)
                               _ => false
                             }
                           }
-                          
+
                           // Check if expression is integer-only (no floats)
                           fn is_int_expr(expr : AST) -> Bool {
                             match expr {
                               Int(_) => true
                               Float(_) => false
-                              Ident(name) => {
+                              Ident(name) =>
                                 // Check if variable is int (not float)
                                 // We need to check var_is_float map
                                 // For now, assume Ident without Float is int
                                 // This will be checked at runtime via the var_is_float check
                                 true
-                              }
-                              Binary(_, l, r) => is_int_expr(l) && is_int_expr(r)
+                              Binary(_, l, r) =>
+                                is_int_expr(l) && is_int_expr(r)
                               _ => false
                             }
                           }
-                          
+
                           // Try compile-time evaluation for literals only
                           if not(contains_var(Binary(op, left, right))) {
                             // All literals - compile-time evaluation (existing code)
@@ -2941,7 +2944,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                                         "+" => a + b
                                         "-" => a - b
                                         "*" => a * b
-                                        "/" => if b != 0.0 { a / b } else { 0.0 }
+                                        "/" =>
+                                          if b != 0.0 {
+                                            a / b
+                                          } else {
+                                            0.0
+                                          }
                                         _ => 0.0
                                       }
                                       Some(result)
@@ -2952,7 +2960,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                                 _ => None
                               }
                             }
-                            
+
                             fn eval_to_int(expr : AST) -> Int? {
                               match expr {
                                 Int(n) => Some(n)
@@ -2976,21 +2984,27 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                                 _ => None
                               }
                             }
-                            
+
                             if is_all_int(Binary(op, left, right)) {
                               match eval_to_int(Binary(op, left, right)) {
                                 Some(n) => {
                                   let s = n.to_string()
                                   let (g2, label) = g.add_string(s)
                                   g = g2
-                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                                  g = g.emit_inst(
+                                    Lea(Reg64("rsi"), RipRel32(label)),
+                                  )
+                                  g = g.emit_inst(
+                                    Mov(Reg64("rdx"), Imm32(s.length())),
+                                  )
                                   g = g.emit_call_print()
                                 }
                                 None => {
                                   let (g2, label) = g.add_string("<expr>")
                                   g = g2
-                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                  g = g.emit_inst(
+                                    Lea(Reg64("rsi"), RipRel32(label)),
+                                  )
                                   g = g.emit_inst(Mov(Reg64("rdx"), Imm32(6)))
                                   g = g.emit_call_print()
                                 }
@@ -3001,14 +3015,20 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                                   let s = ryu_to_string(f)
                                   let (g2, label) = g.add_string(s)
                                   g = g2
-                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                                  g = g.emit_inst(
+                                    Lea(Reg64("rsi"), RipRel32(label)),
+                                  )
+                                  g = g.emit_inst(
+                                    Mov(Reg64("rdx"), Imm32(s.length())),
+                                  )
                                   g = g.emit_call_print()
                                 }
                                 None => {
                                   let (g2, label) = g.add_string("<expr>")
                                   g = g2
-                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                  g = g.emit_inst(
+                                    Lea(Reg64("rsi"), RipRel32(label)),
+                                  )
                                   g = g.emit_inst(Mov(Reg64("rdx"), Imm32(6)))
                                   g = g.emit_call_print()
                                 }
@@ -3019,49 +3039,69 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                             // Check if this is an integer-only expression
                             let has_float = match Binary(op, left, right) {
                               Binary(_, l, r) => {
-                                fn has_float_component(expr : AST, g : CodeGen) -> Bool {
+                                fn has_float_component(
+                                  expr : AST,
+                                  g : CodeGen,
+                                ) -> Bool {
                                   match expr {
                                     Float(_) => true
-                                    Ident(name) => {
+                                    Ident(name) =>
                                       // Check if variable is a float
                                       g.var_is_float.get(name) == Some(true)
-                                    }
-                                    Binary(_, l2, r2) => has_float_component(l2, g) || has_float_component(r2, g)
+                                    Binary(_, l2, r2) =>
+                                      has_float_component(l2, g) ||
+                                      has_float_component(r2, g)
                                     _ => false
                                   }
                                 }
-                                has_float_component(l, g) || has_float_component(r, g)
+                                has_float_component(l, g) ||
+                                has_float_component(r, g)
                               }
                               _ => false
                             }
-                            
+
                             if has_float {
                               // Float expression with variables
                               // Use compile-time ryu_to_string if we can determine the result at compile time
                               // Otherwise, show a simplified representation
-                              
+
                               // For float expressions with variables, check if all values are known at compile time
                               // If so, we can use ryu_to_string to format them
-                              fn has_only_known_values(expr : AST, g : CodeGen) -> Bool {
+                              fn has_only_known_values(
+                                expr : AST,
+                                g : CodeGen,
+                              ) -> Bool {
                                 match expr {
                                   Float(_) => true
                                   Int(_) => true
-                                  Ident(name) => g.var_tuple_field_float_values.get(name) != None
-                                  Binary(_, l, r) => has_only_known_values(l, g) && has_only_known_values(r, g)
+                                  Ident(name) =>
+                                    g.var_tuple_field_float_values.get(name) !=
+                                    None
+                                  Binary(_, l, r) =>
+                                    has_only_known_values(l, g) &&
+                                    has_only_known_values(r, g)
                                   _ => false
                                 }
                               }
-                              
-                              fn eval_known_floats(expr : AST, g : CodeGen) -> Double? {
+
+                              fn eval_known_floats(
+                                expr : AST,
+                                g : CodeGen,
+                              ) -> Double? {
                                 match expr {
                                   Float(f) => Some(f)
                                   Int(n) => Some(n.to_double())
-                                  Ident(name) => {
-                                    match g.var_tuple_field_float_values.get(name) {
-                                      Some(vals) => if vals.length() > 0 { Some(vals[0]) } else { None }
+                                  Ident(name) =>
+                                    match
+                                      g.var_tuple_field_float_values.get(name) {
+                                      Some(vals) =>
+                                        if vals.length() > 0 {
+                                          Some(vals[0])
+                                        } else {
+                                          None
+                                        }
                                       None => None
                                     }
-                                  }
                                   Binary(bin_op, l, r) => {
                                     let lv = eval_known_floats(l, g)
                                     let rv = eval_known_floats(r, g)
@@ -3071,7 +3111,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                                           "+" => a + b
                                           "-" => a - b
                                           "*" => a * b
-                                          "/" => if b != 0.0 { a / b } else { 0.0 }
+                                          "/" =>
+                                            if b != 0.0 {
+                                              a / b
+                                            } else {
+                                              0.0
+                                            }
                                           _ => 0.0
                                         }
                                         Some(result)
@@ -3082,21 +3127,31 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                                   _ => None
                                 }
                               }
-                              
-                              if has_only_known_values(Binary(op, left, right), g) {
-                                match eval_known_floats(Binary(op, left, right), g) {
+
+                              if has_only_known_values(
+                                  Binary(op, left, right),
+                                  g,
+                                ) {
+                                match
+                                  eval_known_floats(Binary(op, left, right), g) {
                                   Some(f) => {
                                     let s = ryu_to_string(f)
                                     let (g2, label) = g.add_string(s)
                                     g = g2
-                                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                                    g = g.emit_inst(
+                                      Lea(Reg64("rsi"), RipRel32(label)),
+                                    )
+                                    g = g.emit_inst(
+                                      Mov(Reg64("rdx"), Imm32(s.length())),
+                                    )
                                     g = g.emit_call_print()
                                   }
                                   None => {
                                     let (g2, label) = g.add_string("<float>")
                                     g = g2
-                                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                    g = g.emit_inst(
+                                      Lea(Reg64("rsi"), RipRel32(label)),
+                                    )
                                     g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
                                     g = g.emit_call_print()
                                   }
@@ -3105,7 +3160,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                                 // Has unknown variables - show placeholder
                                 let (g2, label) = g.add_string("<float>")
                                 g = g2
-                                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                g = g.emit_inst(
+                                  Lea(Reg64("rsi"), RipRel32(label)),
+                                )
                                 g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
                                 g = g.emit_call_print()
                               }
@@ -3113,35 +3170,51 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                               // Integer expression with variables - evaluate at runtime
                               // Generate code to evaluate the expression and print result
                               // For simplicity, handle simple cases: var + lit, lit + var, var + var
-                              
-                              fn codegen_binary_expr(g : CodeGen, expr : AST) -> CodeGen {
+
+                              fn codegen_binary_expr(
+                                g : CodeGen,
+                                expr : AST,
+                              ) -> CodeGen {
                                 match expr {
-                                  Int(n) => {
+                                  Int(n) =>
                                     g.emit_inst(Mov(Reg64("rax"), Imm32(n)))
-                                  }
-                                  Ident(name) => {
+                                  Ident(name) =>
                                     // Load variable from stack
                                     match g.var_offsets.get(name) {
-                                      Some(offset) => {
-                                        g.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
-                                      }
-                                      None => g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+                                      Some(offset) =>
+                                        g.emit_inst(
+                                          Mov(Reg64("rax"), StackBP64(offset)),
+                                        )
+                                      None =>
+                                        g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
                                     }
-                                  }
                                   Binary(bin_op, l, r) => {
                                     let g = codegen_binary_expr(g, l)
                                     let g = g.emit_inst(Push(Reg64("rax")))
                                     let g = codegen_binary_expr(g, r)
                                     // Now rax = right, stack has left
-                                    let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                                    let g = g.emit_inst(
+                                      Mov(Reg64("rbx"), Reg64("rax")),
+                                    )
                                     let g = g.emit_inst(Pop(Reg64("rax")))
                                     // rax = left, rbx = right
                                     match bin_op {
-                                      "+" => g.emit_inst(Add(Reg64("rax"), Reg64("rbx")))
-                                      "-" => g.emit_inst(Sub(Reg64("rax"), Reg64("rbx")))
-                                      "*" => g.emit_inst(Imul(Reg64("rax"), Reg64("rbx")))
+                                      "+" =>
+                                        g.emit_inst(
+                                          Add(Reg64("rax"), Reg64("rbx")),
+                                        )
+                                      "-" =>
+                                        g.emit_inst(
+                                          Sub(Reg64("rax"), Reg64("rbx")),
+                                        )
+                                      "*" =>
+                                        g.emit_inst(
+                                          Imul(Reg64("rax"), Reg64("rbx")),
+                                        )
                                       "/" => {
-                                        let g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                                        let g = g.emit_inst(
+                                          Mov(Reg64("rdx"), Imm32(0)),
+                                        )
                                         let g = g.emit_inst(Idiv(Reg64("rbx")))
                                         g
                                       }
@@ -3151,10 +3224,13 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                                   _ => g
                                 }
                               }
-                              
+
                               // Evaluate expression - result in rax
-                              g = codegen_binary_expr(g, Binary(op, left, right))
-                              
+                              g = codegen_binary_expr(
+                                g,
+                                Binary(op, left, right),
+                              )
+
                               // Convert rax to string and print
                               let buf_label = ".Lint_buf"
                               let (g2, digit_loop) = g.new_label()
@@ -3165,7 +3241,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                               g = g.emit_inst(Push(Reg64("rbx")))
                               g = g.emit_inst(Push(Reg64("rcx")))
                               g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
-                              g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                              g = g.emit_inst(
+                                Lea(Reg64("rdi"), RipRel32(buf_label)),
+                              )
                               g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
                               g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
                               g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
@@ -3178,7 +3256,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                               g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
                               g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
                               g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
-                              g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                              g = g.emit_inst(
+                                Mov(MemIndirect("rdi"), Reg8("sil")),
+                              )
                               g = g.emit_inst(Dec(Reg64("rdi")))
                               g = g.emit_inst(Inc(Reg64("rcx")))
                               g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
@@ -3187,7 +3267,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                               g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
                               g = g.emit_inst(Jne(skip_zero))
                               g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
-                              g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                              g = g.emit_inst(
+                                Mov(MemIndirect("rdi"), Reg8("sil")),
+                              )
                               g = g.emit_inst(Inc(Reg64("rcx")))
                               g = g.define_label(skip_zero)
                               g = g.emit_inst(Inc(Reg64("rdi")))
@@ -3202,31 +3284,38 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                             }
                           }
                         }
-                        Ident(var_name) => {
+                        Ident(var_name) =>
                           // Check variable type and print accordingly
                           if g.var_is_float.get(var_name) == Some(true) {
                             // Float variable - try to get compile-time value, fallback to placeholder
                             match g.var_tuple_field_float_values.get(var_name) {
-                              Some(float_vals) => {
+                              Some(float_vals) =>
                                 if float_vals.length() > 0 {
                                   let s = ryu_to_string(float_vals[0])
                                   let (g2, label) = g.add_string(s)
                                   g = g2
-                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                                  g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                                  g = g.emit_inst(
+                                    Lea(Reg64("rsi"), RipRel32(label)),
+                                  )
+                                  g = g.emit_inst(
+                                    Mov(Reg64("rdx"), Imm32(s.length())),
+                                  )
                                   g = g.emit_call_print()
                                 } else {
                                   let (g2, label) = g.add_string("<float>")
                                   g = g2
-                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                  g = g.emit_inst(
+                                    Lea(Reg64("rsi"), RipRel32(label)),
+                                  )
                                   g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
                                   g = g.emit_call_print()
                                 }
-                              }
                               None => {
                                 let (g2, label) = g.add_string("<float>")
                                 g = g2
-                                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                g = g.emit_inst(
+                                  Lea(Reg64("rsi"), RipRel32(label)),
+                                )
                                 g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
                                 g = g.emit_call_print()
                               }
@@ -3239,9 +3328,10 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                             g = g4
                             // Load bool from stack
                             match g.var_offsets.get(var_name) {
-                              Some(offset) => {
-                                g = g.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
-                              }
+                              Some(offset) =>
+                                g = g.emit_inst(
+                                  Mov(Reg64("rax"), StackBP64(offset)),
+                                )
                               None => ()
                             }
                             g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
@@ -3249,7 +3339,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                             // Print false
                             let (g5, s_false) = g.add_string("false")
                             g = g5
-                            g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_false)))
+                            g = g.emit_inst(
+                              Lea(Reg64("rsi"), RipRel32(s_false)),
+                            )
                             g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
                             g = g.emit_call_print()
                             g = g.emit_inst(Jmp(end_label))
@@ -3273,13 +3365,15 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                             // Array variable - print elements inline
                             // Get the array values if they're tracked
                             match g.var_tuple_field_array_values.get(var_name) {
-                              Some(arr_vals) => {
+                              Some(arr_vals) =>
                                 if arr_vals.length() > 0 {
                                   let elements = arr_vals[0]
                                   // Print opening bracket
                                   let (g2, open_label) = g.add_string("[")
                                   g = g2
-                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(open_label)))
+                                  g = g.emit_inst(
+                                    Lea(Reg64("rsi"), RipRel32(open_label)),
+                                  )
                                   g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
                                   g = g.emit_call_print()
                                   // Print each element
@@ -3289,39 +3383,57 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                                       // Print comma and space
                                       let (g3, comma_label) = g.add_string(", ")
                                       g = g3
-                                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(comma_label)))
-                                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
+                                      g = g.emit_inst(
+                                        Lea(Reg64("rsi"), RipRel32(comma_label)),
+                                      )
+                                      g = g.emit_inst(
+                                        Mov(Reg64("rdx"), Imm32(2)),
+                                      )
                                       g = g.emit_call_print()
                                     }
                                     // Print element value
                                     let elem_str = elements[elem_idx].to_string()
-                                    let (g4, elem_label) = g.add_string(elem_str)
+                                    let (g4, elem_label) = g.add_string(
+                                      elem_str,
+                                    )
                                     g = g4
-                                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(elem_label)))
-                                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(elem_str.length())))
+                                    g = g.emit_inst(
+                                      Lea(Reg64("rsi"), RipRel32(elem_label)),
+                                    )
+                                    g = g.emit_inst(
+                                      Mov(
+                                        Reg64("rdx"),
+                                        Imm32(elem_str.length()),
+                                      ),
+                                    )
                                     g = g.emit_call_print()
                                     elem_idx = elem_idx + 1
                                   }
                                   // Print closing bracket
                                   let (g5, close_label) = g.add_string("]")
                                   g = g5
-                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(close_label)))
+                                  g = g.emit_inst(
+                                    Lea(Reg64("rsi"), RipRel32(close_label)),
+                                  )
                                   g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
                                   g = g.emit_call_print()
                                 } else {
                                   // Empty array
                                   let (g2, arr_label) = g.add_string("[]")
                                   g = g2
-                                  g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(arr_label)))
+                                  g = g.emit_inst(
+                                    Lea(Reg64("rsi"), RipRel32(arr_label)),
+                                  )
                                   g = g.emit_inst(Mov(Reg64("rdx"), Imm32(2)))
                                   g = g.emit_call_print()
                                 }
-                              }
                               None => {
                                 // Array but no tracked values
                                 let (g2, arr_label) = g.add_string("[...]")
                                 g = g2
-                                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(arr_label)))
+                                g = g.emit_inst(
+                                  Lea(Reg64("rsi"), RipRel32(arr_label)),
+                                )
                                 g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
                                 g = g.emit_call_print()
                               }
@@ -3339,7 +3451,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                             g = g.emit_inst(Push(Reg64("rbx")))
                             g = g.emit_inst(Push(Reg64("rcx")))
                             g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
-                            g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                            g = g.emit_inst(
+                              Lea(Reg64("rdi"), RipRel32(buf_label)),
+                            )
                             g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
                             g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
                             g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
@@ -3352,7 +3466,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                             g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
                             g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
                             g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
-                            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                            g = g.emit_inst(
+                              Mov(MemIndirect("rdi"), Reg8("sil")),
+                            )
                             g = g.emit_inst(Dec(Reg64("rdi")))
                             g = g.emit_inst(Inc(Reg64("rcx")))
                             g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
@@ -3361,7 +3477,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                             g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
                             g = g.emit_inst(Jne(skip_zero))
                             g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
-                            g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                            g = g.emit_inst(
+                              Mov(MemIndirect("rdi"), Reg8("sil")),
+                            )
                             g = g.emit_inst(Inc(Reg64("rcx")))
                             g = g.define_label(skip_zero)
                             g = g.emit_inst(Inc(Reg64("rdi")))
@@ -3374,7 +3492,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                             g = g.emit_inst(Pop(Reg64("rcx")))
                             g = g.emit_inst(Pop(Reg64("rbx")))
                           }
-                        }
                         _ => {
                           // For other expressions, show placeholder
                           let (g2, label) = g.add_string("<expr>")
