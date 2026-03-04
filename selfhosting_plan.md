@@ -77,7 +77,7 @@
 - **Proper type handling**: Integer vs float arithmetic produces correct results
 - **Recursive evaluation**: Nested binary expressions are fully evaluated at compile time
 - **Variables (integers)**: `"{x + 5}"` where x=10 → `"15"` - Runtime evaluation!
-- **Variables (floats)**: `"{a / b}"` shows `<float-expr>` - Requires runtime float-to-string
+- **Variables (floats)**: `"{a / b}"` where a=10.0, b=3.0 → `"3.3333333333333335"` - Compile-time eval with tracked values!
 
 **Example:**
 ```moonbit
@@ -90,6 +90,10 @@ println("10 + 2 * 5: \{10 + 2 * 5}")    // Output: 10 + 2 * 5: 20 (precedence!)
 let x = 10
 println("x + 5: \{x + 5}")              // Output: x + 5: 15 (runtime eval!)
 println("x * 2: \{x * 2}")              // Output: x * 2: 20
+
+let t = (10.0, 3.0)
+let (a, b) = t
+println("a / b: \{a / b}")              // Output: a / b: 3.3333333333333335
 ```
 
 ### Example 007 - Fully Working!
@@ -149,21 +153,23 @@ done
   - Proper integer vs float arithmetic (10/3 = 3, 10.0/3.0 = 3.333...)
   - Supports: +, -, *, / operators
 
-### In Progress / Future
-
-- [ ] 012_basic_test: Add test framework support (expected to fail)
 - [x] **Chained binary expressions**: `"{1.0 + 2.0 + 3.0}"`, `"{10 + 5 + 3}"` - COMPLETE!
   - Recursive evaluation of expression trees
   - Proper handling of mixed int/float chained expressions
   - Examples: `1.0 + 2.0 + 3.0 = 6`, `2 * 3 * 4 = 24`
 
-- [x] **Binary expressions with variables**: `"{x + 5}"` - PARTIAL!
+- [x] **Binary expressions with variables**: `"{x + 5}"`, `"{a / b}"` - COMPLETE!
   - Integer expressions: Runtime evaluation works! `x + 5` where x=10 → 15
-  - Float expressions: Shows `<float-expr>` - needs runtime float-to-string conversion
-  - Supports: `+`, `-`, `*`, `/` with proper integer arithmetic
+  - Float expressions with known values: `a / b` where a=10.0, b=3.0 → 3.333...
+  - Supports: `+`, `-`, `*`, `/` with proper type handling
   - Example: `let x = 10; println("{x + 5}")` → `x + 5: 15`
+  - Example: `let t = (10.0, 3.0); let (a, b) = t; println("{a / b}")` → 3.333...
+
+### In Progress / Future
+
+- [ ] 012_basic_test: Add test framework support (expected to fail)
 
 ---
 
 *Created: 2026-03-01*
-*Updated: 2026-03-03 - Binary expressions with variables now working for integers! Runtime code generation for variable-based expressions*
+*Updated: 2026-03-03 - Binary expressions with variables now fully working! Both integer and float expressions with variables supported*

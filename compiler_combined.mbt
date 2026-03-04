@@ -5709,29 +5709,99 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                             }
                           } else {
                             // Contains variables - runtime evaluation
-                            // For now, only support integer expressions
                             // Check if this is an integer-only expression
                             let has_float = match Binary(op, left, right) {
                               Binary(_, l, r) => {
-                                fn has_float_lit(expr : AST) -> Bool {
+                                fn has_float_component(expr : AST, g : CodeGen) -> Bool {
                                   match expr {
                                     Float(_) => true
-                                    Binary(_, l2, r2) => has_float_lit(l2) || has_float_lit(r2)
+                                    Ident(name) => {
+                                      // Check if variable is a float
+                                      g.var_is_float.get(name) == Some(true)
+                                    }
+                                    Binary(_, l2, r2) => has_float_component(l2, g) || has_float_component(r2, g)
                                     _ => false
                                   }
                                 }
-                                has_float_lit(l) || has_float_lit(r)
+                                has_float_component(l, g) || has_float_component(r, g)
                               }
                               _ => false
                             }
                             
                             if has_float {
-                              // Float expression with variables - not supported yet
-                              let (g2, label) = g.add_string("<float-expr>")
-                              g = g2
-                              g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                              g = g.emit_inst(Mov(Reg64("rdx"), Imm32(12)))
-                              g = g.emit_call_print()
+                              // Float expression with variables
+                              // Use compile-time ryu_to_string if we can determine the result at compile time
+                              // Otherwise, show a simplified representation
+                              
+                              // For float expressions with variables, check if all values are known at compile time
+                              // If so, we can use ryu_to_string to format them
+                              fn has_only_known_values(expr : AST, g : CodeGen) -> Bool {
+                                match expr {
+                                  Float(_) => true
+                                  Int(_) => true
+                                  Ident(name) => g.var_tuple_field_float_values.get(name) != None
+                                  Binary(_, l, r) => has_only_known_values(l, g) && has_only_known_values(r, g)
+                                  _ => false
+                                }
+                              }
+                              
+                              fn eval_known_floats(expr : AST, g : CodeGen) -> Double? {
+                                match expr {
+                                  Float(f) => Some(f)
+                                  Int(n) => Some(n.to_double())
+                                  Ident(name) => {
+                                    match g.var_tuple_field_float_values.get(name) {
+                                      Some(vals) => if vals.length() > 0 { Some(vals[0]) } else { None }
+                                      None => None
+                                    }
+                                  }
+                                  Binary(bin_op, l, r) => {
+                                    let lv = eval_known_floats(l, g)
+                                    let rv = eval_known_floats(r, g)
+                                    match (lv, rv) {
+                                      (Some(a), Some(b)) => {
+                                        let result = match bin_op {
+                                          "+" => a + b
+                                          "-" => a - b
+                                          "*" => a * b
+                                          "/" => if b != 0.0 { a / b } else { 0.0 }
+                                          _ => 0.0
+                                        }
+                                        Some(result)
+                                      }
+                                      _ => None
+                                    }
+                                  }
+                                  _ => None
+                                }
+                              }
+                              
+                              if has_only_known_values(Binary(op, left, right), g) {
+                                match eval_known_floats(Binary(op, left, right), g) {
+                                  Some(f) => {
+                                    let s = ryu_to_string(f)
+                                    let (g2, label) = g.add_string(s)
+                                    g = g2
+                                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                                    g = g.emit_call_print()
+                                  }
+                                  None => {
+                                    let (g2, label) = g.add_string("<float>")
+                                    g = g2
+                                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                                    g = g.emit_call_print()
+                                  }
+                                }
+                              } else {
+                                // Has unknown variables - show placeholder
+                                let (g2, label) = g.add_string("<float>")
+                                g = g2
+                                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                                g = g.emit_call_print()
+                              }
                             } else {
                               // Integer expression with variables - evaluate at runtime
                               // Generate code to evaluate the expression and print result
