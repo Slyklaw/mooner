@@ -4201,13 +4201,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Pop(Reg64("rcx")))
                       g = g.emit_inst(Pop(Reg64("rbx")))
                     }
-                  Tuple(_) => {
-                    g = g.codegen_expr(arg)
-                    let (g2, label1) = g.add_string("<tuple>")
-                    g = g2
-                    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label1)))
-                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
-                  }
                   StructLit(_, _) => {
                     // Inline struct literal - just print <struct>
                     g = g.codegen_expr(arg)
