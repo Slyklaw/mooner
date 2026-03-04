@@ -10,7 +10,7 @@
 | 004_basic_function | PASS | |
 | 005_basic_array | PASS | Fixed array indexing off-by-one |
 | 006_basic_string | PASS | Fixed string interpolation - properly handles `\{expr}` syntax |
-| 007_basic_tuple | PASS | Float tuple printing now works! Fixed float literals using add_float, bool printing, array printing, and type annotation parsing |
+| 007_basic_tuple | PASS | Float tuple printing now works! Fixed float literals using add_float (IEEE 754), bool printing, array printing, type annotation parsing, AND tuple destructuring with string interpolation using Ryu float-to-string conversion |
 | 008_basic_map | PASS | Map creation, access, equality, update, and printing all work! |
 | 009_basic_control_flows | PASS | |
 | 010_basic_struct | PASS | |
@@ -52,7 +52,32 @@
 
 ## Recent Fixes
 
-- 007_basic_tuple: COMPLETE! Fixed float literals using `add_float` (IEEE 754 doubles), bool printing in tuples, array printing in tuples, and type annotation parsing for tuples
+### Float-to-String Conversion (Ryu Algorithm) - COMPLETE!
+
+- **Implemented `ryu_to_string()` function** with full Ryu floating-point to string conversion algorithm
+- Converts IEEE 754 doubles to shortest round-trippable decimal representation
+- Handles: positive/negative, zero, subnormal numbers, scientific notation, special values (NaN, Infinity)
+
+### String Interpolation Improvements - COMPLETE!
+
+- **Float literals**: `"{3.14}"` now prints `"3.14"` (uses Ryu algorithm)
+- **Float variables**: Tuple-destructured float variables print their compile-time values
+- **Int literals**: `"{42}"` prints `"42"`
+- **Bool variables**: Print `"true"`/`"false"` correctly
+- **Array variables**: Print tracked array values like `"[1, 2, 3]"`
+- **Expression parsing**: Updated `parse_interpolation_expr()` to parse numeric literals (float/int) in addition to identifiers
+
+### Example 007 - Fully Working!
+
+Tuple destructuring with string interpolation now works:
+```moonbit
+let (a, b, c) = (3.14, false, [1,2,3])
+println("{a}, {b}, {c}")  // Output: 3.14, false, [1, 2, 3]
+```
+
+### Previous Fixes
+
+- 007_basic_tuple: Fixed float literals using `add_float` (IEEE 754 doubles), bool printing in tuples, array printing in tuples, and type annotation parsing for tuples
 - 008_basic_map: Complete! Map creation, access, equality, update, and printing all work
 - 005_basic_array: Fixed array indexing (off-by-one in codegen)
 - 006_basic_string: Added unicode escape `\u{XXXX}` support in lexer
@@ -83,16 +108,24 @@ done
 
 ## Tasks
 
+### Completed
+
 - [x] 005_basic_array: Fix array indexing
 - [x] 006_basic_string: Implement string interpolation - COMPLETE!
 - [x] 007_basic_tuple: Fix float tuple printing - COMPLETE!
+- [x] 007_basic_tuple: Float literals in string interpolation - COMPLETE!
+- [x] 007_basic_tuple: Tuple destructuring with string interpolation - COMPLETE!
 - [x] 008_basic_map: Add map support - COMPLETE!
 - [x] 011_basic_enum: Fixed via string interpolation in 006
-- [ ] 012_basic_test: Add test framework support (expected to fail)
 - [x] 013_pattern_matching: Complete pattern matching - COMPLETE!
 - [x] 001_hello: Fixed heredoc syntax - COMPLETE!
+
+### In Progress / Future
+
+- [ ] 012_basic_test: Add test framework support (expected to fail)
+- [ ] Binary expressions in interpolation: `"{1.0/3.0}"` (currently shows `<expr>`)
 
 ---
 
 *Created: 2026-03-01*
-*Updated: 2026-03-02 - All examples except 012 (test framework) now passing!*
+*Updated: 2026-03-03 - All examples except 012 (test framework) now passing! Added Ryu float-to-string conversion, improved string interpolation for tuple destructuring*
