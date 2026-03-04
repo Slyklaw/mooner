@@ -112,7 +112,6 @@ fn Parser::parse_literal(self : Parser) -> (AST, Parser) {
       let ast = parse_string_interpolation(s)
       (ast, self.advance())
     }
-    // InterpolatedString removed for self-hosting
     Char(c) => (Char(c), self.advance())
     Ident(name) => (Ident(name), self.advance())
     LParen => self.parse_tuple_or_parens()
@@ -209,7 +208,6 @@ fn Parser::parse_primary(self : Parser) -> (AST, Parser) {
     | Int(_)
     | Float(_)
     | String(_)
-    // | InterpolatedString(_) // Removed for self-hosting
     | Char(_)
     | True
     | False
@@ -1196,9 +1194,6 @@ fn Parser::parse_binary(self : Parser, min_prec : Int) -> (AST, Parser) {
 
 ///|
 fn parse_string_interpolation(s : String) -> AST {
-  // Debug: print the actual string we're parsing
-  let debug_msg = "parse_string_interpolation got: [\{s}]"
-  println(debug_msg)
   // Check if string has interpolation \{expr}
   let mut has_interpolation = false
   let mut i = 0
@@ -1256,8 +1251,6 @@ fn parse_string_interpolation(s : String) -> AST {
           None => break
         }
       }
-      // Debug
-      println("EXPR_STR: [\{expr_str}]")
       // Parse the expression
       let expr = parse_interpolation_expr(expr_str)
       parts = parts + [expr]

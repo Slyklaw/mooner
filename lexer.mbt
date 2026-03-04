@@ -36,7 +36,6 @@ pub enum Token {
   UInt(UInt)
   Float(Double)
   String(String)
-  // InterpolatedString(Array[(Bool, String)]) // Removed - causes parser hang
   Char(Char)
   Plus
   Minus
@@ -593,8 +592,6 @@ fn read_string_loop(lexer : Lexer, acc : String) -> (String, Lexer) {
         // This is string interpolation - keep both backslash and brace
         let c = char_at(lexer.input, lexer.pos).unwrap()
         let next = char_at(lexer.input, lexer.pos + 1).unwrap()
-        // Debug
-        println("INTERP: found backslash-brace, c='\{c}', next='\{next}'")
         read_string_loop(
           lexer.advance().advance(),
           acc + c.to_string() + next.to_string(),
@@ -784,7 +781,6 @@ fn token_eq(a : Token, b : Token) -> Bool {
     (Underscore, Underscore) => true
     (Ident(s1), Ident(s2)) => s1 == s2
     (Int(i1), Int(i2)) => i1 == i2
-    // (Float(f1), Float(f2)) => f1 == f2 // Removed
     (String(s1), String(s2)) => s1 == s2
     (Char(c1), Char(c2)) => c1 == c2
     (Plus, Plus) => true

@@ -2337,9 +2337,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               let right_str = match right {
                 Float(f) => ryu_to_string(f)
                 Ident(name) => {
-                  println(
-                    "DEBUG: Looking up name=\{name} in var_tuple_field_float_values",
-                  )
                   // Check if this is a tuple field variable with stored float values
                   match self.var_tuple_field_float_values.get(name) {
                     Some(values) =>
