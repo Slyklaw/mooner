@@ -2309,9 +2309,10 @@ fn parse_string_interpolation(s : String) -> AST {
 ///|
 fn parse_interpolation_expr(expr_str : String) -> AST {
   // Simple expression parser for interpolation
-  // Handle: ident, expr.field, expr.field.field
+  // Handle: float literal, int literal, ident, expr.field
   let expr_str = expr_str.trim()
-  // Check for field access (e.g., "r" in RGB case, or "pos.x")
+  
+  // Check for field access (e.g., "pos.x", "tuple.0")
   let has_dot = {
     let mut i = 0
     let mut found = false
@@ -2324,15 +2325,93 @@ fn parse_interpolation_expr(expr_str : String) -> AST {
     }
     found
   }
+  
   if has_dot {
-    let parts = expr_str.split(".").collect()
+    // Check if it's a numeric literal with decimal (e.g., "3.14") 
+    // vs field access (e.g., "tuple.0" or "pos.x")
+    let parts = expr_str.split(".").to_array()
+    
     if parts.length() == 2 {
-      let base = parts[0].trim().to_string()
-      let field = parts[1].trim().to_string()
-      // Single field access
-      FieldExpr(Ident(base), field)
+      let first_part = parts[0].trim()
+      let second_part = parts[1].trim()
+      
+      // Check if both parts are numeric (e.g., "3.14", "-1.5")
+      let first_is_numeric = {
+        let mut all_digits = true
+        let mut i = 0
+        while i < first_part.length() {
+          let c = first_part[i]
+          if not((c >= '0' && c <= '9') || (c == '-' && i == 0)) {
+            all_digits = false
+            break
+          }
+          i = i + 1
+        }
+        all_digits && first_part.length() > 0
+      }
+      
+      let second_is_numeric = {
+        let mut all_digits = true
+        let mut i = 0
+        while i < second_part.length() {
+          let c = second_part[i]
+          if not(c >= '0' && c <= '9') {
+            all_digits = false
+            break
+          }
+          i = i + 1
+        }
+        all_digits && second_part.length() > 0
+      }
+      
+      if first_is_numeric && second_is_numeric {
+        // It's a float literal like "3.14"
+        // Parse manually to avoid errors
+        let mut result = 0.0
+        let mut is_negative = false
+        let mut i = 0
+        
+        // Handle negative
+        if first_part.length() > 0 && first_part[0] == '-' {
+          is_negative = true
+          i = 1
+        }
+        
+        // Parse integer part
+        let mut int_part = 0
+        while i < first_part.length() {
+          let c = first_part[i]
+          if c >= '0' && c <= '9' {
+            int_part = int_part * 10 + (c - '0').to_int()
+          }
+          i = i + 1
+        }
+        
+        // Parse fractional part
+        let mut frac_part = 0.0
+        let mut frac_divisor = 1.0
+        let mut j = 0
+        while j < second_part.length() {
+          let c = second_part[j]
+          if c >= '0' && c <= '9' {
+            frac_part = frac_part * 10.0 + (c - '0').to_int().to_double()
+            frac_divisor = frac_divisor * 10.0
+          }
+          j = j + 1
+        }
+        
+        result = int_part.to_double() + frac_part / frac_divisor
+        if is_negative {
+          result = -result
+        }
+        
+        Float(result)
+      } else {
+        // It's field access like "tuple.0" or "pos.x"
+        FieldExpr(Ident(first_part.to_string()), second_part.to_string())
+      }
     } else if parts.length() == 3 {
-      // Double field access
+      // Double field access like "obj.field.subfield"
       let base = parts[0].trim().to_string()
       let field1 = parts[1].trim().to_string()
       let field2 = parts[2].trim().to_string()
@@ -2341,8 +2420,50 @@ fn parse_interpolation_expr(expr_str : String) -> AST {
       Ident(expr_str.to_string())
     }
   } else {
-    // Simple identifier
-    Ident(expr_str.to_string())
+    // No dot - could be integer literal or identifier
+    // Check if it's all digits (integer literal)
+    let is_integer = {
+      let mut all_digits = true
+      let mut i = 0
+      while i < expr_str.length() {
+        let c = expr_str[i]
+        if not((c >= '0' && c <= '9') || (c == '-' && i == 0)) {
+          all_digits = false
+          break
+        }
+        i = i + 1
+      }
+      all_digits && expr_str.length() > 0 && (expr_str.length() > 1 || (expr_str[0] >= '0' && expr_str[0] <= '9'))
+    }
+    
+    if is_integer {
+      // Parse integer
+      let mut result = 0
+      let mut is_negative = false
+      let mut i = 0
+      
+      if expr_str.length() > 0 && expr_str[0] == '-' {
+        is_negative = true
+        i = 1
+      }
+      
+      while i < expr_str.length() {
+        let c = expr_str[i]
+        if c >= '0' && c <= '9' {
+          result = result * 10 + (c - '0').to_int()
+        }
+        i = i + 1
+      }
+      
+      if is_negative {
+        result = -result
+      }
+      
+      Int(result)
+    } else {
+      // Simple identifier
+      Ident(expr_str.to_string())
+    }
   }
 }
 
@@ -4625,13 +4746,29 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         let (g2, label) = self.add_string("")
         g2.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
       } else if parts.length() == 1 {
-        self.codegen_expr(parts[0])
+        // Single part - handle float literals specially by converting to string
+        match parts[0] {
+          Float(f) => {
+            let s = ryu_to_string(f)
+            let (g, label) = self.add_string(s)
+            g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
+          }
+          _ => self.codegen_expr(parts[0])
+        }
       } else {
+        // Multiple parts - convert float literals to String nodes first
+        let mut converted_parts : Array[AST] = []
+        for part in parts {
+          match part {
+            Float(f) => converted_parts = converted_parts + [String(ryu_to_string(f))]
+            _ => converted_parts = converted_parts + [part]
+          }
+        }
         // Start with first part, then chain with Binary("+", left, right)
-        let mut result_expr = parts[0]
+        let mut result_expr = converted_parts[0]
         let mut i = 1
-        while i < parts.length() {
-          result_expr = Binary("+", result_expr, parts[i])
+        while i < converted_parts.length() {
+          result_expr = Binary("+", result_expr, converted_parts[i])
           i = i + 1
         }
         self.codegen_expr(result_expr)
@@ -5345,6 +5482,46 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     g = g2
                     g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
                     g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                  }
+                  StringConcat(parts) => {
+                    // String interpolation: print each part sequentially
+                    for part in parts {
+                      match part {
+                        String(s) => {
+                          let (g2, label) = g.add_string(s)
+                          g = g2
+                          g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                          g = g.emit_call_print()
+                        }
+                        Float(f) => {
+                          let s = ryu_to_string(f)
+                          let (g2, label) = g.add_string(s)
+                          g = g2
+                          g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                          g = g.emit_call_print()
+                        }
+                        Int(n) => {
+                          let s = n.to_string()
+                          let (g2, label) = g.add_string(s)
+                          g = g2
+                          g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+                          g = g.emit_call_print()
+                        }
+                        _ => {
+                          // For other expressions, show placeholder
+                          let (g2, label) = g.add_string("<expr>")
+                          g = g2
+                          g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(6)))
+                          g = g.emit_call_print()
+                        }
+                      }
+                    }
+                    need_skip_print = true
+                    g = g.emit_inst(Jmp(skip_print_label))
                   }
                   Ident(var_name) =>
                     if g.var_array_len.get(var_name) != None {
