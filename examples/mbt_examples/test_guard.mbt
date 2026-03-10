@@ -1,9 +1,9 @@
-// Simple guard test
-fn test_guard(x : (Int, Bool, Double)) -> Unit {
-  guard x is (a, b, c)
-  println("a=\{a}, b=\{b}, c=\{c}")
-}
-
+// Test guard syntax
 fn main {
-  test_guard((42, true, 3.14))
+  let x = (1, 2, 3)
+  guard x is (a, b, c) {
+    println(a)
+    println(b)
+    println(c)
+  }
 }

@@ -459,20 +459,32 @@ fn Parser::parse_match(self : Parser) -> (AST, Parser) {
       } else if self_token_eq(parser.current(), Case) {
         let p2 = parser.skip(1)
         let (pattern, p3) = p2.parse_expr()
+        // Expand or patterns: 1 | 2 | 3 becomes multiple cases
+        let expanded = expand_or_pattern(pattern)
         if self_token_eq(p3.current(), Arrow) {
           let p4 = p3.skip(1)
           let (body, p5) = p4.parse_block_or_expr()
-          cases = cases + [(pattern, body)]
+          // Add each expanded pattern
+          let mut i = 0
+          while i < expanded.length() {
+            cases = cases + [(expanded[i], body)]
+            i = i + 1
+          }
           parser = p5
         } else {
           parser = p3
         }
       } else if self_token_eq(parser.current(), Underscore) {
         let (pattern, p2) = parser.parse_expr()
+        let expanded = expand_or_pattern(pattern)
         if self_token_eq(p2.current(), Arrow) {
           let p3 = p2.skip(1)
           let (body, p4) = p3.parse_block_or_expr()
-          cases = cases + [(pattern, body)]
+          let mut i = 0
+          while i < expanded.length() {
+            cases = cases + [(expanded[i], body)]
+            i = i + 1
+          }
           parser = p4
         } else {
           parser = p2
@@ -481,10 +493,15 @@ fn Parser::parse_match(self : Parser) -> (AST, Parser) {
         match parser.current() {
           Token::Ident(_) | Token::Int(_) => {
             let (pattern, p2) = parser.parse_expr()
+            let expanded = expand_or_pattern(pattern)
             if self_token_eq(p2.current(), Arrow) {
               let p3 = p2.skip(1)
               let (body, p4) = p3.parse_block_or_expr()
-              cases = cases + [(pattern, body)]
+              let mut i = 0
+              while i < expanded.length() {
+                cases = cases + [(expanded[i], body)]
+                i = i + 1
+              }
               parser = p4
             } else {
               parser = p2
@@ -497,6 +514,20 @@ fn Parser::parse_match(self : Parser) -> (AST, Parser) {
     (MatchExpr(expr, cases), parser)
   } else {
     (MatchExpr(expr, []), p2)
+  }
+}
+
+///| Expand or pattern (1 | 2 | 3) into multiple patterns
+fn expand_or_pattern(pattern : AST) -> Array[AST] {
+  match pattern {
+    Binary("|", left, right) => {
+      // Recursively expand both sides
+      let left_expanded = expand_or_pattern(left)
+      let right_expanded = expand_or_pattern(right)
+      // Concatenate - left comes first
+      left_expanded + right_expanded
+    }
+    _ => [pattern] // Not an or pattern, return as-is
   }
 }
 
