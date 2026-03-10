@@ -12,7 +12,7 @@
 
 ## Phases
 
-- [ ] **Phase 1: Map Support** - Implement map type with literal syntax, access, and update operations (4 requirements) (gap closure in progress)
+- [x] **Phase 1: Map Support** - Implement map type with literal syntax, access, and update operations (4 requirements) ✓ COMPLETE
 - [ ] **Phase 2: Tuple & Float Improvements** - Fix float runtime conversion and tuple printing (5 requirements)
 - [ ] **Phase 3: Enum & Pattern Matching** - Implement advanced pattern matching with data constructors, guards, and destructuring (6 requirements)
 - [ ] **Phase 4: Derive(Show) Macro** - Implement derive macro to generate toString for types (1 requirement)
@@ -108,7 +108,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Map Support | 1/2 | In Progress (gap closure) | - |
+| 1. Map Support | 2/2 | ✓ Complete | 2026-03-09 |
 | 2. Tuple & Float Improvements | 0/1 | Not started | - |
 | 3. Enum & Pattern Matching | 0/1 | Not started | - |
 | 4. Derive(Show) Macro | 0/1 | Not started | - |
