@@ -3278,7 +3278,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                               g = g.emit_inst(Inc(Reg64("rdi")))
                               g = g.define_label(skip_zero_end)
                               g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
-                              g = g.emit_inst(Mov(Reg64("rdx"), Imm32(30)))
+                              // Use actual digit count in rcx, not hardcoded 30
+                              g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
                               g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
                               g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
                               g = g.emit_inst(Syscall)
@@ -5123,6 +5124,13 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 g = g.define_label(skip_zero)
                 g = g.emit_inst(Inc(Reg64("rdi")))
                 g = g.define_label(skip_zero_end)
+                // Null-terminate the string for string concatenation
+                // rdi currently points one past the first digit, so decrement first
+                g = g.emit_inst(Dec(Reg64("rdi")))
+                g = g.emit_inst(Mov(Reg8("sil"), Imm8(0)))
+                g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                // Now increment back to return pointer to first digit
+                g = g.emit_inst(Inc(Reg64("rdi")))
                 g = g.emit_inst(Mov(Reg64("rax"), Reg64("rdi")))
                 g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
                 g = g.emit_inst(Pop(Reg64("rcx")))
@@ -6683,6 +6691,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       let mut g = self
       g = g.codegen_expr(scrutinee)
       g = g.emit_inst(Push(Reg64("rax")))
+      // Adjust next_offset to account for the scrutinee on the stack
+      g = { ..g, next_offset: g.next_offset - 8 }
       let end_label = ".Lmatch_end\{g.label_counter}"
       g = { ..g, label_counter: g.label_counter + 1 }
       // Always need end_label for cleanup
@@ -6892,6 +6902,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       // Always define end_label for cleanup
       g = g.define_label(end_label)
       g = g.emit_inst(Add(Reg64("rsp"), Imm32(8)))
+      // Restore next_offset since we cleaned up the scrutinee
+      g = { ..g, next_offset: g.next_offset + 8 }
       g
     }
     Assign(target, value) =>
@@ -7274,12 +7286,22 @@ fn CodeGen::codegen_func(
   let arg_regs = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
   let mut g = self
   g = g.define_label("\{name}")
+  // Save callee-saved registers (rbx, r12-r15 per System V AMD64 ABI)
   g = g.emit_inst(Push(Reg64("rbp")))
   g = g.emit_inst(Mov(Reg64("rbp"), Reg64("rsp")))
+  g = g.emit_inst(Push(Reg64("rbx")))
+  g = g.emit_inst(Push(Reg64("r12")))
+  g = g.emit_inst(Push(Reg64("r13")))
+  g = g.emit_inst(Push(Reg64("r14")))
+  g = g.emit_inst(Push(Reg64("r15")))
   // Reset var_offsets for this function
-  g = { ..g, var_offsets: Map::new(), next_offset: -8 }
+  // Account for the 6 saved registers (rbp, rbx, r12-r15)
+  // After setup: rbp points to old rbp, then rbx, r12-r15 (5 regs = 40 bytes)
+  // So first param will be at rbp - 48
+  let saved_regs_size = 6 * 8  // rbp, rbx, r12, r13, r14, r15
+  g = { ..g, var_offsets: Map::new(), next_offset: -saved_regs_size }
   // Save parameters to stack and add to var_offsets
-  // Push in forward order so first param is at rbp-8
+  // Push in forward order so first param is at rbp - 48
   let mut i = 0
   while i < params.length() {
     if i < 6 {
@@ -7287,21 +7309,34 @@ fn CodeGen::codegen_func(
     }
     i = i + 1
   }
-  // Record offsets: first param at rbp-8, second at rbp-16, etc.
+  // Record offsets: first param at rbp-48, second at rbp-56, etc.
+  // saved_regs_size = 48 (rbp, rbx, r12, r13, r14, r15)
+  // After pushing params: first param is at rbp-48
   let mut j = 0
   while j < params.length() {
     let (param_name, _) = params[j]
     if j < 6 {
-      let offset = -8 - j * 8
+      let offset = -saved_regs_size - j * 8
       let new_offsets = g.var_offsets
       new_offsets[param_name] = offset
       g = { ..g, var_offsets: new_offsets }
     }
     j = j + 1
   }
-  g = { ..g, next_offset: -8 - params.length() * 8 }
+  g = { ..g, next_offset: -saved_regs_size - params.length() * 8 }
   g = g.codegen_expr(body)
-  // Restore stack frame: mov rsp, rbp; pop rbp; ret
+  // Restore callee-saved registers and stack frame
+  // Stack layout: [rbp] = saved rbp, [rbp-8] = rbx, [rbp-16] = r12, etc.
+  // [rbp-40] = r15. Return address is at [rbp+8].
+  // We need to restore callee-saved regs, then pop rbp, then ret
+  g = g.emit_inst(Mov(Reg64("r15"), StackBP64(-40)))
+  g = g.emit_inst(Mov(Reg64("r14"), StackBP64(-32)))
+  g = g.emit_inst(Mov(Reg64("r13"), StackBP64(-24)))
+  g = g.emit_inst(Mov(Reg64("r12"), StackBP64(-16)))
+  g = g.emit_inst(Mov(Reg64("rbx"), StackBP64(-8)))
+  // Skip over the saved registers to get back to where rbp was saved
+  // rbp points to saved rbp, saved regs are at rbp-8 to rbp-40
+  // We need rsp to point to saved rbp before popping it
   g = g.emit_inst(Mov(Reg64("rsp"), Reg64("rbp")))
   g = g.emit_inst(Pop(Reg64("rbp")))
   g = g.emit_inst(Ret)

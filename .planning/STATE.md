@@ -11,8 +11,8 @@
 | Attribute | Value |
 |-----------|-------|
 | **Phase** | 3 - Enum & Pattern Matching |
-| **Status** | In Progress - user function returns fixed |
-| **Progress** | [===-] 60% |
+| **Status** | Core fixes complete - 0 in println interpolation remaining |
+| **Progress** | [====] 90% |
 
 ## Phase 1-2: Complete
 
@@ -53,11 +53,31 @@
    - Added CallExpr handling in println argument processing
    - `println(add(2, 40))` now works correctly
 
-### Remaining Issues
+3. **Enum field extraction in function** - ✓ FIXED
+   - Match now extracts fields correctly when enum passed to function
+   - `RGB(r,g,b)` pattern extracts correct values (0, 0, 255)
+   - `println(r)` prints correct value when r is from enum pattern match
 
-1. **Pattern matching guards/destructuring (013_pattern_matching)** - Not supported
-2. **Derive(Show) macro** - Not implemented
-3. **Enum field extraction** - Minor issue with RGB(r,g,b) field values
+4. **LetBind after match with enum fields** - ✓ FIXED
+   - Root cause: Functions didn't preserve callee-saved registers (r12-r15)
+   - Match code uses r12 to hold enum pointer, which was being clobbered by function calls
+   - Fixed by adding callee-saved register preservation to function prologue/epilogue
+   - Also fixed match code to adjust next_offset when pushing scrutinee
+
+5. **int_to_string null termination** - ✓ FIXED
+   - Fixed int_to_string function to null-terminate for string concatenation
+   - Used Dec/Inc pattern to properly position null terminator without overwriting digits
+
+### Known Issues
+
+1. **String interpolation with value 0 in println** - ✗ BUG
+   - `println("RGB: \{r}, \{g}, \{b}")` where r=0, g=0 prints "RGB: , , 255"
+   - `let s = "\{r}"; println(s)` works correctly (0 prints as "0")
+   - Root cause: println uses inline int-to-string code (not int_to_string function)
+   - Inline code doesn't null-terminate, causing string concatenation to read wrong data
+
+2. **Pattern matching guards/destructuring (013_pattern_matching)** - Not supported
+3. **Derive(Show) macro** - Not implemented
 4. **Float precision** - Some float operations show precision differences
 
 ### Test Results
@@ -70,36 +90,40 @@
 | 008_basic_map | ✓ PASS |
 | 009_basic_control_flows | ✓ PASS |
 | 010_basic_struct | ✓ PASS |
+| 011_basic_enum | ✓ Mostly (only 0 in println interp fails) |
 | 006_basic_string | Minor diff |
 | 007_basic_tuple | Float precision |
-| 011_basic_enum | Field values |
 
 ## Key Decisions
 
 | Decision | Rationale | Status |
 |----------|-----------|--------|
-| Direct syscall code generation | Avoids runtime library dependency | Working |
-| Stack-based local variables | Simpler code generation | Working |
-| Parse single top-level function | Simplifies compilation model | Working |
+| Use global enum buffer | Simpler than per-function allocation | Working |
+| Stack offsets -128+ for match bindings | Avoid collision with LetBind vars | Working |
+| Match uses r12 register | Holds enum pointer for field extraction | Working (with callee-saved fix) |
+| Preserve callee-saved registers | Required for r12 to survive function calls | Implemented |
 
-## Session Continuity
+## Summary of Today's Fixes
 
-### What's Ready
+### Critical Bug Fix: Callee-Saved Register Preservation
+**Problem:** Functions didn't preserve r12-r15, causing match enum pointer to be corrupted
+**Solution:** Added push/pop of rbx, r12-r15 in function prologue/epilogue
+**Impact:** Fixed LetBind after match, function calls in match bodies
 
-- Phase 1-2: Complete ✓
-- Phase 3: Core user function support working
-- Examples: Most basic examples pass
+### Match next_offset Fix
+**Problem:** Match pushed scrutinee but didn't adjust next_offset
+**Solution:** Decrement next_offset on push, increment on cleanup
+**Impact:** Fixed stack offset calculations for LetBind inside match
 
-### Next Steps
+### int_to_string Null Termination
+**Problem:** int_to_string didn't null-terminate, breaking string concatenation
+**Solution:** Added Dec/Mov/Inc pattern to null-terminate correctly
+**Impact:** Fixed 0 in string interpolation when using let binding
 
-1. Fix remaining enum field extraction issue
-2. Implement pattern matching guards/destructuring
-3. Implement Derive(Show) macro
+## Next Steps
 
-### Blockers
-
-- None
-
----
-
-*Last updated: 2026-03-09*
+1. Fix inline int-to-string code in println to null-terminate
+   - Multiple inline code paths throughout codegen.mbt
+   - Alternative: Make string concatenation use length instead of null terminator
+2. Run full test suite to verify all fixes
+3. Consider Phase 4: Pattern guards, derive macros
