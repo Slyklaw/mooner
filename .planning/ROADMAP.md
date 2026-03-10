@@ -15,8 +15,8 @@
 - [x] **Phase 1: Map Support** - Implement map type with literal syntax, access, and update operations (4 requirements) ✓ COMPLETE
 - [x] **Phase 2: Tuple & Float Improvements** - Fix float runtime conversion and tuple printing (5 requirements) ✓ COMPLETE
 - [x] **Phase 3: Enum Pattern Matching** - Implement enum data constructors and field extraction (3 requirements) ✓ COMPLETE
-- [ ] **Phase 4: Pattern Matching Enhancements** - Implement guards, destructuring, and or patterns (3 requirements)
-- [ ] **Phase 5: Derive(Show) Macro** - Implement derive macro to generate toString for types (1 requirement)
+- [x] **Phase 4: Pattern Matching Enhancements** - Implement guards, destructuring, and or patterns (3 requirements) ✓ COMPLETE
+- [x] **Phase 5: Derive(Show) Macro** - Implement derive macro to generate toString for types (1 requirement) ✓ COMPLETE
 
 ---
 
@@ -97,7 +97,7 @@
 2. Destructuring patterns work for tuples and arrays (e.g., `let (a, b) = tuple`)
 3. Or patterns work correctly (e.g., `1 | 2 | 3` matches any of these values)
 
-**Status:** Not started
+**Status:** Complete (2026-03-10)
 
 ---
 
@@ -116,7 +116,7 @@
 3. derive(Show) works for structs with named fields
 4. derive(Show) works for enums with variants
 
-**Status:** Not started
+**Status:** Complete (2026-03-10)
 
 ---
 
@@ -127,8 +127,8 @@
 | 1. Map Support | ✓ Complete | 2026-03-09 |
 | 2. Tuple & Float Improvements | ✓ Complete | 2026-03-09 |
 | 3. Enum Pattern Matching | ✓ Complete | 2026-03-10 |
-| 4. Pattern Matching Enhancements | Not started | - |
-| 5. Derive(Show) Macro | Not started | - |
+| 4. Pattern Matching Enhancements | ✓ Complete | 2026-03-10 |
+| 5. Derive(Show) Macro | ✓ Complete | 2026-03-10 |
 
 ---
 
@@ -148,13 +148,13 @@
 | ENUM-01 | Phase 3 | Complete |
 | ENUM-02 | Phase 3 | Complete |
 | ENUM-03 | Phase 3 | Complete |
-| PAT-01 | Phase 4 | Pending |
-| PAT-02 | Phase 4 | Pending |
-| PAT-03 | Phase 4 | Pending |
-| TEST-01 | Phase 5 | Pending |
+| PAT-01 | Phase 4 | Complete |
+| PAT-02 | Phase 4 | Complete |
+| PAT-03 | Phase 4 | Complete |
+| TEST-01 | Phase 5 | Complete |
 
 **Coverage:** 15/15 requirements mapped ✓
 
 ---
 
-*Last updated: 2026-03-09*
+*Last updated: 2026-03-10*
