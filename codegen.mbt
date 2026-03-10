@@ -39,6 +39,8 @@ pub struct CodeGen {
   needs_map_buf : Bool
   map_buf_offset : Int
   enum_buf_offset : Int
+  // Track float variable values for printing
+  var_float_values : Map[String, Double]
 }
 
 ///|
@@ -82,6 +84,7 @@ fn CodeGen::new() -> CodeGen {
     needs_map_buf: false,
     map_buf_offset: 0,
     enum_buf_offset: 0,
+    var_float_values: Map::new(),
   }
 }
 
@@ -3663,14 +3666,26 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Mov(MemIndirect("rsi"), Reg8("al")))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(1)))
                     } else if g.var_is_float.get(var_name) == Some(true) {
-                      // Float variable - use placeholder for now
-                      let float_str = "<float>"
-                      let (g_f, f_label) = g.add_string(float_str)
-                      g = g_f
-                      g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(f_label)))
-                      g = g.emit_inst(
-                        Mov(Reg64("rdx"), Imm32(float_str.length())),
-                      )
+                      // Float variable - try to get the stored float value
+                      let float_val = g.var_float_values.get(var_name)
+                      match float_val {
+                        Some(f) => {
+                          // Use ryu_to_string to convert the known float value
+                          let float_str = ryu_to_string(f)
+                          let (g_f, f_label) = g.add_string(float_str)
+                          g = g_f
+                          g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(f_label)))
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(float_str.length())))
+                        }
+                        None => {
+                          // Fallback to placeholder - can't convert runtime float to string without runtime support
+                          let float_str = "<float>"
+                          let (g_f, f_label) = g.add_string(float_str)
+                          g = g_f
+                          g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(f_label)))
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(float_str.length())))
+                        }
+                      }
                     } else if g.var_is_bool.get(var_name) == Some(true) {
                       // Bool variable - print "true" or "false"
                       g = g.codegen_expr(arg)
@@ -4882,7 +4897,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                           match g.var_tuple_field_float_values.get(var_name) {
                             Some(values) =>
                               if idx < values.length() {
-                                values[idx].to_string()
+                                ryu_to_string(values[idx])
                               } else {
                                 "<float>"
                               }
@@ -5766,6 +5781,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     LetBind(name, _annot, value, body) => {
       let is_float = is_float_expr(value, self.var_is_float) ||
         is_float_field_expr(value, self.var_tuple_field_types)
+      // Extract float value if this is a float literal
+      let float_value = match value {
+        Float(f) => Some(f)
+        _ => None
+      }
       let is_string = is_string_expr(value, self.var_is_string)
       let is_char = is_char_expr(value, self.var_is_char)
       let is_bool = is_bool_expr(value, self.var_is_bool)
@@ -6076,6 +6096,12 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           Some(values) => new_tuple_field_float_values[name] = values
           None => ()
         }
+        // Store float variable value for printing
+        let new_var_float_values = g2.var_float_values
+        match float_value {
+          Some(f) => new_var_float_values[name] = f
+          None => ()
+        }
         let new_tuple_field_bool_values = g2.var_tuple_field_bool_values
         match tuple_field_bool_values {
           Some(values) => new_tuple_field_bool_values[name] = values
@@ -6106,6 +6132,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_types: new_types,
           var_struct_fields: new_struct_fields,
           next_offset: new_next_offset,
+          var_float_values: new_var_float_values,
         }
       }
       g3.codegen_expr(body)

@@ -4,16 +4,15 @@
 
 **Project Name:** Mooner  
 **Core Value:** Compile standard MoonBit language to working x86_64 Linux executables that match official MoonBit compiler output.  
-**Current Focus:** Phase 1 - Map Support
+**Current Focus:** Phase 2 - Tuple & Float Improvements
 
 ## Current Position
 
 | Attribute | Value |
 |-----------|-------|
-| **Phase** | 1 - Map Support (COMPLETE) |
-| **Plan** | 02 (gap closure - completed) |
-| **Status** | Complete - all 4 criteria verified |
-| **Progress** | [=====] 100% |
+| **Phase** | 2 - Tuple & Float Improvements |
+| **Status** | In Progress - float fixes implemented |
+| **Progress** | [==--] 40% |
 
 ## Phase 1: Complete
 
@@ -43,11 +42,12 @@
 ### Active Issues (blocking v1)
 
 1. **Map type (008_basic_map)** - ✓ FIXED - Working correctly
-2. **Float tuple printing (007_basic_tuple)** - Shows `<tuple>` for float tuples
-3. **Float variable runtime conversion** - Prints integer part only
-4. **Enum pattern matching with data (011_basic_enum)** - Incomplete
-5. **Pattern matching guards/destructuring (013_pattern_matching)** - Not supported
-6. **Derive(Show) macro** - Not implemented
+2. **Float tuple printing (007_basic_tuple)** - ✓ FIXED - Now prints floats correctly (2.1 vs official 2.099...)
+3. **Float variable runtime conversion** - ✓ FIXED - Now prints full float value (2.1 not 3.0)
+4. **String printing (006_basic_string)** - Minor diff: shows "Use <string>. Happy coding" extra line
+5. **Enum pattern matching with data (011_basic_enum)** - Not implemented
+6. **Pattern matching guards/destructuring (013_pattern_matching)** - Not supported
+7. **Derive(Show) macro** - Not implemented
 
 ### Key Decisions
 
