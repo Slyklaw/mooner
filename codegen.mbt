@@ -1671,40 +1671,20 @@ fn CodeGen::convert_bool_to_string(
   expr : AST,
 ) -> (CodeGen, AST) {
   // Handle Bool literals at compile time
+  // For variables, return placeholder - handled at runtime
   match expr {
     Bool(true) => {
       let (g, label) = self.add_string("true")
-      (g, String("true"))
+      (g, AST::String("true"))
     }
     Bool(false) => {
       let (g, label) = self.add_string("false")
-      (g, String("false"))
+      (g, AST::String("false"))
     }
-    Ident(name) =>
-      // Check if this bool variable has a tracked value from tuple destructuring
-      match self.var_tuple_field_bool_values.get(name) {
-        Some(vals) =>
-          if vals.length() > 0 {
-            if vals[0] {
-              let (g, label) = self.add_string("true")
-              (g, String("true"))
-            } else {
-              let (g, label) = self.add_string("false")
-              (g, String("false"))
-            }
-          } else {
-            let (g, label) = self.add_string("<bool>")
-            (g, String("<bool>"))
-          }
-        None => {
-          let (g, label) = self.add_string("<bool>")
-          (g, String("<bool>"))
-        }
-      }
     _ => {
-      // For variables, use placeholder
+      // For all other cases (including Ident), return placeholder
       let (g, label) = self.add_string("<bool>")
-      (g, String("<bool>"))
+      (g, AST::String("<bool>"))
     }
   }
 }
@@ -1962,6 +1942,15 @@ fn is_string_expr(expr : AST, var_is_string : Map[String, Bool]) -> Bool {
     Binary("+", left, right) =>
       is_string_expr(left, var_is_string) ||
       is_string_expr(right, var_is_string)
+    IfExpr(_, then_branch, else_opt) => {
+      // If both branches return strings, the IfExpr returns a string
+      let then_is_str = is_string_expr(then_branch, var_is_string)
+      let else_is_str = match else_opt {
+        Some(else_branch) => is_string_expr(else_branch, var_is_string)
+        None => false
+      }
+      then_is_str || else_is_str
+    }
     CallExpr(Ident(fname), _) =>
       fname == "string_concat" ||
       fname == "input" ||
@@ -2121,22 +2110,55 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         let (g2, label) = self.add_string("")
         g2.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
       } else if parts.length() == 1 {
-        // Single part - handle float literals specially by converting to string
+        // Single part - handle float and bool literals specially by converting to string
         match parts[0] {
           Float(f) => {
             let s = ryu_to_string(f)
             let (g, label) = self.add_string(s)
             g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
           }
+          Bool(b) => {
+            let s = if b { "true" } else { "false" }
+            let (g, label) = self.add_string(s)
+            g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
+          }
+          Ident(name) => {
+            // Check if this is a bool variable - convert to runtime if expression
+            if self.var_is_bool.get(name) == Some(true) {
+              // Generate: if name { "true" } else { "false" }
+              let true_str = AST::String("true")
+              let false_str = AST::String("false")
+              let if_expr = IfExpr(parts[0], true_str, Some(false_str))
+              self.codegen_expr(if_expr)
+            } else {
+              self.codegen_expr(parts[0])
+            }
+          }
           _ => self.codegen_expr(parts[0])
         }
       } else {
-        // Multiple parts - convert float literals to String nodes first
+        // Multiple parts - convert float and bool literals to String nodes first
         let mut converted_parts : Array[AST] = []
         for part in parts {
           match part {
+            Bool(b) => {
+              let s = if b { "true" } else { "false" }
+              converted_parts = converted_parts + [String(s)]
+            }
             Float(f) =>
               converted_parts = converted_parts + [String(ryu_to_string(f))]
+            Ident(name) => {
+              // Check if this is a bool variable - convert to runtime if expression
+              if self.var_is_bool.get(name) == Some(true) {
+                // Generate: if name { "true" } else { "false" }
+                let true_str = AST::String("true")
+                let false_str = AST::String("false")
+                let if_expr = IfExpr(part, true_str, Some(false_str))
+                converted_parts = converted_parts + [if_expr]
+              } else {
+                converted_parts = converted_parts + [part]
+              }
+            }
             _ => converted_parts = converted_parts + [part]
           }
         }
@@ -2368,10 +2390,34 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               let concat_expr = Binary("+", left, String(right_str))
               self.codegen_expr(concat_expr)
             } else if right_is_bool {
-              // For bool, create conditional string
-              let (g, right_val) = self.convert_bool_to_string(right)
-              let concat_expr = Binary("+", left, right_val)
-              g.codegen_expr(concat_expr)
+              // For bool in string concatenation, we need runtime conversion
+              // Check if this is a known bool variable
+              let right_expr : AST = match right {
+                Ident(name) => {
+                  // First check var_is_bool for regular bool variables
+                  if self.var_is_bool.get(name) == Some(true) {
+                    // Runtime conversion: generate if expr to choose string at runtime
+                    // if name { "true" } else { "false" }
+                    let true_str = AST::String("true")
+                    let false_str = AST::String("false")
+                    IfExpr(right, true_str, Some(false_str))
+                  } else {
+                    // Check tuple field bool values
+                    match self.var_tuple_field_bool_values.get(name) {
+                      Some(vals) =>
+                        if vals.length() > 0 {
+                          if vals[0] { String("true") } else { String("false") }
+                        } else {
+                          String("<bool>")
+                        }
+                      None => String("<bool>")
+                    }
+                  }
+                }
+                _ => String("<bool>")
+              }
+              let concat_expr = Binary("+", left, right_expr)
+              self.codegen_expr(concat_expr)
             } else if right_is_array {
               // For array in interpolation, try to use tracked array values
               let arr_values = match right {

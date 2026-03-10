@@ -1493,7 +1493,7 @@ fn parse_interpolation_expr(expr_str : String) -> AST {
       (expr_str.length() > 1 || (expr_str[0] >= '0' && expr_str[0] <= '9'))
     }
 
-    if is_integer {
+      if is_integer {
       // Parse integer
       let mut result = 0
       let mut is_negative = false
@@ -1517,6 +1517,12 @@ fn parse_interpolation_expr(expr_str : String) -> AST {
       }
 
       Int(result)
+    } else if expr_str == "true" {
+      // Bool literal true
+      Bool(true)
+    } else if expr_str == "false" {
+      // Bool literal false
+      Bool(false)
     } else {
       // Simple identifier
       Ident(expr_str.to_string())
