@@ -13,6 +13,7 @@ pub enum AST {
   LetTuple(Array[String], AST, AST) // names, value, body
   IfExpr(AST, AST, AST?)
   MatchExpr(AST, Array[(AST, AST)])
+  GuardExpr(AST, AST) // expr, pattern
   WhileLoop(AST, AST)
   ForLoop(AST?, AST?, AST?, AST)
   ForInLoop(String, AST, AST) // for x in arr { body }
@@ -214,6 +215,7 @@ fn Parser::parse_primary(self : Parser) -> (AST, Parser) {
     While => self.parse_while()
     For => self.parse_for()
     Let => self.parse_let()
+    Guard => self.parse_guard()
     Fn => self.parse_function()
     Type => self.parse_type_decl()
     Struct => self.parse_type_decl()
@@ -659,6 +661,22 @@ fn Parser::parse_let(self : Parser) -> (AST, Parser) {
     } else {
       (LetBind(name, annot, Unit, Unit), p3)
     }
+  }
+}
+
+///|
+fn Parser::parse_guard(self : Parser) -> (AST, Parser) {
+  // guard expr is pattern
+  let p = self.skip(1) // skip 'guard'
+  let (expr, p2) = p.parse_expr()
+  // Now expect 'is'
+  if self_token_eq(p2.current(), Is) {
+    let p3 = p2.skip(1)
+    let (pattern, p4) = p3.parse_expr()
+    (GuardExpr(expr, pattern), p4)
+  } else {
+    // Not a guard, treat as noop
+    (Unit, p2)
   }
 }
 

@@ -7162,6 +7162,145 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g = { ..g, next_offset: g.next_offset + 8 }
       g
     }
+    GuardExpr(expr, pattern) => {
+      // Guard: guard expr is pattern
+      // This is similar to LetTuple - extract values from expr and bind to pattern vars
+      // For now, handle tuple patterns: guard x is (a, b, c)
+      match pattern {
+        Tuple(elems) => {
+          // Extract variable names from tuple elements
+          let mut names : Array[String] = []
+          let mut i = 0
+          while i < elems.length() {
+            match elems[i] {
+              Ident(name) => names = names + [name]
+              _ => ()
+            }
+            i = i + 1
+          }
+          // Get source tuple info
+          // Get source tuple info
+          let src_tuple_field_types = match expr {
+            Ident(src_name) => self.var_tuple_field_types.get(src_name)
+            Tuple(elems) => {
+              let mut types : Array[Bool] = []
+              let mut i = 0
+              while i < elems.length() {
+                types = types + [is_float_expr(elems[i], self.var_is_float)]
+                i = i + 1
+              }
+              Some(types)
+            }
+            _ => None
+          }
+          let src_tuple_field_is_bool = match expr {
+            Ident(src_name) => self.var_tuple_field_is_bool.get(src_name)
+            Tuple(elems) => {
+              let mut bools : Array[Bool] = []
+              let mut i = 0
+              while i < elems.length() {
+                let is_b = match elems[i] {
+                  Bool(_) => true
+                  Ident(name) => self.var_is_bool.get(name) == Some(true)
+                  _ => false
+                }
+                bools = bools + [is_b]
+                i = i + 1
+              }
+              Some(bools)
+            }
+            _ => None
+          }
+          // Evaluate the expression
+          let g = self.codegen_expr(expr)
+          // Now extract each field and bind to names
+          let mut g2 = g
+          let mut current_offset = g.next_offset
+          // Check if expr is a tuple variable
+          let src_is_tuple_var = match expr {
+            Ident(src_name) => g.var_is_tuple.get(src_name) == Some(true)
+            _ => false
+          }
+          // Get stack offset of source tuple
+          let tuple_stack_offset = match expr {
+            Ident(src_name) => g.var_offsets.get(src_name)
+            _ => None
+          }
+          let mut name_idx = 0
+          while name_idx < names.length() {
+            let name = names[name_idx]
+            // Determine if this element is a float
+            let is_float = match src_tuple_field_types {
+              Some(types) =>
+                if name_idx < types.length() {
+                  types[name_idx]
+                } else {
+                  false
+                }
+              None => false
+            }
+            let is_bool = match src_tuple_field_is_bool {
+              Some(bools) =>
+                if name_idx < bools.length() {
+                  bools[name_idx]
+                } else {
+                  false
+                }
+              None => false
+            }
+            // Calculate offset
+            let elem_offset = name_idx * 8
+            let reg_offset = current_offset
+            if src_is_tuple_var {
+              match tuple_stack_offset {
+                Some(tuple_off) => {
+                  let total_offset = tuple_off + elem_offset
+                  if is_float {
+                    g2 = g2.emit_inst(Movsd(Xmm("xmm0"), StackBP64(total_offset)))
+                    g2 = g2.emit_inst(PushXmm("xmm0"))
+                  } else {
+                    g2 = g2.emit_inst(Mov(Reg64("rax"), StackBP64(total_offset)))
+                    g2 = g2.emit_inst(Push(Reg64("rax")))
+                  }
+                }
+                None => g2 = g2.emit_inst(Push(Reg64("rax")))
+              }
+            } else {
+              // Tuple literal
+              let lit_elem_offset = -8 * (name_idx + 1)
+              if is_float {
+                g2 = g2.emit_inst(Movsd(Xmm("xmm0"), StackBP64(lit_elem_offset)))
+                g2 = g2.emit_inst(PushXmm("xmm0"))
+              } else {
+                g2 = g2.emit_inst(Mov(Reg64("rcx"), StackBP64(lit_elem_offset)))
+                g2 = g2.emit_inst(Push(Reg64("rcx")))
+              }
+            }
+            current_offset = current_offset - 8
+            // Register this variable
+            let new_offsets = g2.var_offsets
+            new_offsets[name] = reg_offset
+            let new_floats = g2.var_is_float
+            new_floats[name] = is_float
+            let new_bools = g2.var_is_bool
+            new_bools[name] = is_bool
+            g2 = {
+              ..g2,
+              var_offsets: new_offsets,
+              var_is_float: new_floats,
+              var_is_bool: new_bools,
+            }
+            name_idx = name_idx + 1
+          }
+          g2
+        }
+        _ => {
+          // Non-tuple pattern: just evaluate expression (no binding for now)
+          // This handles the case where pattern is a simple identifier
+          self.codegen_expr(expr)
+        }
+      }
+    }
     Assign(target, value) =>
       match target {
         Ident(name) =>

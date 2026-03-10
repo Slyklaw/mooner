@@ -14,6 +14,8 @@ pub enum Token {
   Break
   Continue
   Return
+  Guard
+  Is
   True
   False
   Unit
@@ -724,6 +726,8 @@ fn is_keyword(s : String) -> Token {
     "break" => Break
     "continue" => Continue
     "return" => Return
+    "guard" => Guard
+    "is" => Is
     "true" => True
     "false" => False
     "unit" => Unit
@@ -762,6 +766,8 @@ fn token_eq(a : Token, b : Token) -> Bool {
     (Break, Break) => true
     (Continue, Continue) => true
     (Return, Return) => true
+    (Guard, Guard) => true
+    (Is, Is) => true
     (True, True) => true
     (False, False) => true
     (Unit, Unit) => true

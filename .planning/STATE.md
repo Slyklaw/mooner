@@ -40,7 +40,7 @@
 - Test blocks (assert_eq, assert_true, assert_false, inspect)
 - Map type support
 
-## Phase 3: In Progress
+## Phase 3-4: In Progress
 
 ### Fixed in Phase 3
 
@@ -68,13 +68,24 @@
    - Fixed int_to_string function to null-terminate for string concatenation
    - Used Dec/Inc pattern to properly position null terminator without overwriting digits
 
+### Fixed in Phase 4
+
+1. **Guard syntax** - ✓ IMPLEMENTED
+   - Added `Guard` and `Is` tokens to lexer
+   - Added `GuardExpr` AST node
+   - Added parser for guard expressions
+   - Added codegen for guard with tuple patterns
+   - `guard tuple is (a, b, c)` now works for int/float tuples
+
 ### Known Issues
 
 1. ~~String interpolation with value 0 in println~~ - FIXED
 2. ~~Nested enum pattern matching~~ - FIXED
-3. **Pattern matching guards/destructuring (013_pattern_matching)** - Phase 4
-4. **Derive(Show) macro** - Not implemented
-5. **Float precision** - Some float operations show precision differences
+3. **Guard syntax** - Partially implemented (int/float tuples work, bools broken)
+4. **Bool in tuple destructuring** - Not working (affects LetTuple and Guard)
+5. **Or patterns** - Not implemented
+6. **Derive(Show) macro** - Not implemented
+7. **Float precision** - Some float operations show precision differences
 
 ### Test Results
 
