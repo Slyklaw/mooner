@@ -7971,15 +7971,65 @@ fn CodeGen::codegen_func(
   // saved_regs_size = 48 (rbp, rbx, r12, r13, r14, r15)
   // After pushing params: first param is at rbp-48
   let mut j = 0
+  // Track if this param is a tuple and its field types
+  let new_var_is_tuple = g.var_is_tuple
+  let new_var_tuple_field_types = g.var_tuple_field_types
+  let new_var_tuple_field_float_values = g.var_tuple_field_float_values
+  let new_var_tuple_field_bool_values = g.var_tuple_field_bool_values
   while j < params.length() {
-    let (param_name, _) = params[j]
+    let (param_name, param_type) = params[j]
     if j < 6 {
       let offset = -saved_regs_size - j * 8
       let new_offsets = g.var_offsets
       new_offsets[param_name] = offset
       g = { ..g, var_offsets: new_offsets }
     }
+    // Parse parameter type annotation to track tuple field types
+    match param_type {
+      Some(Tuple(type_elems)) => {
+        // This parameter is a tuple - track its field types
+        new_var_is_tuple[param_name] = true
+        // Parse each field type to determine if it's float
+        let mut field_types : Array[Bool] = []
+        let mut field_float_values : Array[Double] = []
+        let mut field_bool_values : Array[Bool] = []
+        let mut k = 0
+        while k < type_elems.length() {
+          let field_type = type_elems[k]
+          let is_float = match field_type {
+            Ident("Float") => true
+            Ident("Double") => true
+            _ => false
+          }
+          let _is_bool = match field_type {
+            Ident("Bool") => true
+            _ => false
+          }
+          let _is_int = match field_type {
+            Ident("Int") => true
+            Ident("UInt") => true
+            _ => false
+          }
+          field_types = field_types + [is_float]
+          field_float_values = field_float_values + [0.0]
+          field_bool_values = field_bool_values + [false]
+          k = k + 1
+        }
+        new_var_tuple_field_types[param_name] = field_types
+        new_var_tuple_field_float_values[param_name] = field_float_values
+        new_var_tuple_field_bool_values[param_name] = field_bool_values
+      }
+      _ => ()
+    }
     j = j + 1
+  }
+  // Update the type tracking maps
+  g = {
+    ..g,
+    var_is_tuple: new_var_is_tuple,
+    var_tuple_field_types: new_var_tuple_field_types,
+    var_tuple_field_float_values: new_var_tuple_field_float_values,
+    var_tuple_field_bool_values: new_var_tuple_field_bool_values,
   }
   g = { ..g, next_offset: -saved_regs_size - params.length() * 8 }
   g = g.codegen_expr(body)
