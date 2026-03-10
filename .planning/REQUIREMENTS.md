@@ -69,18 +69,18 @@
 | MAP-02 | Phase 1 | Complete |
 | MAP-03 | Phase 1 | Complete |
 | MAP-04 | Phase 1 | Complete |
-| TUP-01 | Phase 2 | Pending |
-| TUP-02 | Phase 2 | Pending |
-| TUP-03 | Phase 2 | Pending |
-| FLT-01 | Phase 2 | Pending |
-| FLT-02 | Phase 2 | Pending |
+| TUP-01 | Phase 2 | Complete |
+| TUP-02 | Phase 2 | Complete |
+| TUP-03 | Phase 2 | Complete |
+| FLT-01 | Phase 2 | Complete |
+| FLT-02 | Phase 2 | Complete |
 | ENUM-01 | Phase 3 | Pending |
 | ENUM-02 | Phase 3 | Pending |
 | ENUM-03 | Phase 3 | Pending |
-| PAT-01 | Phase 3 | Pending |
-| PAT-02 | Phase 3 | Pending |
-| PAT-03 | Phase 3 | Pending |
-| TEST-01 | Phase 4 | Pending |
+| PAT-01 | Phase 4 | Pending |
+| PAT-02 | Phase 4 | Pending |
+| PAT-03 | Phase 4 | Pending |
+| TEST-01 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 15 total
@@ -89,4 +89,4 @@
 
 ---
 *Requirements defined: 2026-02-24*
-*Last updated: 2026-02-24 after initial definition*
+*Last updated: 2026-03-09 after roadmap revision*

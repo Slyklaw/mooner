@@ -4,15 +4,15 @@
 
 **Project Name:** Mooner  
 **Core Value:** Compile standard MoonBit language to working x86_64 Linux executables that match official MoonBit compiler output.  
-**Current Focus:** Phase 3 - Enum & Pattern Matching
+**Current Focus:** Phase 3 - Enum Pattern Matching
 
 ## Current Position
 
 | Attribute | Value |
 |-----------|-------|
-| **Phase** | 3 - Enum & Pattern Matching |
-| **Status** | Core fixes complete - 0 in println interpolation remaining |
-| **Progress** | [====] 90% |
+| **Phase** | 3 - Enum Pattern Matching |
+| **Status** | In progress - implementing enum data constructors |
+| **Progress** | [==  ] 30% |
 
 ## Phase 1-2: Complete
 
@@ -122,8 +122,12 @@
 
 ## Next Steps
 
-1. Fix inline int-to-string code in println to null-terminate
-   - Multiple inline code paths throughout codegen.mbt
-   - Alternative: Make string concatenation use length instead of null terminator
-2. Run full test suite to verify all fixes
-3. Consider Phase 4: Pattern guards, derive macros
+1. Complete Phase 3: Enum Pattern Matching
+   - Implement enum data constructors (RGB(r, g, b))
+   - Implement pattern binding for enum variants
+   - Support nested enum pattern matching
+2. Phase 4: Pattern Matching Enhancements
+   - Implement guard expressions
+   - Implement destructuring patterns
+   - Implement or patterns
+3. Phase 5: Derive(Show) Macro
