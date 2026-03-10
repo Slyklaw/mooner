@@ -3411,13 +3411,39 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                             g = g.emit_call_print()
                             g = g.define_label(end_label)
                           } else if g.var_is_string.get(var_name) == Some(true) {
-                            // String variable - for now print placeholder
-                            // TODO: Track string values at compile time for interpolation
-                            let (g2, label) = g.add_string("<string>")
-                            g = g2
-                            g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
-                            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
-                            g = g.emit_call_print()
+                            // String variable - load from stack and print
+                            // Load string pointer from variable location
+                            match g.var_offsets.get(var_name) {
+                              Some(offset) => {
+                                g = g.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
+                                // Calculate string length by scanning for null terminator
+                                g = g.emit_inst(Push(Reg64("rax")))
+                                g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                                let (g2, len_loop) = g.new_label()
+                                let (g3, len_done) = g2.new_label()
+                                g = g3
+                                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                                g = g.define_label(len_loop)
+                                g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("rax")))
+                                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                                g = g.emit_inst(Je(len_done))
+                                g = g.emit_inst(Inc(Reg64("rax")))
+                                g = g.emit_inst(Inc(Reg64("rdx")))
+                                g = g.emit_inst(Jmp(len_loop))
+                                g = g.define_label(len_done)
+                                g = g.emit_inst(Pop(Reg64("rax")))
+                                g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                                g = g.emit_call_print()
+                              }
+                              None => {
+                                // Fallback to placeholder if offset not found
+                                let (g2, label) = g.add_string("<string>")
+                                g = g2
+                                g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(8)))
+                                g = g.emit_call_print()
+                              }
+                            }
                           } else if g.var_array_len.get(var_name) != None {
                             // Array variable - print elements inline
                             // Get the array values if they're tracked
