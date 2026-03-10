@@ -3274,6 +3274,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                                 Mov(MemIndirect("rdi"), Reg8("sil")),
                               )
                               g = g.emit_inst(Inc(Reg64("rcx")))
+                              g = g.emit_inst(Jmp(skip_zero_end))
                               g = g.define_label(skip_zero)
                               g = g.emit_inst(Inc(Reg64("rdi")))
                               g = g.define_label(skip_zero_end)
@@ -3485,6 +3486,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                               Mov(MemIndirect("rdi"), Reg8("sil")),
                             )
                             g = g.emit_inst(Inc(Reg64("rcx")))
+                            g = g.emit_inst(Jmp(skip_zero_end))
                             g = g.define_label(skip_zero)
                             g = g.emit_inst(Inc(Reg64("rdi")))
                             g = g.define_label(skip_zero_end)
@@ -3535,6 +3537,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                           g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
                           g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
                           g = g.emit_inst(Inc(Reg64("rcx")))
+                          g = g.emit_inst(Jmp(skip_zero_end))
                           g = g.define_label(skip_zero)
                           g = g.emit_inst(Inc(Reg64("rdi")))
                           g = g.define_label(skip_zero_end)
