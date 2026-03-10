@@ -74,9 +74,9 @@
 | TUP-03 | Phase 2 | Complete |
 | FLT-01 | Phase 2 | Complete |
 | FLT-02 | Phase 2 | Complete |
-| ENUM-01 | Phase 3 | Pending |
-| ENUM-02 | Phase 3 | Pending |
-| ENUM-03 | Phase 3 | Pending |
+| ENUM-01 | Phase 3 | Complete |
+| ENUM-02 | Phase 3 | Complete |
+| ENUM-03 | Phase 3 | Complete |
 | PAT-01 | Phase 4 | Pending |
 | PAT-02 | Phase 4 | Pending |
 | PAT-03 | Phase 4 | Pending |

@@ -70,15 +70,11 @@
 
 ### Known Issues
 
-1. **String interpolation with value 0 in println** - ✗ BUG
-   - `println("RGB: \{r}, \{g}, \{b}")` where r=0, g=0 prints "RGB: , , 255"
-   - `let s = "\{r}"; println(s)` works correctly (0 prints as "0")
-   - Root cause: println uses inline int-to-string code (not int_to_string function)
-   - Inline code doesn't null-terminate, causing string concatenation to read wrong data
-
-2. **Pattern matching guards/destructuring (013_pattern_matching)** - Not supported
-3. **Derive(Show) macro** - Not implemented
-4. **Float precision** - Some float operations show precision differences
+1. ~~String interpolation with value 0 in println~~ - FIXED
+2. ~~Nested enum pattern matching~~ - FIXED
+3. **Pattern matching guards/destructuring (013_pattern_matching)** - Phase 4
+4. **Derive(Show) macro** - Not implemented
+5. **Float precision** - Some float operations show precision differences
 
 ### Test Results
 

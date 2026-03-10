@@ -6778,7 +6778,259 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             }
           }
           CallExpr(Ident(var_name), bindings) => {
-            let disc_val = match g.enum_discriminants.get(var_name) {
+            // Check if any bindings contain nested patterns (CallExpr) OR constructor idents
+            // Helper function to check for nested patterns
+            let has_nested_patterns = fn(b : AST) -> Bool {
+              match b {
+                CallExpr(_, _) => true
+                _ => false
+              }
+            }
+            // Helper to check if an ident is an enum constructor
+            let is_enum_constructor = fn(name : String) -> Bool {
+              match g.enum_discriminants.get(name) {
+                Some(_) => true
+                None => {
+                  let parts = name.split("::").to_array()
+                  if parts.length() == 2 {
+                    match g.enum_discriminants.get(parts[1].to_string()) {
+                      Some(_) => true
+                      None => false
+                    }
+                  } else {
+                    false
+                  }
+                }
+              }
+            }
+            let mut has_nested = false
+            let mut i = 0
+            while i < bindings.length() {
+              // Check if it's a CallExpr OR an Ident that's an enum constructor
+              let is_nested = match bindings[i] {
+                CallExpr(_, _) => true
+                Ident(name) => is_enum_constructor(name)
+                _ => false
+              }
+              if is_nested {
+                has_nested = true
+              }
+              i = i + 1
+            }
+            if has_nested {
+              // Handle nested patterns
+              // For each binding that is a nested pattern, we need to:
+              // 1. Check the outer discriminant matches
+              // 2. Load inner data and match against inner pattern
+              // 3. Only if inner matches, bind variables and execute body
+              // Build nested match logic manually
+              let disc_val = match g.enum_discriminants.get(var_name) {
+                Some(disc) => Some(disc)
+                None => {
+                  let parts = var_name.split("::").to_array()
+                  if parts.length() == 2 {
+                    g.enum_discriminants.get(parts[1].to_string())
+                  } else {
+                    None
+                  }
+                }
+              }
+              match disc_val {
+                Some(disc) => {
+                  // Load the value from stack into rcx
+                  g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
+                  // Check if value is small (< 256) - likely a direct discriminant
+                  g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(256)))
+                  let (g2, is_small_label) = g.new_label()
+                  g = g2
+                  g = g.emit_inst(Jb(is_small_label))
+                  // Large value - treat as pointer, load discriminant from pointer
+                  g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rcx")))
+                  g = g.define_label(is_small_label)
+                  // Now rcx has the discriminant
+                  g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(disc)))
+                  let outer_match_fail = ".Louter_fail\{g.label_counter}"
+                  g = { ..g, label_counter: g.label_counter + 1 }
+                  g = g.emit_inst(Jne(outer_match_fail))
+                  // Outer matches - now handle nested patterns
+                  // Load enum pointer from stack
+                  g = g.emit_inst(Mov(Reg64("r12"), MemIndirect("rsp")))
+                  // Process each binding
+                  let mut bind_idx = 0
+                  let mut nested_patterns = [] // CallExpr patterns like Some1(v)
+                  let mut constructor_patterns = [] // Constructor Idents like None1
+                  let mut var_bindings = []
+                  while bind_idx < bindings.length() {
+                    match bindings[bind_idx] {
+                      Ident(name) => {
+                        // Check if this is an enum constructor or a variable
+                        if is_enum_constructor(name) {
+                          // It's a constructor pattern to match
+                          constructor_patterns = constructor_patterns + [(name, bind_idx)]
+                        } else {
+                          // Simple variable binding - will handle after nested matches
+                          var_bindings = var_bindings + [name]
+                        }
+                      }
+                      CallExpr(Ident(inner_ctor), inner_bindings) => {
+                        // Nested pattern - need to match inner value
+                        nested_patterns = nested_patterns + [
+                          (inner_ctor, inner_bindings, bind_idx),
+                        ]
+                      }
+                      _ => ()
+                    }
+                    bind_idx = bind_idx + 1
+                  }
+                  // First, check constructor patterns (like None1)
+                  let mut constr_idx = 0
+                  let all_constructor_match = ".Lconstr_ok\{g.label_counter}"
+                  g = { ..g, label_counter: g.label_counter + 1 }
+                  while constr_idx < constructor_patterns.length() {
+                    let (constr_name, field_idx) = constructor_patterns[constr_idx]
+                    // Get discriminant for constructor
+                    let constr_disc : Int = match g.enum_discriminants.get(constr_name) {
+                      Some(d) => d
+                      None => {
+                        let parts2 = constr_name.split("::").to_array()
+                        if parts2.length() == 2 {
+                          match g.enum_discriminants.get(parts2[1].to_string()) {
+                            Some(d2) => d2
+                            None => 0
+                          }
+                        } else {
+                          0
+                        }
+                      }
+                    }
+                    // Load inner value from buffer
+                    g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32((field_idx + 1) * 8)))
+                    g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
+                    g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+                    // Check if small or pointer
+                    g = g.emit_inst(Mov(Reg64("rcx"), Reg64("rax")))
+                    g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(256)))
+                    let (g_constr, constr_small) = g.new_label()
+                    g = g_constr
+                    g = g.emit_inst(Jb(constr_small))
+                    g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rcx")))
+                    g = g.define_label(constr_small)
+                    // Compare discriminant
+                    g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(constr_disc)))
+                    // If doesn't match, fail the whole pattern
+                    g = g.emit_inst(Jne(outer_match_fail))
+                    // Constructor matched! Continue to next
+                    constr_idx = constr_idx + 1
+                  }
+                  // All constructor patterns matched - continue to nested patterns or success
+                  g = g.define_label(all_constructor_match)
+                  // For each nested pattern, generate matching code
+                  // The inner value is at [r12 + (bind_idx + 1) * 8]
+                  let mut nested_idx = 0
+                  let all_nested_match = ".Lnested_ok\{g.label_counter}"
+                  g = { ..g, label_counter: g.label_counter + 1 }
+                  while nested_idx < nested_patterns.length() {
+                    let (inner_ctor, inner_bindings, field_idx) =
+                      nested_patterns[nested_idx]
+                    // Get discriminant for inner constructor
+                    let inner_disc : Int = match g.enum_discriminants.get(inner_ctor) {
+                      Some(d) => d
+                      None => {
+                        let parts2 = inner_ctor.split("::").to_array()
+                        if parts2.length() == 2 {
+                          match g.enum_discriminants.get(parts2[1].to_string()) {
+                            Some(d2) => d2
+                            None => 0
+                          }
+                        } else {
+                          0
+                        }
+                      }
+                    }
+                    // Load inner value from buffer
+                    g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
+                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32((field_idx + 1) * 8)))
+                    g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
+                    g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+                    // Check if small or pointer
+                    g = g.emit_inst(Mov(Reg64("rcx"), Reg64("rax")))
+                    g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(256)))
+                    let (g_inner, inner_small) = g.new_label()
+                    g = g_inner
+                    g = g.emit_inst(Jb(inner_small))
+                    g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rcx")))
+                    g = g.define_label(inner_small)
+                    // Compare discriminant
+                    g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(inner_disc)))
+                    let nested_fail = ".Lnested_fail\{g.label_counter}"
+                    g = { ..g, label_counter: g.label_counter + 1 }
+                    g = g.emit_inst(Jne(nested_fail))
+                    // Inner matches - bind inner fields
+                    let mut inner_bind_idx = 0
+                    while inner_bind_idx < inner_bindings.length() {
+                      match inner_bindings[inner_bind_idx] {
+                        Ident(bind_name) => {
+                          let offset = -128 - (100 + inner_bind_idx) * 8
+                          let new_offsets2 = g.var_offsets
+                          new_offsets2[bind_name] = offset
+                          g = { ..g, var_offsets: new_offsets2 }
+                          // Load from inner enum buffer
+                          g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
+                          g = g.emit_inst(
+                            Mov(Reg64("rdx"), Imm32((field_idx + 1) * 8)),
+                          )
+                          g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
+                          g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+                          // Now rax has the inner enum pointer, get its field
+                          g = g.emit_inst(
+                            Mov(Reg64("rdx"), Imm32((inner_bind_idx + 1) * 8)),
+                          )
+                          g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
+                          g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+                          g = g.emit_inst(Mov(StackBP64(offset), Reg64("rax")))
+                        }
+                        _ => ()
+                      }
+                      inner_bind_idx = inner_bind_idx + 1
+                    }
+                    g = g.emit_inst(Jmp(all_nested_match))
+                    g = g.define_label(nested_fail)
+                    nested_idx = nested_idx + 1
+                  }
+                  g = g.define_label(all_nested_match)
+                  // Now bind outer variable bindings
+                  bind_idx = 0
+                  while bind_idx < bindings.length() {
+                    match bindings[bind_idx] {
+                      Ident(bind_name) => {
+                        let offset = -128 - bind_idx * 8
+                        let new_offsets3 = g.var_offsets
+                        new_offsets3[bind_name] = offset
+                        g = { ..g, var_offsets: new_offsets3 }
+                        // Load from enum buffer: [r12 + (bind_idx + 1) * 8]
+                        g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
+                        g = g.emit_inst(
+                          Mov(Reg64("rdx"), Imm32((bind_idx + 1) * 8)),
+                        )
+                        g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
+                        g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+                        g = g.emit_inst(Mov(StackBP64(offset), Reg64("rax")))
+                      }
+                      _ => ()
+                    }
+                    bind_idx = bind_idx + 1
+                  }
+                  // Execute body
+                  g = g.codegen_expr(body)
+                  g = g.emit_inst(Jmp(end_label))
+                  g = g.define_label(outer_match_fail)
+                }
+                None => if is_last { g = g.codegen_expr(body) }
+              }
+            } else {
+              // Original non-nested pattern handling
+              let disc_val = match g.enum_discriminants.get(var_name) {
               Some(disc) => Some(disc)
               None => {
                 let parts = var_name.split("::").to_array()
@@ -6897,6 +7149,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               }
               None => if is_last { g = g.codegen_expr(body) }
             }
+            } // end if has_nested_patterns
           }
           _ => if is_last { g = g.codegen_expr(body) }
         }
