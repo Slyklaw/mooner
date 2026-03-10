@@ -3495,6 +3495,58 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                             g = g.emit_inst(Pop(Reg64("rcx")))
                             g = g.emit_inst(Pop(Reg64("rbx")))
                           }
+                        CallExpr(func, args) => {
+                          // Function call - evaluate it first
+                          g = g.codegen_expr(arg)
+                          // rax now has the return value - print it as integer
+                          // Use same integer-to-string conversion as variable case
+                          let buf_label = ".Lint_buf"
+                          let (g2, digit_loop) = g.new_label()
+                          let (g3, done_label) = g2.new_label()
+                          let (g4, skip_zero) = g3.new_label()
+                          let (g5, skip_zero_end) = g4.new_label()
+                          g = g5
+                          g = g.emit_inst(Push(Reg64("rbx")))
+                          g = g.emit_inst(Push(Reg64("rcx")))
+                          g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                          g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                          g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                          g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                          g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                          g = g.emit_inst(Je(done_label))
+                          g = g.define_label(digit_loop)
+                          g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                          g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                          g = g.emit_inst(Idiv(Reg64("rsi")))
+                          g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                          g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                          g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+                          g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                          g = g.emit_inst(Dec(Reg64("rdi")))
+                          g = g.emit_inst(Inc(Reg64("rcx")))
+                          g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                          g = g.emit_inst(Jne(digit_loop))
+                          g = g.define_label(done_label)
+                          g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                          g = g.emit_inst(Jne(skip_zero))
+                          g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
+                          g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                          g = g.emit_inst(Inc(Reg64("rcx")))
+                          g = g.define_label(skip_zero)
+                          g = g.emit_inst(Inc(Reg64("rdi")))
+                          g = g.define_label(skip_zero_end)
+                          g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(30)))
+                          g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+                          g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+                          g = g.emit_inst(Syscall)
+                          g = g.emit_inst(Pop(Reg64("rcx")))
+                          g = g.emit_inst(Pop(Reg64("rbx")))
+                          // We already did the print, skip the default
+                          need_skip_print = true
+                          g = g.emit_inst(Jmp(skip_print_label))
+                        }
                         _ => {
                           // For other expressions, show placeholder
                           let (g2, label) = g.add_string("<expr>")
@@ -5484,10 +5536,33 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     }
     Block(stmts) => {
       let mut g = self
-      let mut i = 0
-      while i < stmts.length() {
-        g = g.codegen_expr(stmts[i])
-        i = i + 1
+      let num_stmts = stmts.length()
+      // If last statement is ReturnExpr, we need special handling
+      if num_stmts > 0 {
+        let last_stmt = stmts[num_stmts - 1]
+        match last_stmt {
+          ReturnExpr(e) => {
+            // For blocks ending with return, process all statements EXCEPT the last
+            // Then generate return code specially
+            let mut i = 0
+            while i < num_stmts - 1 {
+              g = g.codegen_expr(stmts[i])
+              i = i + 1
+            }
+            // Generate return expression - this will emit ret
+            g = g.codegen_expr(last_stmt)
+            // Block is done - don't add more code
+            return g
+          }
+          _ => {
+            // Normal block - process all statements
+            let mut i = 0
+            while i < num_stmts {
+              g = g.codegen_expr(stmts[i])
+              i = i + 1
+            }
+          }
+        }
       }
       g
     }

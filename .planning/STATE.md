@@ -4,17 +4,17 @@
 
 **Project Name:** Mooner  
 **Core Value:** Compile standard MoonBit language to working x86_64 Linux executables that match official MoonBit compiler output.  
-**Current Focus:** Phase 2 - Tuple & Float Improvements
+**Current Focus:** Phase 3 - Enum & Pattern Matching
 
 ## Current Position
 
 | Attribute | Value |
 |-----------|-------|
-| **Phase** | 2 - Tuple & Float Improvements |
-| **Status** | In Progress - float fixes implemented |
-| **Progress** | [==--] 40% |
+| **Phase** | 3 - Enum & Pattern Matching |
+| **Status** | In Progress - user function returns fixed |
+| **Progress** | [===-] 60% |
 
-## Phase 1: Complete
+## Phase 1-2: Complete
 
 ### Completed Features (from PROJECT.md)
 
@@ -38,18 +38,43 @@
 - Struct definitions, construction, field access, mutation, functional update
 - Enum definitions and constructors (simple variants)
 - Test blocks (assert_eq, assert_true, assert_false, inspect)
+- Map type support
 
-### Active Issues (blocking v1)
+## Phase 3: In Progress
 
-1. **Map type (008_basic_map)** - ✓ FIXED - Working correctly
-2. **Float tuple printing (007_basic_tuple)** - ✓ FIXED - Now prints floats correctly (2.1 vs official 2.099...)
-3. **Float variable runtime conversion** - ✓ FIXED - Now prints full float value (2.1 not 3.0)
-4. **String printing (006_basic_string)** - Minor diff: shows "Use <string>. Happy coding" extra line
-5. **Enum pattern matching with data (011_basic_enum)** - Not implemented
-6. **Pattern matching guards/destructuring (013_pattern_matching)** - Not supported
-7. **Derive(Show) macro** - Not implemented
+### Fixed in Phase 3
 
-### Key Decisions
+1. **User function return values** - ✓ FIXED
+   - Block handling now properly processes ReturnExpr
+   - Functions with explicit return work: `fn f() -> Int { return 99 }`
+   - Functions with expression body work: `fn f() -> Int { a + b }`
+
+2. **Function call in println** - ✓ FIXED  
+   - Added CallExpr handling in println argument processing
+   - `println(add(2, 40))` now works correctly
+
+### Remaining Issues
+
+1. **Pattern matching guards/destructuring (013_pattern_matching)** - Not supported
+2. **Derive(Show) macro** - Not implemented
+3. **Enum field extraction** - Minor issue with RGB(r,g,b) field values
+4. **Float precision** - Some float operations show precision differences
+
+### Test Results
+
+| Example | Status |
+|---------|--------|
+| 003_basic_constants | ✓ PASS |
+| 004_basic_function | ✓ PASS |
+| 005_basic_array | ✓ PASS |
+| 008_basic_map | ✓ PASS |
+| 009_basic_control_flows | ✓ PASS |
+| 010_basic_struct | ✓ PASS |
+| 006_basic_string | Minor diff |
+| 007_basic_tuple | Float precision |
+| 011_basic_enum | Field values |
+
+## Key Decisions
 
 | Decision | Rationale | Status |
 |----------|-----------|--------|
@@ -61,18 +86,19 @@
 
 ### What's Ready
 
-- Phase 1: Map Support requirements are clear
-- Examples: 008_basic_map ready to test after implementation
-- Codebase: lexer.mbt, parser.mbt, type_checker.mbt, codegen.mbt well-structured
+- Phase 1-2: Complete ✓
+- Phase 3: Core user function support working
+- Examples: Most basic examples pass
 
 ### Next Steps
 
-1. Phase 1: Map Support - COMPLETE ✓
-2. Proceed to Phase 2: Fix float tuple printing and float runtime conversion
+1. Fix remaining enum field extraction issue
+2. Implement pattern matching guards/destructuring
+3. Implement Derive(Show) macro
 
 ### Blockers
 
-- None - Phase 1 is complete
+- None
 
 ---
 
