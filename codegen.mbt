@@ -41,6 +41,9 @@ pub struct CodeGen {
   enum_buf_offset : Int
   // Track float variable values for printing
   var_float_values : Map[String, Double]
+  // Track enum variables for printing
+  var_is_enum : Map[String, Bool]
+  var_enum_variant : Map[String, String]
 }
 
 ///|
@@ -85,6 +88,8 @@ fn CodeGen::new() -> CodeGen {
     map_buf_offset: 0,
     enum_buf_offset: 0,
     var_float_values: Map::new(),
+    var_is_enum: Map::new(),
+    var_enum_variant: Map::new(),
   }
 }
 
@@ -2122,7 +2127,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             let (g, label) = self.add_string(s)
             g.emit_inst(Lea(Reg64("rax"), RipRel32(label)))
           }
-          Ident(name) => {
+          Ident(name) =>
             // Check if this is a bool variable - convert to runtime if expression
             if self.var_is_bool.get(name) == Some(true) {
               // Generate: if name { "true" } else { "false" }
@@ -2133,7 +2138,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             } else {
               self.codegen_expr(parts[0])
             }
-          }
           _ => self.codegen_expr(parts[0])
         }
       } else {
@@ -2147,7 +2151,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             }
             Float(f) =>
               converted_parts = converted_parts + [String(ryu_to_string(f))]
-            Ident(name) => {
+            Ident(name) =>
               // Check if this is a bool variable - convert to runtime if expression
               if self.var_is_bool.get(name) == Some(true) {
                 // Generate: if name { "true" } else { "false" }
@@ -2158,7 +2162,6 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               } else {
                 converted_parts = converted_parts + [part]
               }
-            }
             _ => converted_parts = converted_parts + [part]
           }
         }
@@ -2393,7 +2396,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               // For bool in string concatenation, we need runtime conversion
               // Check if this is a known bool variable
               let right_expr : AST = match right {
-                Ident(name) => {
+                Ident(name) =>
                   // First check var_is_bool for regular bool variables
                   if self.var_is_bool.get(name) == Some(true) {
                     // Runtime conversion: generate if expr to choose string at runtime
@@ -2406,14 +2409,17 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     match self.var_tuple_field_bool_values.get(name) {
                       Some(vals) =>
                         if vals.length() > 0 {
-                          if vals[0] { String("true") } else { String("false") }
+                          if vals[0] {
+                            String("true")
+                          } else {
+                            String("false")
+                          }
                         } else {
                           String("<bool>")
                         }
                       None => String("<bool>")
                     }
                   }
-                }
                 _ => String("<bool>")
               }
               let concat_expr = Binary("+", left, right_expr)
@@ -3559,7 +3565,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                           g = g.emit_inst(Push(Reg64("rbx")))
                           g = g.emit_inst(Push(Reg64("rcx")))
                           g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
-                          g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                          g = g.emit_inst(
+                            Lea(Reg64("rdi"), RipRel32(buf_label)),
+                          )
                           g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
                           g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
                           g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
@@ -3778,7 +3786,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                           let (g_f, f_label) = g.add_string(float_str)
                           g = g_f
                           g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(f_label)))
-                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(float_str.length())))
+                          g = g.emit_inst(
+                            Mov(Reg64("rdx"), Imm32(float_str.length())),
+                          )
                         }
                         None => {
                           // Fallback to placeholder - can't convert runtime float to string without runtime support
@@ -3786,7 +3796,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                           let (g_f, f_label) = g.add_string(float_str)
                           g = g_f
                           g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(f_label)))
-                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(float_str.length())))
+                          g = g.emit_inst(
+                            Mov(Reg64("rdx"), Imm32(float_str.length())),
+                          )
                         }
                       }
                     } else if g.var_is_bool.get(var_name) == Some(true) {
@@ -3808,6 +3820,68 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(s_false)))
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(5)))
                       g = g.define_label(end_label)
+                    } else if g.var_is_enum.get(var_name) == Some(true) {
+                      // Enum variable - print the variant name
+                      let variant_name = g.var_enum_variant.get(var_name)
+                      match variant_name {
+                        Some(vname) => {
+                          let (g2, enum_label) = g.add_string(vname)
+                          g = g2
+                          g = g.emit_inst(
+                            Lea(Reg64("rsi"), RipRel32(enum_label)),
+                          )
+                          g = g.emit_inst(
+                            Mov(Reg64("rdx"), Imm32(vname.length())),
+                          )
+                        }
+                        None => {
+                          // Fallback to integer printing
+                          g = g.codegen_expr(arg)
+                          let buf_label = ".Lint_buf"
+                          let (g2, digit_loop) = g.new_label()
+                          let (g3, done_label) = g2.new_label()
+                          let (g4, skip_zero) = g3.new_label()
+                          let (g5, skip_zero_end) = g4.new_label()
+                          g = g5
+                          g = g.emit_inst(Push(Reg64("rbx")))
+                          g = g.emit_inst(Push(Reg64("rcx")))
+                          g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                          g = g.emit_inst(
+                            Lea(Reg64("rdi"), RipRel32(buf_label)),
+                          )
+                          g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                          g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                          g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                          g = g.emit_inst(Je(done_label))
+                          g = g.define_label(digit_loop)
+                          g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                          g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                          g = g.emit_inst(Idiv(Reg64("rsi")))
+                          g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                          g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                          g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+                          g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                          g = g.emit_inst(Dec(Reg64("rdi")))
+                          g = g.emit_inst(Inc(Reg64("rcx")))
+                          g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                          g = g.emit_inst(Jne(digit_loop))
+                          g = g.define_label(done_label)
+                          g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                          g = g.emit_inst(Jne(skip_zero))
+                          g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
+                          g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                          g = g.emit_inst(Inc(Reg64("rcx")))
+                          g = g.emit_inst(Jmp(skip_zero_end))
+                          g = g.define_label(skip_zero)
+                          g = g.emit_inst(Inc(Reg64("rdi")))
+                          g = g.define_label(skip_zero_end)
+                          g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
+                          g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                          g = g.emit_inst(Pop(Reg64("rcx")))
+                          g = g.emit_inst(Pop(Reg64("rbx")))
+                        }
+                      }
                     } else if g.var_is_string.get(var_name) == Some(true) {
                       // String variable - print the string
                       g = g.codegen_expr(arg)
@@ -5036,48 +5110,125 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                       g = g.emit_inst(Mov(Reg64("rdx"), Imm32(4)))
                       g = g.define_label(bool_end_label)
                     } else if is_int {
-                      g = g.codegen_expr(arg)
-                      let buf_label = ".Lint_buf"
-                      let (g2, digit_loop) = g.new_label()
-                      let (g3, done_label) = g2.new_label()
-                      let (g4, skip_zero) = g3.new_label()
-                      let (g5, skip_zero_end) = g4.new_label()
-                      g = g5
-                      g = g.emit_inst(Push(Reg64("rbx")))
-                      g = g.emit_inst(Push(Reg64("rcx")))
-                      g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
-                      g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
-                      g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
-                      g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
-                      g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
-                      g = g.emit_inst(Je(done_label))
-                      g = g.define_label(digit_loop)
-                      g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
-                      g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
-                      g = g.emit_inst(Idiv(Reg64("rsi")))
-                      g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
-                      g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
-                      g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
-                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
-                      g = g.emit_inst(Dec(Reg64("rdi")))
-                      g = g.emit_inst(Inc(Reg64("rcx")))
-                      g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
-                      g = g.emit_inst(Jne(digit_loop))
-                      g = g.define_label(done_label)
-                      g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
-                      g = g.emit_inst(Jne(skip_zero))
-                      g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
-                      g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
-                      g = g.emit_inst(Inc(Reg64("rcx")))
-                      g = g.emit_inst(Jmp(skip_zero_end))
-                      g = g.define_label(skip_zero)
-                      g = g.emit_inst(Inc(Reg64("rdi")))
-                      g = g.define_label(skip_zero_end)
-                      g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
-                      g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
-                      g = g.emit_inst(Pop(Reg64("rcx")))
-                      g = g.emit_inst(Pop(Reg64("rbx")))
+                      // Check if this is an enum variable
+                      let is_enum_var = match arg {
+                        Ident(var_name) =>
+                          g.var_is_enum.get(var_name) == Some(true)
+                        _ => false
+                      }
+                      if is_enum_var {
+                        // Print the enum variant name
+                        let variant_name = match arg {
+                          Ident(var_name) => g.var_enum_variant.get(var_name)
+                          _ => None
+                        }
+                        match variant_name {
+                          Some(vname) => {
+                            let (g2, enum_label) = g.add_string(vname)
+                            g = g2
+                            g = g.emit_inst(
+                              Lea(Reg64("rsi"), RipRel32(enum_label)),
+                            )
+                            g = g.emit_inst(
+                              Mov(Reg64("rdx"), Imm32(vname.length())),
+                            )
+                          }
+                          None => {
+                            // Fall through to integer printing
+                            g = g.codegen_expr(arg)
+                            let buf_label = ".Lint_buf"
+                            let (g2, digit_loop) = g.new_label()
+                            let (g3, done_label) = g2.new_label()
+                            let (g4, skip_zero) = g3.new_label()
+                            let (g5, skip_zero_end) = g4.new_label()
+                            g = g5
+                            g = g.emit_inst(Push(Reg64("rbx")))
+                            g = g.emit_inst(Push(Reg64("rcx")))
+                            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                            g = g.emit_inst(
+                              Lea(Reg64("rdi"), RipRel32(buf_label)),
+                            )
+                            g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                            g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                            g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                            g = g.emit_inst(Je(done_label))
+                            g = g.define_label(digit_loop)
+                            g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                            g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                            g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                            g = g.emit_inst(Idiv(Reg64("rsi")))
+                            g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                            g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                            g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+                            g = g.emit_inst(
+                              Mov(MemIndirect("rdi"), Reg8("sil")),
+                            )
+                            g = g.emit_inst(Dec(Reg64("rdi")))
+                            g = g.emit_inst(Inc(Reg64("rcx")))
+                            g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                            g = g.emit_inst(Jne(digit_loop))
+                            g = g.define_label(done_label)
+                            g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                            g = g.emit_inst(Jne(skip_zero))
+                            g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
+                            g = g.emit_inst(
+                              Mov(MemIndirect("rdi"), Reg8("sil")),
+                            )
+                            g = g.emit_inst(Inc(Reg64("rcx")))
+                            g = g.emit_inst(Jmp(skip_zero_end))
+                            g = g.define_label(skip_zero)
+                            g = g.emit_inst(Inc(Reg64("rdi")))
+                            g = g.define_label(skip_zero_end)
+                            g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
+                            g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                            g = g.emit_inst(Pop(Reg64("rcx")))
+                            g = g.emit_inst(Pop(Reg64("rbx")))
+                          }
+                        }
+                      } else {
+                        g = g.codegen_expr(arg)
+                        let buf_label = ".Lint_buf"
+                        let (g2, digit_loop) = g.new_label()
+                        let (g3, done_label) = g2.new_label()
+                        let (g4, skip_zero) = g3.new_label()
+                        let (g5, skip_zero_end) = g4.new_label()
+                        g = g5
+                        g = g.emit_inst(Push(Reg64("rbx")))
+                        g = g.emit_inst(Push(Reg64("rcx")))
+                        g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                        g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                        g = g.emit_inst(Add(Reg64("rdi"), Imm32(30)))
+                        g = g.emit_inst(Mov(Reg64("rcx"), Imm32(0)))
+                        g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                        g = g.emit_inst(Je(done_label))
+                        g = g.define_label(digit_loop)
+                        g = g.emit_inst(Mov(Reg64("rax"), Reg64("rbx")))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                        g = g.emit_inst(Mov(Reg64("rsi"), Imm32(10)))
+                        g = g.emit_inst(Idiv(Reg64("rsi")))
+                        g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rax")))
+                        g = g.emit_inst(Add(Reg64("rdx"), Imm32(48)))
+                        g = g.emit_inst(Mov(Reg8("sil"), Reg8("dl")))
+                        g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                        g = g.emit_inst(Dec(Reg64("rdi")))
+                        g = g.emit_inst(Inc(Reg64("rcx")))
+                        g = g.emit_inst(Cmp(Reg64("rbx"), Imm32(0)))
+                        g = g.emit_inst(Jne(digit_loop))
+                        g = g.define_label(done_label)
+                        g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                        g = g.emit_inst(Jne(skip_zero))
+                        g = g.emit_inst(Mov(Reg8("sil"), Imm8(48)))
+                        g = g.emit_inst(Mov(MemIndirect("rdi"), Reg8("sil")))
+                        g = g.emit_inst(Inc(Reg64("rcx")))
+                        g = g.emit_inst(Jmp(skip_zero_end))
+                        g = g.define_label(skip_zero)
+                        g = g.emit_inst(Inc(Reg64("rdi")))
+                        g = g.define_label(skip_zero_end)
+                        g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rdi")))
+                        g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rcx")))
+                        g = g.emit_inst(Pop(Reg64("rcx")))
+                        g = g.emit_inst(Pop(Reg64("rbx")))
+                      }
                     } else if is_map {
                       g = g.codegen_expr(arg)
                       let (g2, map_label) = g.add_string("<map>")
@@ -5932,6 +6083,21 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         Ident(src) => self.var_is_map.get(src) == Some(true)
         _ => false
       }
+      // Check if value is an enum variant
+      let is_enum = match value {
+        Ident(var_name) => self.enum_discriminants.get(var_name) != None
+        _ => false
+      }
+      // Get the variant name if it's an enum
+      let enum_variant_name = match value {
+        Ident(var_name) =>
+          if self.enum_discriminants.get(var_name) != None {
+            Some(var_name)
+          } else {
+            None
+          }
+        _ => None
+      }
       let is_struct_or_tuple = match value {
         StructLit(_, _) => true
         StructUpdate(_, _) => true
@@ -6233,6 +6399,14 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         let new_var_float_values = g2.var_float_values
         match float_value {
           Some(f) => new_var_float_values[name] = f
+          None => ()
+        }
+        // Store enum variable info for printing
+        let new_var_is_enum = g2.var_is_enum
+        new_var_is_enum[name] = is_enum
+        let new_var_enum_variant = g2.var_enum_variant
+        match enum_variant_name {
+          Some(vname) => new_var_enum_variant[name] = vname
           None => ()
         }
         let new_tuple_field_bool_values = g2.var_tuple_field_bool_values
@@ -6908,22 +7082,20 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   let mut var_bindings = []
                   while bind_idx < bindings.length() {
                     match bindings[bind_idx] {
-                      Ident(name) => {
+                      Ident(name) =>
                         // Check if this is an enum constructor or a variable
                         if is_enum_constructor(name) {
                           // It's a constructor pattern to match
-                          constructor_patterns = constructor_patterns + [(name, bind_idx)]
+                          constructor_patterns = constructor_patterns +
+                            [(name, bind_idx)]
                         } else {
                           // Simple variable binding - will handle after nested matches
                           var_bindings = var_bindings + [name]
                         }
-                      }
-                      CallExpr(Ident(inner_ctor), inner_bindings) => {
+                      CallExpr(Ident(inner_ctor), inner_bindings) =>
                         // Nested pattern - need to match inner value
-                        nested_patterns = nested_patterns + [
-                          (inner_ctor, inner_bindings, bind_idx),
-                        ]
-                      }
+                        nested_patterns = nested_patterns +
+                          [(inner_ctor, inner_bindings, bind_idx)]
                       _ => ()
                     }
                     bind_idx = bind_idx + 1
@@ -6935,12 +7107,14 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   while constr_idx < constructor_patterns.length() {
                     let (constr_name, field_idx) = constructor_patterns[constr_idx]
                     // Get discriminant for constructor
-                    let constr_disc : Int = match g.enum_discriminants.get(constr_name) {
+                    let constr_disc : Int = match
+                      g.enum_discriminants.get(constr_name) {
                       Some(d) => d
                       None => {
                         let parts2 = constr_name.split("::").to_array()
                         if parts2.length() == 2 {
-                          match g.enum_discriminants.get(parts2[1].to_string()) {
+                          match
+                            g.enum_discriminants.get(parts2[1].to_string()) {
                             Some(d2) => d2
                             None => 0
                           }
@@ -6951,7 +7125,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     }
                     // Load inner value from buffer
                     g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
-                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32((field_idx + 1) * 8)))
+                    g = g.emit_inst(
+                      Mov(Reg64("rdx"), Imm32((field_idx + 1) * 8)),
+                    )
                     g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
                     g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
                     // Check if small or pointer
@@ -6977,15 +7153,16 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                   let all_nested_match = ".Lnested_ok\{g.label_counter}"
                   g = { ..g, label_counter: g.label_counter + 1 }
                   while nested_idx < nested_patterns.length() {
-                    let (inner_ctor, inner_bindings, field_idx) =
-                      nested_patterns[nested_idx]
+                    let (inner_ctor, inner_bindings, field_idx) = nested_patterns[nested_idx]
                     // Get discriminant for inner constructor
-                    let inner_disc : Int = match g.enum_discriminants.get(inner_ctor) {
+                    let inner_disc : Int = match
+                      g.enum_discriminants.get(inner_ctor) {
                       Some(d) => d
                       None => {
                         let parts2 = inner_ctor.split("::").to_array()
                         if parts2.length() == 2 {
-                          match g.enum_discriminants.get(parts2[1].to_string()) {
+                          match
+                            g.enum_discriminants.get(parts2[1].to_string()) {
                             Some(d2) => d2
                             None => 0
                           }
@@ -6996,7 +7173,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                     }
                     // Load inner value from buffer
                     g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
-                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32((field_idx + 1) * 8)))
+                    g = g.emit_inst(
+                      Mov(Reg64("rdx"), Imm32((field_idx + 1) * 8)),
+                    )
                     g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
                     g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
                     // Check if small or pointer
@@ -7077,124 +7256,132 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             } else {
               // Original non-nested pattern handling
               let disc_val = match g.enum_discriminants.get(var_name) {
-              Some(disc) => Some(disc)
-              None => {
-                let parts = var_name.split("::").to_array()
-                if parts.length() == 2 {
-                  g.enum_discriminants.get(parts[1].to_string())
-                } else {
-                  None
+                Some(disc) => Some(disc)
+                None => {
+                  let parts = var_name.split("::").to_array()
+                  if parts.length() == 2 {
+                    g.enum_discriminants.get(parts[1].to_string())
+                  } else {
+                    None
+                  }
                 }
               }
-            }
-            match disc_val {
-              Some(disc) => {
-                // For CallExpr patterns (enum constructors like RGB), the scrutinee could be:
-                // - A direct discriminant (for simple enums without data, typically small numbers)
-                // - A pointer to enum structure (for enums with data, always non-zero and typically large)
-                // We use a threshold to distinguish: small values (<256) are discriminants, large values are pointers
-                // Note: Code section typically starts at 0x400000, so any value < 0x10000 is definitely not a pointer
-                // Load the value from stack into rcx
-                g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
-                // Check if value is small (< 256) - likely a direct discriminant
-                // If large - treat as pointer and dereference
-                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(256)))
-                let (g2, is_small_label) = g.new_label()
-                g = g2
-                g = g.emit_inst(Jb(is_small_label)) // if < 256, treat as direct discriminant
-                // Large value (>= 256) - treat as pointer, load discriminant from pointer
-                g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rcx")))
-                g = g.define_label(is_small_label)
-                // Now rcx has the discriminant (either direct or dereferenced)
-                g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(disc)))
-                if is_last {
-                  // Last case - if doesn't match, fall through (do nothing)
-                  // If matches, execute body
-                  let skip_bind = ".Lmatch_skip_bind\{g.label_counter}"
-                  g = { ..g, label_counter: g.label_counter + 1 }
-                  g = g.emit_inst(Jne(skip_bind))
-                  // Bind fields if there are any bindings
-                  let num_bindings = bindings.length()
-                  if num_bindings > 0 {
-                    // Store bound variables at specific stack locations
-                    // Use negative offsets that won't conflict with LetBind
-                    // LetBind starts from next_offset which is typically around -8 to -16
-                    // We'll use -128, -136, -144, etc. to be far away
-                    // Load enum pointer from stack
-                    g = g.emit_inst(Mov(Reg64("r12"), MemIndirect("rsp")))
-                    // Bind each field
-                    let mut bind_idx = 0
-                    while bind_idx < num_bindings {
-                      match bindings[bind_idx] {
-                        Ident(bind_name) => {
-                          // Use very low stack offsets to avoid LetBind
-                          let offset = -128 - bind_idx * 8
-                          let new_offsets = g.var_offsets
-                          new_offsets[bind_name] = offset
-                          g = { ..g, var_offsets: new_offsets }
-                          // Load from enum buffer: [r12 + (bind_idx + 1) * 8]
-                          g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
-                          g = g.emit_inst(
-                            Mov(Reg64("rdx"), Imm32((bind_idx + 1) * 8)),
-                          )
-                          g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
-                          g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
-                          // Store at rbp + offset
-                          g = g.emit_inst(Mov(StackBP64(offset), Reg64("rax")))
+              match disc_val {
+                Some(disc) => {
+                  // For CallExpr patterns (enum constructors like RGB), the scrutinee could be:
+                  // - A direct discriminant (for simple enums without data, typically small numbers)
+                  // - A pointer to enum structure (for enums with data, always non-zero and typically large)
+                  // We use a threshold to distinguish: small values (<256) are discriminants, large values are pointers
+                  // Note: Code section typically starts at 0x400000, so any value < 0x10000 is definitely not a pointer
+                  // Load the value from stack into rcx
+                  g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rsp")))
+                  // Check if value is small (< 256) - likely a direct discriminant
+                  // If large - treat as pointer and dereference
+                  g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(256)))
+                  let (g2, is_small_label) = g.new_label()
+                  g = g2
+                  g = g.emit_inst(Jb(is_small_label)) // if < 256, treat as direct discriminant
+                  // Large value (>= 256) - treat as pointer, load discriminant from pointer
+                  g = g.emit_inst(Mov(Reg64("rcx"), MemIndirect("rcx")))
+                  g = g.define_label(is_small_label)
+                  // Now rcx has the discriminant (either direct or dereferenced)
+                  g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(disc)))
+                  if is_last {
+                    // Last case - if doesn't match, fall through (do nothing)
+                    // If matches, execute body
+                    let skip_bind = ".Lmatch_skip_bind\{g.label_counter}"
+                    g = { ..g, label_counter: g.label_counter + 1 }
+                    g = g.emit_inst(Jne(skip_bind))
+                    // Bind fields if there are any bindings
+                    let num_bindings = bindings.length()
+                    if num_bindings > 0 {
+                      // Store bound variables at specific stack locations
+                      // Use negative offsets that won't conflict with LetBind
+                      // LetBind starts from next_offset which is typically around -8 to -16
+                      // We'll use -128, -136, -144, etc. to be far away
+                      // Load enum pointer from stack
+                      g = g.emit_inst(Mov(Reg64("r12"), MemIndirect("rsp")))
+                      // Bind each field
+                      let mut bind_idx = 0
+                      while bind_idx < num_bindings {
+                        match bindings[bind_idx] {
+                          Ident(bind_name) => {
+                            // Use very low stack offsets to avoid LetBind
+                            let offset = -128 - bind_idx * 8
+                            let new_offsets = g.var_offsets
+                            new_offsets[bind_name] = offset
+                            g = { ..g, var_offsets: new_offsets }
+                            // Load from enum buffer: [r12 + (bind_idx + 1) * 8]
+                            g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
+                            g = g.emit_inst(
+                              Mov(Reg64("rdx"), Imm32((bind_idx + 1) * 8)),
+                            )
+                            g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
+                            g = g.emit_inst(
+                              Mov(Reg64("rax"), MemIndirect("rax")),
+                            )
+                            // Store at rbp + offset
+                            g = g.emit_inst(
+                              Mov(StackBP64(offset), Reg64("rax")),
+                            )
+                          }
+                          _ => ()
                         }
-                        _ => ()
+                        bind_idx = bind_idx + 1
                       }
-                      bind_idx = bind_idx + 1
+                      g = g.codegen_expr(body)
+                    } else {
+                      g = g.codegen_expr(body)
                     }
-                    g = g.codegen_expr(body)
+                    g = g.emit_inst(Jmp(end_label))
+                    g = g.define_label(skip_bind)
                   } else {
-                    g = g.codegen_expr(body)
-                  }
-                  g = g.emit_inst(Jmp(end_label))
-                  g = g.define_label(skip_bind)
-                } else {
-                  let next_case = ".Lmatch_next\{g.label_counter}"
-                  g = { ..g, label_counter: g.label_counter + 1 }
-                  g = g.emit_inst(Jne(next_case))
-                  // Bind fields if there are any bindings
-                  let num_bindings = bindings.length()
-                  if num_bindings > 0 {
-                    // Store bound variables at specific stack locations
-                    // Load enum pointer from stack
-                    g = g.emit_inst(Mov(Reg64("r12"), MemIndirect("rsp")))
-                    // Bind each field
-                    let mut bind_idx = 0
-                    while bind_idx < num_bindings {
-                      match bindings[bind_idx] {
-                        Ident(bind_name) => {
-                          let offset = -128 - bind_idx * 8
-                          let new_offsets = g.var_offsets
-                          new_offsets[bind_name] = offset
-                          g = { ..g, var_offsets: new_offsets }
-                          // Load from enum buffer: [r12 + (bind_idx + 1) * 8]
-                          g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
-                          g = g.emit_inst(
-                            Mov(Reg64("rdx"), Imm32((bind_idx + 1) * 8)),
-                          )
-                          g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
-                          g = g.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
-                          // Store at rbp + offset
-                          g = g.emit_inst(Mov(StackBP64(offset), Reg64("rax")))
+                    let next_case = ".Lmatch_next\{g.label_counter}"
+                    g = { ..g, label_counter: g.label_counter + 1 }
+                    g = g.emit_inst(Jne(next_case))
+                    // Bind fields if there are any bindings
+                    let num_bindings = bindings.length()
+                    if num_bindings > 0 {
+                      // Store bound variables at specific stack locations
+                      // Load enum pointer from stack
+                      g = g.emit_inst(Mov(Reg64("r12"), MemIndirect("rsp")))
+                      // Bind each field
+                      let mut bind_idx = 0
+                      while bind_idx < num_bindings {
+                        match bindings[bind_idx] {
+                          Ident(bind_name) => {
+                            let offset = -128 - bind_idx * 8
+                            let new_offsets = g.var_offsets
+                            new_offsets[bind_name] = offset
+                            g = { ..g, var_offsets: new_offsets }
+                            // Load from enum buffer: [r12 + (bind_idx + 1) * 8]
+                            g = g.emit_inst(Mov(Reg64("rax"), Reg64("r12")))
+                            g = g.emit_inst(
+                              Mov(Reg64("rdx"), Imm32((bind_idx + 1) * 8)),
+                            )
+                            g = g.emit_inst(Add(Reg64("rax"), Reg64("rdx")))
+                            g = g.emit_inst(
+                              Mov(Reg64("rax"), MemIndirect("rax")),
+                            )
+                            // Store at rbp + offset
+                            g = g.emit_inst(
+                              Mov(StackBP64(offset), Reg64("rax")),
+                            )
+                          }
+                          _ => ()
                         }
-                        _ => ()
+                        bind_idx = bind_idx + 1
                       }
-                      bind_idx = bind_idx + 1
+                      g = g.codegen_expr(body)
+                    } else {
+                      g = g.codegen_expr(body)
                     }
-                    g = g.codegen_expr(body)
-                  } else {
-                    g = g.codegen_expr(body)
+                    g = g.emit_inst(Jmp(end_label))
+                    g = g.define_label(next_case)
                   }
-                  g = g.emit_inst(Jmp(end_label))
-                  g = g.define_label(next_case)
                 }
+                None => if is_last { g = g.codegen_expr(body) }
               }
-              None => if is_last { g = g.codegen_expr(body) }
-            }
             } // end if has_nested_patterns
           }
           _ => if is_last { g = g.codegen_expr(body) }
@@ -7208,7 +7395,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g = { ..g, next_offset: g.next_offset + 8 }
       g
     }
-    GuardExpr(expr, pattern) => {
+    GuardExpr(expr, pattern) =>
       // Guard: guard expr is pattern
       // This is similar to LetTuple - extract values from expr and bind to pattern vars
       // For now, handle tuple patterns: guard x is (a, b, c)
@@ -7302,10 +7489,14 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                 Some(tuple_off) => {
                   let total_offset = tuple_off + elem_offset
                   if is_float {
-                    g2 = g2.emit_inst(Movsd(Xmm("xmm0"), StackBP64(total_offset)))
+                    g2 = g2.emit_inst(
+                      Movsd(Xmm("xmm0"), StackBP64(total_offset)),
+                    )
                     g2 = g2.emit_inst(PushXmm("xmm0"))
                   } else {
-                    g2 = g2.emit_inst(Mov(Reg64("rax"), StackBP64(total_offset)))
+                    g2 = g2.emit_inst(
+                      Mov(Reg64("rax"), StackBP64(total_offset)),
+                    )
                     g2 = g2.emit_inst(Push(Reg64("rax")))
                   }
                 }
@@ -7315,7 +7506,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               // Tuple literal
               let lit_elem_offset = -8 * (name_idx + 1)
               if is_float {
-                g2 = g2.emit_inst(Movsd(Xmm("xmm0"), StackBP64(lit_elem_offset)))
+                g2 = g2.emit_inst(
+                  Movsd(Xmm("xmm0"), StackBP64(lit_elem_offset)),
+                )
                 g2 = g2.emit_inst(PushXmm("xmm0"))
               } else {
                 g2 = g2.emit_inst(Mov(Reg64("rcx"), StackBP64(lit_elem_offset)))
@@ -7340,13 +7533,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           }
           g2
         }
-        _ => {
+        _ =>
           // Non-tuple pattern: just evaluate expression (no binding for now)
           // This handles the case where pattern is a simple identifier
           self.codegen_expr(expr)
-        }
       }
-    }
     Assign(target, value) =>
       match target {
         Ident(name) =>
@@ -7739,7 +7930,7 @@ fn CodeGen::codegen_func(
   // Account for the 6 saved registers (rbp, rbx, r12-r15)
   // After setup: rbp points to old rbp, then rbx, r12-r15 (5 regs = 40 bytes)
   // So first param will be at rbp - 48
-  let saved_regs_size = 6 * 8  // rbp, rbx, r12, r13, r14, r15
+  let saved_regs_size = 6 * 8 // rbp, rbx, r12, r13, r14, r15
   g = { ..g, var_offsets: Map::new(), next_offset: -saved_regs_size }
   // Save parameters to stack and add to var_offsets
   // Push in forward order so first param is at rbp - 48

@@ -27,6 +27,7 @@ pub enum AST {
   LetTuple(Array[String], AST, AST)
   IfExpr(AST, AST, AST?)
   MatchExpr(AST, Array[(AST, AST)])
+  GuardExpr(AST, AST)
   WhileLoop(AST, AST)
   ForLoop(AST?, AST?, AST?, AST)
   ForInLoop(String, AST, AST)
@@ -92,6 +93,9 @@ pub struct CodeGen {
   needs_map_buf : Bool
   map_buf_offset : Int
   enum_buf_offset : Int
+  var_float_values : Map[String, Double]
+  var_is_enum : Map[String, Bool]
+  var_enum_variant : Map[String, String]
 }
 
 pub struct Lexer {
@@ -133,6 +137,8 @@ pub enum Token {
   Break
   Continue
   Return
+  Guard
+  Is
   True
   False
   Unit

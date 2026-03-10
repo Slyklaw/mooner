@@ -517,7 +517,8 @@ fn Parser::parse_match(self : Parser) -> (AST, Parser) {
   }
 }
 
-///| Expand or pattern (1 | 2 | 3) into multiple patterns
+///|
+/// Expand or pattern (1 | 2 | 3) into multiple patterns
 fn expand_or_pattern(pattern : AST) -> Array[AST] {
   match pattern {
     Binary("|", left, right) => {
@@ -1524,7 +1525,7 @@ fn parse_interpolation_expr(expr_str : String) -> AST {
       (expr_str.length() > 1 || (expr_str[0] >= '0' && expr_str[0] <= '9'))
     }
 
-      if is_integer {
+    if is_integer {
       // Parse integer
       let mut result = 0
       let mut is_negative = false
