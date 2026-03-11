@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** The compiler generates correct, executable output for all language features covered by the test suite. If everything else fails, the examples must pass.
-**Current focus:** Phase 2 complete. Next: Phase 3 (Control Flow Fixes).
+**Current focus:** Phase 3 (Control Flow Fixes) in progress. Plan 1 complete - jump offset fixes done.
 
 ## Current Position
 
