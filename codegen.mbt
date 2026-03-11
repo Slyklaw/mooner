@@ -10,6 +10,7 @@ pub struct CodeGen {
   var_is_char : Map[String, Bool]
   var_is_bool : Map[String, Bool]
   var_is_tuple : Map[String, Bool]
+  var_tuple_is_param : Map[String, Bool]
   var_is_map : Map[String, Bool]
   var_tuple_field_types : Map[String, Array[Bool]]
   var_tuple_field_is_array : Map[String, Array[Bool]]
@@ -59,6 +60,7 @@ fn CodeGen::new() -> CodeGen {
     var_is_char: Map::new(),
     var_is_bool: Map::new(),
     var_is_tuple: Map::new(),
+    var_tuple_is_param: Map::new(),
     var_is_map: Map::new(),
     var_tuple_field_types: Map::new(),
     var_tuple_field_is_array: Map::new(),
@@ -953,34 +955,59 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
         g.emit_byte(modrm(0, dest_code, rm_code))
       }
     }
-    Lea(Reg64(dest), RipRel32(label)) => {
-      let reg_code = match dest {
-        "rax" => 0
-        "rcx" => 1
-        "rdx" => 2
-        "rbx" => 3
-        "rsp" => 4
-        "rbp" => 5
-        "rsi" => 6
-        "rdi" => 7
-        "r8" => 0
-        "r9" => 1
-        "r10" => 2
-        "r11" => 3
-        "r12" => 4
-        "r13" => 5
-        "r14" => 6
-        "r15" => 7
-        _ => 0
-      }
-      let g = self.emit_byte(0x48) // REX.w
-      let g = g.emit_byte(0x8D) // LEA
-      let g = g.emit_byte(modrm(0, reg_code, 5)) // mod=00, reg=reg, rm=101 (RIP)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
-      let g = { ..g, pending_labels: new_pending }
-      g.emit32(0)
-    }
+     Lea(Reg64(dest), RipRel32(label)) => {
+       let reg_code = match dest {
+         "rax" => 0
+         "rcx" => 1
+         "rdx" => 2
+         "rbx" => 3
+         "rsp" => 4
+         "rbp" => 5
+         "rsi" => 6
+         "rdi" => 7
+         "r8" => 0
+         "r9" => 1
+         "r10" => 2
+         "r11" => 3
+         "r12" => 4
+         "r13" => 5
+         "r14" => 6
+         "r15" => 7
+         _ => 0
+       }
+       let g = self.emit_byte(0x48) // REX.w
+       let g = g.emit_byte(0x8D) // LEA
+       let g = g.emit_byte(modrm(0, reg_code, 5)) // mod=00, reg=reg, rm=101 (RIP)
+       let pos = g.code.length()
+       let new_pending = g.pending_labels + [(label, pos)]
+       let g = { ..g, pending_labels: new_pending }
+       g.emit32(0)
+     }
+     Lea(Reg64(dest), StackBP64(offset)) => {
+       let reg_code = match dest {
+         "rax" => 0
+         "rcx" => 1
+         "rdx" => 2
+         "rbx" => 3
+         "rsp" => 4
+         "rbp" => 5
+         "rsi" => 6
+         "rdi" => 7
+         "r8" => 0
+         "r9" => 1
+         "r10" => 2
+         "r11" => 3
+         "r12" => 4
+         "r13" => 5
+         "r14" => 6
+         "r15" => 7
+         _ => 0
+       }
+       let g = self.emit_byte(0x48) // REX.w
+       let g = g.emit_byte(0x8D) // LEA
+       let g = g.emit_byte(modrm(2, reg_code, 5)) // mod=10, reg=reg, rm=101 (RBP)
+       g.emit32(offset)
+     }
     Add(Reg64(dest), Reg64(src)) => {
       let g = self.emit_byte(0x48)
       let g = g.emit_byte(0x01)
@@ -2057,12 +2084,51 @@ fn CodeGen::codegen_user_func_call2(
   let arg_regs = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
   let mut g = self
   let num_args = args.length()
+  
+  // Track total stack usage for cleanup
+  // We need to track how many bytes are pushed for each argument
+  // For tuple arguments, we need to count the tuple elements + the address
+  let mut total_stack_usage = 0
+  
   let mut i = num_args - 1
   while i >= 0 {
+    // Check if this argument is a tuple
+    let is_tuple = match args[i] {
+      Tuple(elems) => true
+      Ident(name) => g.var_is_tuple.get(name) == Some(true)
+      _ => false
+    }
+    
+    // Evaluate the argument
     g = g.codegen_expr(args[i])
+    
+    // Push the argument address/result onto stack
     g = g.emit_inst(Push(Reg64("rax")))
+    
+    // Track stack usage
+    if is_tuple {
+      // For tuple arguments: elements + address
+      // For tuple literals, we need to count the elements
+      match args[i] {
+        Tuple(elems) => {
+          total_stack_usage = total_stack_usage + elems.length() * 8 + 8
+        }
+        Ident(name) => {
+          // For tuple variables, we don't know the size at compile time
+          // We'll assume a default size of 3 elements (24 bytes) + address (8 bytes)
+          total_stack_usage = total_stack_usage + 32
+        }
+        _ => {
+          total_stack_usage = total_stack_usage + 8
+        }
+      }
+    } else {
+      total_stack_usage = total_stack_usage + 8
+    }
+    
     i = i - 1
   }
+  
   let mut j = 0
   while j < num_args {
     if j < 6 {
@@ -2070,11 +2136,14 @@ fn CodeGen::codegen_user_func_call2(
     }
     j = j + 1
   }
+  
   g = g.emit_inst(Call(func_name))
-  if num_args > 6 {
-    let cleanup = (num_args - 6) * 8
-    g = g.emit_inst(Add(Reg64("rsp"), Imm32(cleanup)))
+  
+  // Clean up all stack usage (including tuple elements)
+  if total_stack_usage > 0 {
+    g = g.emit_inst(Add(Reg64("rsp"), Imm32(total_stack_usage)))
   }
+  
   g
 }
 
@@ -2191,14 +2260,22 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             let g = self.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
             g
           } else if self.var_is_tuple.get(name) == Some(true) {
-            // Tuple - return address (rbp + offset)
-            let g = self.emit_inst(Mov(Reg64("rax"), Reg64("rbp")))
-            let g = if offset >= 0 {
-              g.emit_inst(Add(Reg64("rax"), Imm32(offset)))
+            // Tuple - return address (rbp + offset) or pointer (for parameters)
+            let is_param = self.var_tuple_is_param.get(name) == Some(true)
+            if is_param {
+              // For tuple parameters: load the pointer from stack
+              let g = self.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
+              g
             } else {
-              g.emit_inst(Sub(Reg64("rax"), Imm32(-offset)))
+              // For tuple literals: return address (rbp + offset)
+              let g = self.emit_inst(Mov(Reg64("rax"), Reg64("rbp")))
+              let g = if offset >= 0 {
+                g.emit_inst(Add(Reg64("rax"), Imm32(offset)))
+              } else {
+                g.emit_inst(Sub(Reg64("rax"), Imm32(-offset)))
+              }
+              g
             }
-            g
           } else if self.var_struct_fields.get(name) != None {
             // Struct - return address (rbp + offset)
             let g = self.emit_inst(Mov(Reg64("rax"), Reg64("rbp")))
@@ -3577,9 +3654,31 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                             g = g.emit_inst(Pop(Reg64("rcx")))
                             g = g.emit_inst(Pop(Reg64("rbx")))
                           }
+                        IfExpr(cond, then, else_opt) => {
+                          // Evaluate the IfExpr - result is string pointer in rax
+                          g = g.codegen_expr(part)
+                          // Calculate string length by scanning for null terminator
+                          g = g.emit_inst(Push(Reg64("rax")))
+                          g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                          let (g2, len_loop) = g.new_label()
+                          let (g3, len_done) = g2.new_label()
+                          g = g3
+                          g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                          g = g.define_label(len_loop)
+                          g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("rsi")))
+                          g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                          g = g.emit_inst(Je(len_done))
+                          g = g.emit_inst(Inc(Reg64("rsi")))
+                          g = g.emit_inst(Inc(Reg64("rdx")))
+                          g = g.emit_inst(Jmp(len_loop))
+                          g = g.define_label(len_done)
+                          g = g.emit_inst(Pop(Reg64("rax")))
+                          g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                          g = g.emit_call_print()
+                        }
                         CallExpr(func, args) => {
                           // Function call - evaluate it first
-                          g = g.codegen_expr(arg)
+                          g = g.codegen_expr(part)
                           // rax now has the return value - print it as integer
                           // Use same integer-to-string conversion as variable case
                           let buf_label = ".Lint_buf"
@@ -5972,25 +6071,30 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
       } else {
         let mut g = self
-        // Push elements in reverse order so first element ends up at lowest address
-        let mut i = num_elems - 1
-        while i >= 0 {
+        // Calculate the offset for the first element
+        // We need to allocate space for the tuple BEFORE the next variable
+        let tuple_size = num_elems * 8
+        let first_elem_offset = g.next_offset - tuple_size
+        
+        // Store elements in order (first element at lowest offset)
+        let mut i = 0
+        while i < num_elems {
           let elem = elems[i]
           let elem_is_float = is_float_expr(elem, g.var_is_float)
           g = g.codegen_expr(elem)
+          let offset = first_elem_offset + i * 8
           if elem_is_float {
-            // Float is in xmm0, push it to stack
-            g = g.emit_inst(Sub(Reg64("rsp"), Imm32(8)))
-            g = g.emit_inst(Movsd(MemIndirect("rsp"), Xmm("xmm0")))
+            // Float is in xmm0, store it to stack
+            g = g.emit_inst(Movsd(StackBP64(offset), Xmm("xmm0")))
           } else {
-            g = g.emit_inst(Push(Reg64("rax")))
+            g = g.emit_inst(Mov(StackBP64(offset), Reg64("rax")))
           }
-          i = i - 1
+          i = i + 1
         }
-        // rsp now points to first element (elem0)
-        // Return the address of the tuple (rsp)
-        g = g.emit_inst(Mov(Reg64("rax"), Reg64("rsp")))
-        g
+        // Update next_offset to point to the next variable after the tuple
+        g = { ..g, next_offset: first_elem_offset }
+        // Return the address of the tuple
+        g.emit_inst(Lea(Reg64("rax"), StackBP64(first_elem_offset)))
       }
     }
     FieldExpr(obj, field) => {
@@ -6073,13 +6177,40 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       }
       // For structs: base_offset is the offset from rbp to field 0
       // Field idx is at base_offset + idx * 8
-      let total_offset = base_offset + idx * 8
+      // For tuple parameters: base_offset is the offset to the pointer, need to load pointer first
+      let is_tuple_param = match obj {
+        Ident(var_name) =>
+          self.var_tuple_is_param.get(var_name) == Some(true)
+        _ => false
+      }
       let g = g.emit_inst(Push(Reg64("rbx")))
-      let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rbp")))
-      let g = if total_offset >= 0 {
-        g.emit_inst(Add(Reg64("rbx"), Imm32(total_offset)))
+      let g = if is_tuple_param {
+        // Load the pointer from stack, then add element offset
+        let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rbp")))
+        let g = if base_offset >= 0 {
+          g.emit_inst(Add(Reg64("rbx"), Imm32(base_offset)))
+        } else {
+          g.emit_inst(Sub(Reg64("rbx"), Imm32(-base_offset)))
+        }
+        // Load the pointer value
+        let g = g.emit_inst(Mov(Reg64("rbx"), MemIndirect("rbx")))
+        // Add element offset
+        let g = if idx * 8 >= 0 {
+          g.emit_inst(Add(Reg64("rbx"), Imm32(idx * 8)))
+        } else {
+          g.emit_inst(Sub(Reg64("rbx"), Imm32(-(idx * 8))))
+        }
+        g
       } else {
-        g.emit_inst(Sub(Reg64("rbx"), Imm32(-total_offset)))
+        // For structs: base_offset is the offset from rbp to field 0
+        let total_offset = base_offset + idx * 8
+        let g = g.emit_inst(Mov(Reg64("rbx"), Reg64("rbp")))
+        let g = if total_offset >= 0 {
+          g.emit_inst(Add(Reg64("rbx"), Imm32(total_offset)))
+        } else {
+          g.emit_inst(Sub(Reg64("rbx"), Imm32(-total_offset)))
+        }
+        g
       }
       let g = if field_is_float {
         g.emit_inst(Movsd(Xmm("xmm0"), MemIndirect("rbx")))
@@ -7485,6 +7616,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             Ident(src_name) => g.var_offsets.get(src_name)
             _ => None
           }
+          // Check if tuple is a parameter (passed by reference)
+          let src_is_tuple_param = match expr {
+            Ident(src_name) => g.var_tuple_is_param.get(src_name) == Some(true)
+            _ => false
+          }
           let mut name_idx = 0
           while name_idx < names.length() {
             let name = names[name_idx]
@@ -7513,17 +7649,38 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             if src_is_tuple_var {
               match tuple_stack_offset {
                 Some(tuple_off) => {
-                  let total_offset = tuple_off + elem_offset
-                  if is_float {
-                    g2 = g2.emit_inst(
-                      Movsd(Xmm("xmm0"), StackBP64(total_offset)),
-                    )
-                    g2 = g2.emit_inst(PushXmm("xmm0"))
+                  if src_is_tuple_param {
+                    // For tuple parameters: load pointer, add offset, then load value
+                    let total_offset = tuple_off
+                    if is_float {
+                      // Load pointer from stack
+                      g2 = g2.emit_inst(Mov(Reg64("rax"), StackBP64(total_offset)))
+                      // Load float value from pointer + elem_offset
+                      g2 = g2.emit_inst(Add(Reg64("rax"), Imm32(elem_offset)))
+                      g2 = g2.emit_inst(Movsd(Xmm("xmm0"), MemIndirect("rax")))
+                      g2 = g2.emit_inst(PushXmm("xmm0"))
+                    } else {
+                      // Load pointer from stack
+                      g2 = g2.emit_inst(Mov(Reg64("rax"), StackBP64(total_offset)))
+                      // Load value from pointer + elem_offset
+                      g2 = g2.emit_inst(Add(Reg64("rax"), Imm32(elem_offset)))
+                      g2 = g2.emit_inst(Mov(Reg64("rax"), MemIndirect("rax")))
+                      g2 = g2.emit_inst(Push(Reg64("rax")))
+                    }
                   } else {
-                    g2 = g2.emit_inst(
-                      Mov(Reg64("rax"), StackBP64(total_offset)),
-                    )
-                    g2 = g2.emit_inst(Push(Reg64("rax")))
+                    // For tuple literals: element is at rbp + tuple_offset + elem_offset
+                    let total_offset = tuple_off + elem_offset
+                    if is_float {
+                      g2 = g2.emit_inst(
+                        Movsd(Xmm("xmm0"), StackBP64(total_offset)),
+                      )
+                      g2 = g2.emit_inst(PushXmm("xmm0"))
+                    } else {
+                      g2 = g2.emit_inst(
+                        Mov(Reg64("rax"), StackBP64(total_offset)),
+                      )
+                      g2 = g2.emit_inst(Push(Reg64("rax")))
+                    }
                   }
                 }
                 None => g2 = g2.emit_inst(Push(Reg64("rax")))
@@ -7973,6 +8130,7 @@ fn CodeGen::codegen_func(
   let mut j = 0
   // Track if this param is a tuple and its field types
   let new_var_is_tuple = g.var_is_tuple
+  let new_var_tuple_is_param = g.var_tuple_is_param
   let new_var_tuple_field_types = g.var_tuple_field_types
   let new_var_tuple_field_float_values = g.var_tuple_field_float_values
   let new_var_tuple_field_bool_values = g.var_tuple_field_bool_values
@@ -7989,6 +8147,7 @@ fn CodeGen::codegen_func(
       Some(Tuple(type_elems)) => {
         // This parameter is a tuple - track its field types
         new_var_is_tuple[param_name] = true
+        new_var_tuple_is_param[param_name] = true
         // Parse each field type to determine if it's float
         let mut field_types : Array[Bool] = []
         let mut field_float_values : Array[Double] = []
@@ -8027,11 +8186,12 @@ fn CodeGen::codegen_func(
   g = {
     ..g,
     var_is_tuple: new_var_is_tuple,
+    var_tuple_is_param: new_var_tuple_is_param,
     var_tuple_field_types: new_var_tuple_field_types,
     var_tuple_field_float_values: new_var_tuple_field_float_values,
     var_tuple_field_bool_values: new_var_tuple_field_bool_values,
   }
-  g = { ..g, next_offset: -saved_regs_size - params.length() * 8 }
+  g = { ..g, next_offset: -saved_regs_size - params.length() * 8 - 8 }
   g = g.codegen_expr(body)
   // Restore callee-saved registers and stack frame
   // Stack layout: [rbp] = saved rbp, [rbp-8] = rbx, [rbp-16] = r12, etc.
