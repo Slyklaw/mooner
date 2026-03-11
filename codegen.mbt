@@ -7059,7 +7059,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     }
     Func(name, _params, _ret, body) =>
       if name == "main" {
-        self.codegen_expr(body)
+        // Set function index for label namespace isolation
+        let g = { ..self, current_func_idx: self.func_counter, func_counter: self.func_counter + 1 }
+        g.codegen_expr(body)
       } else {
         // Non-main functions are emitted later by codegen(), skip here
         self
@@ -8247,7 +8249,8 @@ fn CodeGen::codegen_func(
   body : AST,
 ) -> CodeGen {
   let arg_regs = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
-  let mut g = self
+  // Set function index for label namespace isolation
+  let mut g = { ..self, current_func_idx: self.func_counter, func_counter: self.func_counter + 1 }
   g = g.define_label("\{name}")
   // Save callee-saved registers (rbx, r12-r15 per System V AMD64 ABI)
   g = g.emit_inst(Push(Reg64("rbp")))
