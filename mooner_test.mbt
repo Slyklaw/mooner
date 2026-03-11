@@ -13,7 +13,7 @@ test "compile_file returns ok for valid input" {
   let input_path = "examples/mbt_examples/001_hello.mbt"
   let output_path = "/tmp/mooner_test_001.exe"
 
-  let result = @mooner.compile_file(input_path, output_path)
+  let result = @mooner.compile_file(input_path, output_path, 0)
   assert_true(
     match result {
       Ok(_) => true
@@ -47,6 +47,6 @@ test "codegen produces bytes" {
   let input = "fn main { println(1) }"
   let tokens = @mooner.tokenize(input)
   let ast = @mooner.parse(tokens)
-  let code = @mooner.codegen(ast)
+  let code = @mooner.codegen(ast, 0)
   assert_true(code.length() > 0)
 }
