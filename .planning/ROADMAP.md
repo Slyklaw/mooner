@@ -4,7 +4,7 @@
 
 - [x] **Phase 1: Setup & Investigation** - Instrument codegen, establish debug tracing, create minimal test cases (completed 2026-03-11)
 - [x] **Phase 2: Function Calls** - Fix calling convention and return value handling (COMP-01)
-- [ ] **Phase 3: Control Flow** - Fix jump offsets and label resolution (COMP-02)
+- [x] **Phase 3: Control Flow** - Fix jump offsets and label resolution (COMP-02) (completed 2026-03-11)
 - [ ] **Phase 4: Enums** - Fix enum discriminants and pattern matching (COMP-03)
 - [ ] **Phase 5: Pattern Matching** - Fix struct patterns and branch layout (COMP-04)
 - [ ] **Phase 6: Validation & Polish** - Ensure all examples pass, remove debug code (COMP-05)
@@ -49,13 +49,12 @@
 **Plans:** 7 plans
 
 Plans:
-- [x] 03-01-PLAN.md — Fix compilation errors in panic function calls
-- [ ] 03-02-PLAN.md — Update CodeGen pending_labels type to three-tuple
-- [ ] 03-03-PLAN.md — Modify emit_inst to record start position and instruction length
-- [ ] 03-04-PLAN.md — Rewrite pending label fixup loop with correct offset computation
-- [ ] 03-05-PLAN.md — Implement label namespace isolation with function indexing
-- [ ] 03-06-PLAN.md — Add break/continue outside-loop validation
-- [ ] 03-07-PLAN.md — Verify nested break/continue handling and comprehensive testing
+- [x] 03-01-PLAN.md — Fix jump offset calculation and label namespace
+- [x] 03-02-PLAN.md — Break/continue validation and nested loop verification
+- [x] 03-03-PLAN.md — Control flow correctness testing
+- [x] 03-05-PLAN.md — Wire function index tracking for label namespace isolation
+- [x] 03-06-PLAN.md — Add break/continue outside-loop validation and verify nested loops
+- [x] 03-07-PLAN.md — Control flow comprehensive testing
 
 ### Phase 4: Enums
 **Goal**: Enum pattern matching discriminates variants correctly; each variant has unique discriminant
@@ -97,4 +96,4 @@ Each phase will have 2-4 executable plans (detailed during planning phase).
 ---
 
 *Roadmap created: 2026-03-11*
-*Last updated: 2026-03-11 after creation*
+*Last updated: 2026-03-11 - Phase 3 complete (all 7 plans done)*
