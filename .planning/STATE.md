@@ -5,20 +5,20 @@
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** The compiler generates correct, executable output for all language features covered by the test suite. If everything else fails, the examples must pass.
-**Current focus:** Phase 3 (Control Flow Fixes) in progress. Plan 1 complete - jump offset fixes done.
+**Current focus:** Phase 3 (Control Flow Fixes) in progress. Plans 01-02 complete - jump offset fixes and break/continue validation done.
 
 ## Current Position
 
 - **Phase:** 3 (Control Flow Fixes)
-- **Plan:** 01 complete (Jump offset + label namespace fixes)
-- **Status:** Ready for Plan 02
-- **Progress:** [██████░░░░] 63%
+- **Plan:** 02 complete (Break/continue validation + nested loop verification)
+- **Status:** Ready for Plan 03 (if more plans exist) or transition
+- **Progress:** [███████░░░] 68%
 
 ## Performance Metrics
 
-- Commits: 7 (code commits: 3, planning commits: 4)
+- Commits: 9 (code commits: 5, planning commits: 4)
 - Examples passing: 8 / 13 (009 segfault fixed, but for-loop/while-loop output still incorrect)
-- Critical bugs: 3 (009 partially fixed, 011, 013)
+- Critical bugs: 2 (011, 013 remain; 009 partially fixed)
 - Regressions: 0 (target: 0)
 
 ## Accumulated Context
@@ -51,6 +51,7 @@ None at this time.
 - [x] Execute Phase 2: Fix function call return bug (004)
 - [x] Verify fix with minimal repro and full test suite
 - [x] Phase 3 Plan 01: Fix jump offset calculation and label namespace isolation
+- [x] Phase 3 Plan 02: Break/continue validation and nested loop verification
 
 ## Recent Work
 
@@ -68,9 +69,14 @@ None at this time.
   - Fixed RIP-relative addressing: LEA instr_len=7, Movsd instr_len=8
   - Added func_counter and current_func_idx for label namespace isolation
   - Example 009 no longer segfaults; no regressions on passing examples
+- **2026-03-11:** Phase 3 Plan 02 completed:
+  - Added `abort("break not inside loop")` / `abort("continue not inside loop")` validation
+  - Break/continue outside loops now produce compile-time errors instead of silent fallthrough
+  - Created nested break test verifying innermost loop scoping works correctly
+  - Used if/else to preserve CodeGen return type in match arms
 - Research phase synthesized architecture, stack, features, pitfalls
 - Roadmap defined with 6 phases covering all v1 requirements
 
 ## Handoff Notes
 
-Next action: Execute Phase 3 Plan 02 (break/continue validation and for/while loop fixes)
+Next action: Check for Phase 3 Plan 03 or transition to next phase. Example 009 still has incorrect output (55,7,15 vs expected 55,15,15,15) - for/while loop control flow needs further investigation.
