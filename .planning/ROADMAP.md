@@ -49,6 +49,12 @@
 
 **Requirements:** TUP-01, TUP-02, TUP-03, FLT-01, FLT-02
 
+**Plans:** 2 plans
+
+**Plan List:**
+- [ ] 02-01-PLAN.md — Fix GuardExpr float value propagation
+- [ ] 02-02-PLAN.md — Verify float runtime conversion precision
+
 **Success Criteria** (what must be TRUE):
 
 1. Float values inside tuples print their decimal representation (e.g., `(1, 2.5)` prints correctly, not `<tuple>`)
