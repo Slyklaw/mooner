@@ -8,7 +8,7 @@
 
 ### Code Generation
 
-- [ ] **COMP-01**: Function calls with arguments return correct values (fix example 004)
+- [x] **COMP-01**: Function calls with arguments return correct values (fix example 004)
 - [ ] **COMP-02**: Control flow constructs (if, for, while) execute without crashes (fix example 009)
 - [ ] **COMP-03**: Enum pattern matching discriminates variants correctly (fix example 011)
 - [ ] **COMP-04**: Pattern matching on structured data (structs, nested patterns) works without crashes (fix example 013)
@@ -32,7 +32,7 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| COMP-01 | Phase 2 | Pending |
+| COMP-01 | Phase 2 | Complete |
 | COMP-02 | Phase 3 | Pending |
 | COMP-03 | Phase 4 | Pending |
 | COMP-04 | Phase 5 | Pending |

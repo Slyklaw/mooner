@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 - **Phase:** 2 (Function Call Fixes)
 - **Plan:** None yet (requires planning)
 - **Status:** Not started
-- **Progress:** 0%
+- **Progress:** [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -32,6 +32,7 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 | Allow temporary debug code in codegen | Needed for investigation; will be cleaned up in Phase 6 | ✓ Implemented |
 | Use existing codebase analysis as research foundation | Already mapped architecture, stack, concerns; synthesized research artifacts | ✓ Good |
 | Build minimal reproduction tests | Isolate bugs for faster debugging | ✓ Completed |
+| Phase 02-function-calls P01 | 1 min | 1 tasks | 1 files |
 
 ### Blockers
 
