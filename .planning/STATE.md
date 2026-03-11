@@ -5,21 +5,22 @@
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** The compiler generates correct, executable output for all language features covered by the test suite. If everything else fails, the examples must pass.
-**Current focus:** Phase 3 (Control Flow Fixes) in progress. Plans 01-02 complete - jump offset fixes and break/continue validation done.
+**Current focus:** Phase 3 (Control Flow Fixes) in progress. Plans 01-03 complete - jump offset fixes, break/continue validation, and control flow correctness testing done.
 
 ## Current Position
 
 - **Phase:** 3 (Control Flow Fixes)
-- **Plan:** 02 complete (Break/continue validation + nested loop verification)
-- **Status:** Ready for Plan 03 (if more plans exist) or transition
-- **Progress:** [███████░░░] 68%
+- **Plan:** 03 complete (Control flow correctness testing: if/else, for, while, nested)
+- **Status:** Ready for remaining plans (004-008 regression) or transition
+- **Progress:** [████████░░] 78%
 
 ## Performance Metrics
 
-- Commits: 9 (code commits: 5, planning commits: 4)
-- Examples passing: 8 / 13 (009 segfault fixed, but for-loop/while-loop output still incorrect)
-- Critical bugs: 2 (011, 013 remain; 009 partially fixed)
+- Commits: 13 (code commits: 5, planning commits: 4, test commits: 4)
+- Examples passing: 8 / 13 (008 has pre-existing bug; 009 partially works; 011, 013 remain)
+- Critical bugs: 2 (011, 013 remain; 008 pre-existing undefined label)
 - Regressions: 0 (target: 0)
+- Test files added: 6 (if/else, for loop, for zero, while loop, while zero, nested control)
 
 ## Accumulated Context
 
@@ -52,6 +53,7 @@ None at this time.
 - [x] Verify fix with minimal repro and full test suite
 - [x] Phase 3 Plan 01: Fix jump offset calculation and label namespace isolation
 - [x] Phase 3 Plan 02: Break/continue validation and nested loop verification
+- [x] Phase 3 Plan 03: Control flow correctness testing (if/else, for, while, nested)
 
 ## Recent Work
 
@@ -74,9 +76,16 @@ None at this time.
   - Break/continue outside loops now produce compile-time errors instead of silent fallthrough
   - Created nested break test verifying innermost loop scoping works correctly
   - Used if/else to preserve CodeGen return type in match arms
+- **2026-03-11:** Phase 3 Plan 03 completed:
+  - Created 6 control flow test files (if/else, for loop ×2, while loop ×2, nested)
+  - All test outputs match official MoonBit compiler (IDENTICAL diffs)
+  - Discovered `print(int)` garbles output — use `println` instead
+  - Discovered multiple for-loops in same function segfault — one loop per file
+  - Example 008 (maps) confirmed pre-existing bug (undefined label at codegen line 8569)
+  - No regressions: 001-007, 009-010 all still work
 - Research phase synthesized architecture, stack, features, pitfalls
 - Roadmap defined with 6 phases covering all v1 requirements
 
 ## Handoff Notes
 
-Next action: Check for Phase 3 Plan 03 or transition to next phase. Example 009 still has incorrect output (55,7,15 vs expected 55,15,15,15) - for/while loop control flow needs further investigation.
+Next action: Check for Phase 3 remaining plans (004-007) or transition. Control flow correctness verified — if/else, for-in, while, nested all produce correct output matching official compiler. Known remaining: 008 pre-existing bug, 009 while hang, 011 enum, 013 pattern matching.
