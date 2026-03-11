@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** The compiler generates correct, executable output for all language features covered by the test suite. If everything else fails, the examples must pass.
-**Current focus:** Phase 1 complete. Next: Plan Phase 2 (Fix Function Calls).
+**Current focus:** Phase 2 complete. Next: Phase 3 (Control Flow Fixes).
 
 ## Current Position
 
 - **Phase:** 2 (Function Call Fixes)
-- **Plan:** None yet (requires planning)
-- **Status:** Not started
-- **Progress:** [███████░░░] 67%
+- **Plan:** Complete
+- **Status:** Completed
+- **Progress:** [████████░░] 83%
 
 ## Performance Metrics
 
@@ -34,6 +34,8 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 | Build minimal reproduction tests | Isolate bugs for faster debugging | ✓ Completed |
 | Phase 02-function-calls P01 | 1 min | 1 tasks | 1 files |
 | Phase 02 P02 | 2 min | 1 tasks | 1 files |
+| Phase 02-function-calls P03 | ~4 min | 2 tasks | 1 files |
+- [Phase 02-function-calls]: None - followed plan as specified — Plan executed exactly; auto-advance allowed smooth verification
 
 ### Blockers
 
@@ -42,9 +44,9 @@ None at this time.
 ### Todos
 
 - [x] Phase 1: Setup & Investigation complete (debug tracing, harness, minimal repros)
-- [ ] Run `/gsd-plan-phase 2` to create detailed plans for Phase 2
-- [ ] Execute Phase 2: Fix function call return bug (004)
-- [ ] Verify fix with minimal repro and full test suite
+- [x] Run `/gsd-plan-phase 2` to create detailed plans for Phase 2
+- [x] Execute Phase 2: Fix function call return bug (004)
+- [x] Verify fix with minimal repro and full test suite
 
 ## Recent Work
 
@@ -52,9 +54,13 @@ None at this time.
   - Added debug tracing infrastructure to codegen (debug_level, trace_instruction)
   - Built test harness (harness.sh) and captured baseline results for 004/009/011/013
   - Created minimal reproduction files for each bug
+- **2026-03-11:** Phase 2 (Function Calls) completed:
+  - Verified 004_basic_function returns 42 (confirming fixes)
+  - Full test suite passes (19/19) with no regressions
+  - Updated mooner_test.mbt to match current API
 - Research phase synthesized architecture, stack, features, pitfalls
 - Roadmap defined with 6 phases covering all v1 requirements
 
 ## Handoff Notes
 
-Next action: `/gsd-plan-phase 2` to break down Phase 2 into executable plans with tasks.
+Next action: `/gsd-plan-phase 3` to break down Phase 3 into executable plans with tasks.
