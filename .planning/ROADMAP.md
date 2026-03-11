@@ -49,7 +49,7 @@
 **Plans:** 7 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Fix compilation errors in panic function calls
+- [x] 03-01-PLAN.md — Fix compilation errors in panic function calls
 - [ ] 03-02-PLAN.md — Update CodeGen pending_labels type to three-tuple
 - [ ] 03-03-PLAN.md — Modify emit_inst to record start position and instruction length
 - [ ] 03-04-PLAN.md — Rewrite pending label fixup loop with correct offset computation
