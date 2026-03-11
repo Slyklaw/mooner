@@ -45,6 +45,8 @@ pub struct CodeGen {
   // Track enum variables for printing
   var_is_enum : Map[String, Bool]
   var_enum_variant : Map[String, String]
+  // Debug level for codegen tracing (0 = off)
+  debug_level : Int
 }
 
 ///|
@@ -92,6 +94,7 @@ fn CodeGen::new() -> CodeGen {
     var_float_values: Map::new(),
     var_is_enum: Map::new(),
     var_enum_variant: Map::new(),
+    debug_level: 0,
   }
 }
 
@@ -103,6 +106,119 @@ fn CodeGen::emit_byte(self : CodeGen, b : Byte) -> CodeGen {
 ///|
 fn CodeGen::emit_bytes(self : CodeGen, bytes : Array[Byte]) -> CodeGen {
   { ..self, code: self.code + bytes }
+}
+
+///|
+fn inst_to_string(inst : X86Inst) -> String {
+  match inst {
+    Nop => "nop"
+    Ret => "ret"
+    Syscall => "syscall"
+    RepMovsq => "rep movsq"
+    Push(Reg64(reg)) => "push " + reg
+    Push(Imm32(v)) => "push $" + v.to_string()
+    Pop(Reg64(reg)) => "pop " + reg
+    Mov(Reg64(dest), Imm32(v)) => "mov " + dest + ", $" + v.to_string()
+    Mov(Reg64(dest), Imm64(v)) => "mov " + dest + ", $" + v.to_string()
+    Mov(Reg64(dest), Reg64(src)) => "mov " + dest + ", " + src
+    Mov(Reg64(dest), Stack64(offset)) => "mov " + dest + ", [rsp+" + offset.to_string() + "]"
+    Mov(Reg64(dest), StackBP64(offset)) => "mov " + dest + ", [rbp" + (if offset >= 0 { "+" } else { "" }) + offset.to_string() + "]"
+    Mov(Stack64(offset), Reg64(src)) => "mov [rsp+" + offset.to_string() + "], " + src
+    Mov(StackBP64(offset), Reg64(src)) => "mov [rbp" + (if offset >= 0 { "+" } else { "" }) + offset.to_string() + "], " + src
+    Mov(Reg64(dest), MemOffset(addr_reg, offset)) => "mov " + dest + ", [" + addr_reg + (if offset >= 0 { "+" } else { "" }) + offset.to_string() + "]"
+    Mov(Reg64(dest), MemIndirect(addr_reg)) => "mov " + dest + ", [" + addr_reg + "]"
+    Mov(MemIndirect(addr_reg), Reg64(src)) => "mov [" + addr_reg + "], " + src
+    Mov(MemIndirect(addr_reg), Reg8(src)) => "mov byte [" + addr_reg + "], " + src
+    Mov(MemIndirect(addr_reg), Imm8(v)) => "mov byte [" + addr_reg + "], $" + v.to_string()
+    Mov(MemOffset(addr_reg, offset), Imm32(v)) => "mov dword [" + addr_reg + (if offset >= 0 { "+" } else { "" }) + offset.to_string() + "], $" + v.to_string()
+    Mov(MemOffset(addr_reg, offset), Reg64(src)) => "mov [" + addr_reg + (if offset >= 0 { "+" } else { "" }) + offset.to_string() + "], " + src
+    Mov(Reg8(dest), Reg8(src)) => "mov " + dest + ", " + src
+    Mov(Reg8(dest), Imm8(v)) => "mov " + dest + ", $" + v.to_string()
+    Movzx(Reg64(dest), Reg8(src)) => "movzx " + dest + ", " + src
+    Movzx(Reg64(dest), MemIndirect(addr_reg)) => "movzx " + dest + ", [" + addr_reg + "]"
+    Lea(Reg64(dest), RipRel32(label)) => "lea " + dest + ", [" + label + " rip]"
+    Lea(Reg64(dest), StackBP64(offset)) => "lea " + dest + ", [rbp" + (if offset >= 0 { "+" } else { "" }) + offset.to_string() + "]"
+    Add(Reg64(dest), Reg64(src)) => "add " + dest + ", " + src
+    Add(Reg64(dest), Imm32(v)) => "add " + dest + ", $" + v.to_string()
+    Sub(Reg64(dest), Reg64(src)) => "sub " + dest + ", " + src
+    Sub(Reg64(dest), Imm32(v)) => "sub " + dest + ", $" + v.to_string()
+    Imul(Reg64(dest), Reg64(src)) => "imul " + dest + ", " + src
+    Idiv(Reg64(src)) => "idiv " + src
+    Cmp(Reg64(dest), Reg64(src)) => "cmp " + dest + ", " + src
+    Cmp(Reg64(dest), Imm32(v)) => "cmp " + dest + ", $" + v.to_string()
+    Test(Reg64(dest), Reg64(src)) => "test " + dest + ", " + src
+    And(Reg64(dest), Reg64(src)) => "and " + dest + ", " + src
+    And(Reg64(dest), Imm32(v)) => "and " + dest + ", $" + v.to_string()
+    Or(Reg64(dest), Reg64(src)) => "or " + dest + ", " + src
+    Or(Reg64(dest), Imm32(v)) => "or " + dest + ", $" + v.to_string()
+    Xor(Reg64(dest), Reg64(src)) => "xor " + dest + ", " + src
+    Xor(Reg64(dest), Imm32(v)) => "xor " + dest + ", $" + v.to_string()
+    Not(Reg64(dest)) => "not " + dest
+    Neg(Reg64(dest)) => "neg " + dest
+    Inc(Reg64(dest)) => "inc " + dest
+    Dec(Reg64(dest)) => "dec " + dest
+    Cqo => "cqo"
+    Shl(Reg64(dest), Imm8(1)) => "shl " + dest
+    Shl(Reg64(dest), Imm8(v)) => "shl " + dest + ", " + v.to_string()
+    Shl(Reg64(dest), Reg64(src)) => "shl " + dest + ", " + src
+    Shr(Reg64(dest), Imm8(1)) => "shr " + dest
+    Shr(Reg64(dest), Imm32(v)) => "shr " + dest + ", " + v.to_string()
+    Shr(Reg64(dest), Reg64("cl")) => "shr " + dest + ", cl"
+    Sar(Reg64(dest), Imm8(1)) => "sar " + dest
+    Sar(Reg64(dest), Reg64("cl")) => "sar " + dest + ", cl"
+    Jmp(label) => "jmp " + label
+    Je(label) => "je " + label
+    Jne(label) => "jne " + label
+    Jg(label) => "jg " + label
+    Jge(label) => "jge " + label
+    Jl(label) => "jl " + label
+    Jle(label) => "jle " + label
+    Ja(label) => "ja " + label
+    Jae(label) => "jae " + label
+    Jb(label) => "jb " + label
+    Jbe(label) => "jbe " + label
+    Jz(label) => "jz " + label
+    Jnz(label) => "jnz " + label
+    Jp(label) => "jp " + label
+    Setz(Reg8(dest)) => "setz " + dest
+    Setnz(Reg8(dest)) => "setnz " + dest
+    Setg(Reg8(dest)) => "setg " + dest
+    Setge(Reg8(dest)) => "setge " + dest
+    Setl(Reg8(dest)) => "setl " + dest
+    Setle(Reg8(dest)) => "setle " + dest
+    Seta(Reg8(dest)) => "seta " + dest
+    Setae(Reg8(dest)) => "setae " + dest
+    Setb(Reg8(dest)) => "setb " + dest
+    Setbe(Reg8(dest)) => "setbe " + dest
+    PushXmm(reg) => "pushxmm " + reg
+    PopXmm(reg) => "popxmm " + reg
+    Call(label) => "call " + label
+    Movsd(Xmm(dest), Xmm(src)) => "movsd " + dest + ", " + src
+    Movsd(Xmm(dest), RipRel32(label)) => "movsd " + dest + ", [" + label + " rip]"
+    Movsd(RipRel32(label), Xmm(src)) => "movsd [" + label + " rip], " + src
+    Movsd(Xmm(dest), StackBP64(offset)) => "movsd " + dest + ", [rbp" + (if offset >= 0 { "+" } else { "" }) + offset.to_string() + "]"
+    Movsd(Xmm(dest), MemIndirect(base)) => "movsd " + dest + ", [" + base + "]"
+    Movsd(StackBP64(offset), Xmm(src)) => "movsd [rbp" + (if offset >= 0 { "+" } else { "" }) + offset.to_string() + "], " + src
+    Movsd(MemIndirect(base), Xmm(src)) => "movsd [" + base + "], " + src
+    Addsd(Xmm(dest), Xmm(src)) => "addsd " + dest + ", " + src
+    Subsd(Xmm(dest), Xmm(src)) => "subsd " + dest + ", " + src
+    Mulsd(Xmm(dest), Xmm(src)) => "mulsd " + dest + ", " + src
+    Divsd(Xmm(dest), Xmm(src)) => "divsd " + dest + ", " + src
+    Ucomisd(Xmm(dest), Xmm(src)) => "ucomisd " + dest + ", " + src
+    Cvtsi2sd(Xmm(dest), Reg64(src)) => "cvtsi2sd " + dest + ", " + src
+    Cvttsd2si(Reg64(dest), Xmm(src)) => "cvttsd2si " + dest + ", " + src
+    RepMovsq => "rep movsq"
+    _ => "???"
+  }
+}
+
+///|
+fn CodeGen::trace_instruction(self : CodeGen, inst : X86Inst) -> CodeGen {
+  if self.debug_level >= 1 {
+    let s = inst_to_string(inst)
+    println("  " + s)
+  }
+  self
 }
 
 ///|
@@ -374,6 +490,7 @@ fn CodeGen::_emit_rex(
 
 ///|
 fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
+  let g = self.trace_instruction(inst)
   match inst {
     Nop => self.emit_byte(0x90)
     Ret => self.emit_byte(0xC3)
@@ -8276,12 +8393,13 @@ fn collect_funcs(
 }
 
 ///|
-pub fn codegen(ast : AST) -> Bytes {
+pub fn codegen(ast : AST, debug_level: Int) -> Bytes {
   // Collect all functions
   let all_funcs = collect_funcs(ast, Map::new())
 
   let mut g = CodeGen::new()
   g = { ..g, code: g.code + [0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90] }
+  g = { ..g, debug_level: debug_level }
   g = g.define_label("main")
   g = g.emit_inst(Push(Reg64("rbp")))
   g = g.emit_inst(Mov(Reg64("rbp"), Reg64("rsp")))
