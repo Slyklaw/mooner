@@ -7201,19 +7201,19 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
     }
     Break =>
       // Jump to break label of innermost loop
-      if self.loop_labels.length() > 0 {
+      if self.loop_labels.length() == 0 {
+        abort("break not inside loop")
+      } else {
         let (break_label, _) = self.loop_labels[self.loop_labels.length() - 1]
         self.emit_inst(Jmp(break_label))
-      } else {
-        self
       }
     Continue =>
       // Jump to continue label of innermost loop
-      if self.loop_labels.length() > 0 {
+      if self.loop_labels.length() == 0 {
+        abort("continue not inside loop")
+      } else {
         let (_, continue_label) = self.loop_labels[self.loop_labels.length() - 1]
         self.emit_inst(Jmp(continue_label))
-      } else {
-        self
       }
     MatchExpr(scrutinee, cases) => {
       let mut g = self
