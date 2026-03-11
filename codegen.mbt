@@ -2222,26 +2222,28 @@ fn CodeGen::codegen_user_func_call2(
     // Push the argument address/result onto stack
     g = g.emit_inst(Push(Reg64("rax")))
     
-    // Track stack usage
-    if is_tuple {
-      // For tuple arguments: elements + address
-      // For tuple literals, we need to count the elements
-      match args[i] {
-        Tuple(elems) => {
-          total_stack_usage = total_stack_usage + elems.length() * 8 + 8
-        }
-        Ident(name) => {
-          // For tuple variables, we don't know the size at compile time
-          // We'll assume a default size of 3 elements (24 bytes) + address (8 bytes)
-          total_stack_usage = total_stack_usage + 32
-        }
-        _ => {
-          total_stack_usage = total_stack_usage + 8
-        }
-      }
-    } else {
-      total_stack_usage = total_stack_usage + 8
-    }
+     // Track stack usage - only for stack args (i >= 6)
+     if i >= 6 {
+       if is_tuple {
+         // For tuple arguments: elements + address
+         // For tuple literals, we need to count the elements
+         match args[i] {
+           Tuple(elems) => {
+             total_stack_usage = total_stack_usage + elems.length() * 8 + 8
+           }
+           Ident(name) => {
+             // For tuple variables, we don't know the size at compile time
+             // We'll assume a default size of 3 elements (24 bytes) + address (8 bytes)
+             total_stack_usage = total_stack_usage + 32
+           }
+           _ => {
+             total_stack_usage = total_stack_usage + 8
+           }
+         }
+       } else {
+         total_stack_usage = total_stack_usage + 8
+       }
+     }
     
     i = i - 1
   }
