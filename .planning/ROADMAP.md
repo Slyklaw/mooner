@@ -52,22 +52,10 @@
 **Plans:** 2 plans
 
 **Plan List:**
-- [ ] 02-01-PLAN.md — Fix GuardExpr float value propagation
-- [ ] 02-02-PLAN.md — Verify float runtime conversion precision
+- [x] 02-01-PLAN.md — Fix GuardExpr float value propagation ✓
+- [x] 02-02-PLAN.md — Verify float runtime conversion precision ✓
 
-**Success Criteria** (what must be TRUE):
-
-1. Float values inside tuples print their decimal representation (e.g., `(1, 2.5)` prints correctly, not `<tuple>`)
-2. Mixed-type tuples with floats work correctly with println
-3. Float tuple field access returns correct float value
-4. Float variable runtime conversion prints full value (e.g., `let x = 3.14; println(x)` shows "3.14", not "3.0")
-5. `println(float_expr)` outputs correct decimal representation for any float expression
-
-**Gap Closure:** String interpolation with value 0 in println
-- `println("RGB: \{r}")` where r=0 now prints "RGB: 0" (not empty string)
-- Root cause: inline int-to-string code in println didn't null-terminate
-
-**Status:** Complete (2026-03-09)
+**Status:** Complete (2026-03-10)
 
 ---
 
@@ -131,7 +119,7 @@
 | Phase | Status | Completed |
 |-------|--------|-----------|
 | 1. Map Support | ✓ Complete | 2026-03-09 |
-| 2. Tuple & Float Improvements | ✓ Complete | 2026-03-09 |
+| 2. Tuple & Float Improvements | ✓ Complete | 2026-03-10 |
 | 3. Enum Pattern Matching | ✓ Complete | 2026-03-10 |
 | 4. Pattern Matching Enhancements | ✓ Complete | 2026-03-10 |
 | 5. Derive(Show) Macro | ✓ Complete | 2026-03-10 |
