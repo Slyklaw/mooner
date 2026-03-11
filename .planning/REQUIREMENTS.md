@@ -30,14 +30,17 @@
 
 ## Traceability
 
-*To be populated during roadmap creation.*
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| COMP-01 | Phase 2 | Pending |
+| COMP-02 | Phase 3 | Pending |
+| COMP-03 | Phase 4 | Pending |
+| COMP-04 | Phase 5 | Pending |
+| COMP-05 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 5 total
-- Mapped to phases: ?
-- Unmapped: ?
+- Mapped to phases: 5
+- Unmapped: 0 ✓
 
 ---
-
-*Requirements defined: 2026-03-11*
-*Last updated: 2026-03-11 after initialization*
