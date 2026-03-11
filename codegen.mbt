@@ -3595,7 +3595,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                                 g = g.emit_inst(
                                   Mov(Reg64("rax"), StackBP64(offset)),
                                 )
-      None => panic("undefined label: " + label_name)
+                              None => abort("undefined variable: " + var_name)
                             }
                             g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
                             g = g.emit_inst(Jne(true_label))
@@ -5990,10 +5990,10 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g = g.codegen_expr(then)
       g = g.emit_inst(Jmp(end_label))
       g = g.define_label(else_label)
-      match else_opt {
-        Some(else_body) => g = g.codegen_expr(else_body)
-        None => panic("undefined label: " + label_name)
-                            }
+      g = match else_opt {
+        Some(else_body) => g.codegen_expr(else_body)
+        None => g  // No else branch, nothing to generate
+      }
       g = g.define_label(end_label)
       g
     }
@@ -7079,30 +7079,30 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       // For for: continue goes to step label
       g = { ..g, loop_labels: g.loop_labels + [(end_label, step_label)] }
       // Execute init
-      match init {
-        Some(i) => g = g.codegen_expr(i)
-        None => panic("undefined label: " + label_name)
-                            }
+      g = match init {
+        Some(i) => g.codegen_expr(i)
+        None => g
+      }
       // Define condition label
       g = g.define_label(cond_label)
       // Evaluate condition (default to true if none)
-      match cond {
+      g = match cond {
         Some(c) => {
-          g = g.codegen_expr(c)
-          g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
-          g = g.emit_inst(Je(end_label))
+          let g = g.codegen_expr(c)
+          let g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
+          g.emit_inst(Je(end_label))
         }
-        None => panic("undefined label: " + label_name)
-                            }
+        None => g
+      }
       // Evaluate body
       g = g.codegen_expr(body)
       // Define step label
       g = g.define_label(step_label)
       // Execute step
-      match step {
-        Some(s) => g = g.codegen_expr(s)
-        None => panic("undefined label: " + label_name)
-                            }
+      g = match step {
+        Some(s) => g.codegen_expr(s)
+        None => g
+      }
       // Jump back to condition
       g = g.emit_inst(Jmp(cond_label))
       // Define end label
@@ -8385,19 +8385,18 @@ fn collect_funcs(
       collect_funcs(body, f)
     }
     ForLoop(init, cond, step, body) => {
-      let mut f = funcs
-      match init {
-        Some(i) => f = collect_funcs(i, f)
-        None => panic("undefined label: " + label_name)
-                            }
-      match cond {
-        Some(c) => f = collect_funcs(c, f)
-        None => panic("undefined label: " + label_name)
-                            }
-      match step {
-        Some(s) => f = collect_funcs(s, f)
-        None => panic("undefined label: " + label_name)
-                            }
+      let f = match init {
+        Some(i) => collect_funcs(i, funcs)
+        None => funcs
+      }
+      let f = match cond {
+        Some(c) => collect_funcs(c, f)
+        None => f
+      }
+      let f = match step {
+        Some(s) => collect_funcs(s, f)
+        None => f
+      }
       collect_funcs(body, f)
     }
     _ => funcs
@@ -8544,7 +8543,7 @@ pub fn codegen(ast : AST, debug_level: Int) -> Bytes {
         code[write_pos + 2] = b2
         code[write_pos + 3] = b3
       }
-      None => panic("undefined label: " + label_name)
+      None => abort("undefined label: " + label_name)
     }
     i = i + 1
   }
