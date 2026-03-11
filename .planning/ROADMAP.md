@@ -44,6 +44,19 @@
   5. Nested control flow (loops inside conditionals, etc.) works correctly
   6. No regressions in examples 001-008,010
 
+## Plans Summary
+
+**Plans:** 7 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Fix compilation errors in panic function calls
+- [ ] 03-02-PLAN.md — Update CodeGen pending_labels type to three-tuple
+- [ ] 03-03-PLAN.md — Modify emit_inst to record start position and instruction length
+- [ ] 03-04-PLAN.md — Rewrite pending label fixup loop with correct offset computation
+- [ ] 03-05-PLAN.md — Implement label namespace isolation with function indexing
+- [ ] 03-06-PLAN.md — Add break/continue outside-loop validation
+- [ ] 03-07-PLAN.md — Verify nested break/continue handling and comprehensive testing
+
 ### Phase 4: Enums
 **Goal**: Enum pattern matching discriminates variants correctly; each variant has unique discriminant
 **Depends on**: Phase 3
