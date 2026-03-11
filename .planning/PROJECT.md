@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A MoonBit compiler implementation that compiles a simple language to x86_64 ELF executables. The compiler currently passes 7 of 13 test examples; 4 have critical codegen bugs causing incorrect output or segfaults, 1 has acceptable float precision degradation, and 1 is out of scope due to missing runtime support.
+A MoonBit compiler implementation that compiles a simple language to x86_64 ELF executables. The compiler currently passes 8 of 13 test examples; 3 have critical codegen bugs causing incorrect output or segfaults, 1 has acceptable float precision degradation, and 1 is out of scope due to missing runtime support.
 
 Goal: Fix the codegen bugs to make all 13 examples produce correct output (with 012 acknowledged as expected failure).
 
@@ -14,7 +14,7 @@ The compiler generates correct, executable output for all language features cove
 
 ### Validated
 
-(None yet — ship to validate)
+- ✓ COMP-01 — Function calls with arguments return correct values (Phase 2)
 
 ### Active
 
@@ -43,7 +43,7 @@ The compiler consists of:
 Comprehensive codebase analysis exists in `.planning/codebase/`:
 - Architecture, stack, conventions, concerns, integrations, testing, structure
 
-Test suite: `examples/mbt_examples/001` through `013` with reference outputs. Current status: 7 passing, 4 failing (segfaults or wrong output), 1 acceptable, 1 out-of-scope.
+Test suite: `examples/mbt_examples/001` through `013` with reference outputs. Current status: 8 passing, 3 failing (009, 011, 013), 1 acceptable (007), 1 out-of-scope (012).
 
 ## Constraints
 
@@ -59,7 +59,8 @@ Test suite: `examples/mbt_examples/001` through `013` with reference outputs. Cu
 | Focus exclusively on codegen bugs | Parser and lexer appear correct; failures trace to codegen | — Pending |
 | Fix order: 004 → 009 → 011 → 013 | Dependency chain: function calls foundational; control flow next; enums before full pattern matching | — Pending |
 | Allow temporary debug code in codegen | Needed for investigation; will be cleaned up | — Pending |
+| Phase 2: Implement full System V ABI compliance | Parameter offset miscalculation and stack cleanup overrun caused function call failures | ✓ Fixed: 004 returns 42, all passing tests still pass |
 
 ---
 
-*Last updated: 2026-03-11 after project initialization*
+*Last updated: 2026-03-11 after Phase 2 completion*
