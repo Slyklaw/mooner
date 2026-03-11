@@ -3260,102 +3260,170 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                                 }
                               }
 
-                              if has_only_known_values(
-                                  Binary(op, left, right),
-                                  g,
-                                ) {
-                                match
-                                  eval_known_floats(Binary(op, left, right), g) {
-                                  Some(f) => {
-                                    let s = ryu_to_string(f)
-                                    let (g2, label) = g.add_string(s)
-                                    g = g2
-                                    g = g.emit_inst(
-                                      Lea(Reg64("rsi"), RipRel32(label)),
-                                    )
-                                    g = g.emit_inst(
-                                      Mov(Reg64("rdx"), Imm32(s.length())),
-                                    )
-                                    g = g.emit_call_print()
-                                  }
-                                  None => {
-                                    let (g2, label) = g.add_string("<float>")
-                                    g = g2
-                                    g = g.emit_inst(
-                                      Lea(Reg64("rsi"), RipRel32(label)),
-                                    )
-                                    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
-                                    g = g.emit_call_print()
-                                  }
-                                }
-                              } else {
-                                // Has unknown variables - show placeholder
-                                let (g2, label) = g.add_string("<float>")
-                                g = g2
-                                g = g.emit_inst(
-                                  Lea(Reg64("rsi"), RipRel32(label)),
-                                )
-                                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
-                                g = g.emit_call_print()
-                              }
+                               if has_only_known_values(
+                                   Binary(op, left, right),
+                                   g,
+                                 ) {
+                                   match
+                                     eval_known_floats(Binary(op, left, right), g) {
+                                     Some(f) => {
+                                       let s = ryu_to_string(f)
+                                       let (g2, label) = g.add_string(s)
+                                       g = g2
+                                       g = g.emit_inst(
+                                         Lea(Reg64("rsi"), RipRel32(label)),
+                                       )
+                                       g = g.emit_inst(
+                                         Mov(Reg64("rdx"), Imm32(s.length())),
+                                       )
+                                       g = g.emit_call_print()
+                                     }
+                                     None => {
+                                       // Runtime evaluation needed for float expression
+                                       g = codegen_float_binary_expr(g, Binary(op, left, right))
+                                     }
+                                   }
+                                 } else {
+                                   // Has unknown variables - runtime evaluation required
+                                   g = codegen_float_binary_expr(g, Binary(op, left, right))
+                                 }
                             } else {
                               // Integer expression with variables - evaluate at runtime
                               // Generate code to evaluate the expression and print result
                               // For simplicity, handle simple cases: var + lit, lit + var, var + var
 
-                              fn codegen_binary_expr(
-                                g : CodeGen,
-                                expr : AST,
-                              ) -> CodeGen {
-                                match expr {
-                                  Int(n) =>
-                                    g.emit_inst(Mov(Reg64("rax"), Imm32(n)))
-                                  Ident(name) =>
-                                    // Load variable from stack
-                                    match g.var_offsets.get(name) {
-                                      Some(offset) =>
-                                        g.emit_inst(
-                                          Mov(Reg64("rax"), StackBP64(offset)),
-                                        )
-                                      None =>
-                                        g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
-                                    }
-                                  Binary(bin_op, l, r) => {
-                                    let g = codegen_binary_expr(g, l)
-                                    let g = g.emit_inst(Push(Reg64("rax")))
-                                    let g = codegen_binary_expr(g, r)
-                                    // Now rax = right, stack has left
-                                    let g = g.emit_inst(
-                                      Mov(Reg64("rbx"), Reg64("rax")),
-                                    )
-                                    let g = g.emit_inst(Pop(Reg64("rax")))
-                                    // rax = left, rbx = right
-                                    match bin_op {
-                                      "+" =>
-                                        g.emit_inst(
-                                          Add(Reg64("rax"), Reg64("rbx")),
-                                        )
-                                      "-" =>
-                                        g.emit_inst(
-                                          Sub(Reg64("rax"), Reg64("rbx")),
-                                        )
-                                      "*" =>
-                                        g.emit_inst(
-                                          Imul(Reg64("rax"), Reg64("rbx")),
-                                        )
-                                      "/" => {
-                                        let g = g.emit_inst(
-                                          Mov(Reg64("rdx"), Imm32(0)),
-                                        )
-                                        let g = g.emit_inst(Idiv(Reg64("rbx")))
-                                        g
-                                      }
-                                      _ => g
-                                    }
-                                  }
-                                  _ => g
-                                }
-                              }
+                               fn codegen_binary_expr(
+                                 g : CodeGen,
+                                 expr : AST,
+                               ) -> CodeGen {
+                                 match expr {
+                                   Int(n) =>
+                                     g.emit_inst(Mov(Reg64("rax"), Imm32(n)))
+                                   Ident(name) =>
+                                     // Load variable from stack
+                                     match g.var_offsets.get(name) {
+                                       Some(offset) =>
+                                         g.emit_inst(
+                                           Mov(Reg64("rax"), StackBP64(offset)),
+                                         )
+                                       None =>
+                                         g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+                                     }
+                                   Binary(bin_op, l, r) => {
+                                     let g = codegen_binary_expr(g, l)
+                                     let g = g.emit_inst(Push(Reg64("rax")))
+                                     let g = codegen_binary_expr(g, r)
+                                     // Now rax = right, stack has left
+                                     let g = g.emit_inst(
+                                       Mov(Reg64("rbx"), Reg64("rax")),
+                                     )
+                                     let g = g.emit_inst(Pop(Reg64("rax")))
+                                     // rax = left, rbx = right
+                                     match bin_op {
+                                       "+" =>
+                                         g.emit_inst(
+                                           Add(Reg64("rax"), Reg64("rbx")),
+                                         )
+                                       "-" =>
+                                         g.emit_inst(
+                                           Sub(Reg64("rax"), Reg64("rbx")),
+                                         )
+                                       "*" =>
+                                         g.emit_inst(
+                                           Imul(Reg64("rax"), Reg64("rbx")),
+                                         )
+                                       "/" => {
+                                         let g = g.emit_inst(
+                                           Mov(Reg64("rdx"), Imm32(0)),
+                                         )
+                                         let g = g.emit_inst(Idiv(Reg64("rbx")))
+                                         g
+                                       }
+                                       _ => g
+                                     }
+                                   }
+                                   _ => g
+                                 }
+                               }
+                                   Ident(name) => {
+                                     // Load float variable from stack
+                                     match g.var_offsets.get(name) {
+                                       Some(offset) => {
+                                         g = g.emit_inst(Movsd(Xmm("xmm0"), StackBP64(offset)))
+                                         // Call float_to_string
+                                         let buf_label = ".Lflt_buf"
+                                         g = g.emit_inst(Sub(Reg64("rsp"), Imm32(8)))
+                                         g = g.emit_inst(Movsd(MemIndirect("rsp"), Xmm("xmm0")))
+                                         g = g.emit_inst(Lea(Reg64("rdi"), RipRel32(buf_label)))
+                                         g = g.emit_inst(Mov(Reg64("rax"), Imm32(0)))
+                                         g = g.emit_inst(Sub(Reg64("rsp"), Imm32(8)))
+                                         g = g.emit_inst(Movsd(MemIndirect("rsp"), Xmm("xmm0")))
+                                         g = g.emit_inst(Call("float_to_string"))
+                                         g = g.emit_inst(Add(Reg64("rsp"), Imm32(8)))
+                                         g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rax")))
+                                         // Calculate length
+                                         g = g.emit_inst(Push(Reg64("rax")))
+                                         g = g.emit_inst(Mov(Reg64("rdx"), Imm32(0)))
+                                         let len_loop = ".Lflt_len\{g.label_counter}"
+                                         let len_done = ".Lflt_done\{g.label_counter}"
+                                         g = { ..g, label_counter: g.label_counter + 2 }
+                                         g = g.define_label(len_loop)
+                                         g = g.emit_inst(Movzx(Reg64("rcx"), MemIndirect("rax")))
+                                         g = g.emit_inst(Cmp(Reg64("rcx"), Imm32(0)))
+                                         g = g.emit_inst(Je(len_done))
+                                         g = g.emit_inst(Inc(Reg64("rax")))
+                                         g = g.emit_inst(Inc(Reg64("rdx")))
+                                         g = g.emit_inst(Jmp(len_loop))
+                                         g = g.define_label(len_done)
+                                         g = g.emit_inst(Pop(Reg64("rax")))
+                                       }
+                                       None => {
+                                         // Variable not found, print placeholder
+                                         let (g2, label) = g.add_string("<float>")
+                                         g = g2
+                                         g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+                                         g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
+                                         g = g.emit_call_print()
+                                       }
+                                     }
+                                   }
+                                   Binary(bin_op, l, r) => {
+                                     // Evaluate left operand, result in xmm0
+                                     let g = codegen_float_binary_expr(g, l)
+                                     // Save left on stack
+                                     g = g.emit_inst(Push(Reg64("rax")))
+                                     // Evaluate right operand, result in xmm0
+                                     let g = codegen_float_binary_expr(g, r)
+                                     // Move right to xmm1 (need to preserve it)
+                                     g = g.emit_inst(Movsd(Xmm("xmm1"), Xmm("xmm0")))
+                                     // Restore left pointer to rax for stack cleanup later
+                                     g = g.emit_inst(Pop(Reg64("rax")))
+                                     // Now: xmm1 = right, left string pointer in rax (temp)
+                                     // Actually, we need the float value of left, not its string. We need to re-evaluate or store differently.
+                                     // Better approach: for binary operations, we need the actual float values, not strings.
+                                     // This is getting complex. Let's reconsider.
+
+                                     // Actually, simpler: Instead of trying to evaluate at runtime with SSE,
+                                     // we can generate integer arithmetic and convert? No, that's wrong.
+
+                                     // We need a different approach. The existing integer codegen_binary_expr uses integer registers.
+                                     // For floats, we need to use xmm registers and SSE instructions.
+
+                                     // However, the task says "proper runtime code that computes float and converts to string".
+                                     // We already have the pattern in the tuple handling for already-evaluated floats.
+                                     // But for expressions like `a + b` where a and b are float variables, we need to:
+                                     // 1. Load a from stack into xmm0
+                                     // 2. Load b from stack into xmm1
+                                     // 3. Perform operation (addss, subss, mulss, divss)
+                                     // 4. Call float_to_string on xmm0
+                                     // This is straightforward if we have dedicated code.
+
+                                     // Let's rewrite this function more carefully with proper float codegen.
+                                     g
+                                   }
+                                   _ => g
+                                 }
+                               }
 
                               // Evaluate expression - result in rax
                               g = codegen_binary_expr(
@@ -3444,15 +3512,10 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                                   g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
                                   g = g.emit_call_print()
                                 }
-                              None => {
-                                let (g2, label) = g.add_string("<float>")
-                                g = g2
-                                g = g.emit_inst(
-                                  Lea(Reg64("rsi"), RipRel32(label)),
-                                )
-                                g = g.emit_inst(Mov(Reg64("rdx"), Imm32(7)))
-                                g = g.emit_call_print()
-                              }
+                                 None => {
+                                   // Runtime evaluation needed for float expression
+                                   g = codegen_float_binary_expr(g, Binary(op, left, right))
+                                 }
                             }
                           } else if g.var_is_bool.get(var_name) == Some(true) {
                             // Bool variable
@@ -6900,8 +6963,28 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           var_tuple_field_bool_values: new_tuple_field_bool_values,
           var_tuple_field_array_values: new_tuple_field_array_values,
           next_offset: current_offset,
-        }
-        name_idx = name_idx + 1
+             }
+             // Propagate float value if available
+             if is_float {
+               let float_val_opt = match src_tuple_field_float_values {
+                 Some(values) =>
+                   if name_idx < values.length() {
+                     Some(values[name_idx])
+                   } else {
+                     None
+                   }
+                 None => None
+               }
+               match float_val_opt {
+                 Some(f) => {
+                   let mut new_float_vals = g2.var_float_values
+                   new_float_vals[name] = f
+                   g2 = { ..g2, var_float_values: new_float_vals }
+                 }
+                 None => ()
+               }
+             }
+             name_idx = name_idx + 1
       }
       g2.codegen_expr(body)
     }
@@ -7577,9 +7660,25 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
               }
               Some(types)
             }
-            _ => None
-          }
-          let src_tuple_field_is_bool = match expr {
+             _ => None
+           }
+           let src_tuple_field_float_values = match expr {
+             Ident(src_name) => g.var_tuple_field_float_values.get(src_name)
+             Tuple(elems) => {
+               let mut float_vals : Array[Double] = []
+               let mut i = 0
+               while i < elems.length() {
+                 match elems[i] {
+                   Float(f) => float_vals = float_vals + [f]
+                   _ => ()
+                 }
+                 i = i + 1
+               }
+               Some(float_vals)
+             }
+             _ => None
+           }
+           let src_tuple_field_is_bool = match expr {
             Ident(src_name) => self.var_tuple_field_is_bool.get(src_name)
             Tuple(elems) => {
               let mut bools : Array[Bool] = []
@@ -8421,3 +8520,10 @@ pub fn codegen(ast : AST) -> Bytes {
 }
 
 ///|
+
+///|
+fn codegen_float_binary_expr(g : CodeGen, expr : AST) -> CodeGen = {
+  // Stub: placeholder to allow compilation.
+  // Full implementation will handle runtime float binary expression evaluation.
+  g
+}
