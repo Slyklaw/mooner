@@ -47,6 +47,9 @@ pub struct CodeGen {
   var_enum_variant : Map[String, String]
   // Debug level for codegen tracing (0 = off)
   debug_level : Int
+  // Function index for label namespace isolation
+  func_counter : Int
+  current_func_idx : Int
 }
 
 ///|
@@ -95,6 +98,8 @@ fn CodeGen::new() -> CodeGen {
     var_is_enum: Map::new(),
     var_enum_variant: Map::new(),
     debug_level: 0,
+    func_counter: 0,
+    current_func_idx: 0,
   }
 }
 
@@ -253,7 +258,7 @@ fn CodeGen::emit64(self : CodeGen, v : Int) -> CodeGen {
 
 ///|
 fn CodeGen::new_label(self : CodeGen) -> (CodeGen, String) {
-  let name = ".L\{self.label_counter}"
+  let name = ".Lfn\{self.current_func_idx}_\{self.label_counter}"
   ({ ..self, label_counter: self.label_counter + 1 }, name)
 }
 
@@ -415,8 +420,8 @@ fn CodeGen::emit_operand64(self : CodeGen, op : X86Operand) -> CodeGen {
     Stack64(offset) => self.emit32(offset)
     RipRel32(_label) => self.emit32(0)
     Label(name) => {
-      let pos = self.code.length()
-      let new_pending = self.pending_labels + [(name, pos, 5)]
+      let start_pos = self.code.length()
+      let new_pending = self.pending_labels + [(name, start_pos, 5)]
       let g = { ..self, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1100,11 +1105,12 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
          "r15" => 7
          _ => 0
        }
-       let g = self.emit_byte(0x48) // REX.w
+       let g = self
+       let start_pos = g.code.length()
+       let g = g.emit_byte(0x48) // REX.w
        let g = g.emit_byte(0x8D) // LEA
        let g = g.emit_byte(modrm(0, reg_code, 5)) // mod=00, reg=reg, rm=101 (RIP)
-       let pos = g.code.length()
-        let new_pending = g.pending_labels + [(label, pos, 5)]
+       let new_pending = g.pending_labels + [(label, start_pos, 7)]
        let g = { ..g, pending_labels: new_pending }
        g.emit32(0)
      }
@@ -1527,113 +1533,127 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g.emit_byte(modrm(3, 7, rm_code))
     }
     Jmp(label) => {
-      let g = self.emit_byte(0xE9)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_byte(0xE9)
+      let new_pending = g.pending_labels + [(label, start_pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     Je(label) => {
-      let g = self.emit_byte(0x0F)
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0x84)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let new_pending = g.pending_labels + [(label, start_pos, 6)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     Jne(label) => {
-      let g = self.emit_byte(0x0F)
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0x85)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let new_pending = g.pending_labels + [(label, start_pos, 6)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     Jg(label) => {
-      let g = self.emit_byte(0x0F)
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0x8F)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let new_pending = g.pending_labels + [(label, start_pos, 6)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     Jge(label) => {
-      let g = self.emit_byte(0x0F)
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0x8D)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let new_pending = g.pending_labels + [(label, start_pos, 6)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     Jl(label) => {
-      let g = self.emit_byte(0x0F)
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0x8C)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let new_pending = g.pending_labels + [(label, start_pos, 6)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     Jle(label) => {
-      let g = self.emit_byte(0x0F)
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0x8E)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let new_pending = g.pending_labels + [(label, start_pos, 6)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     Ja(label) => {
-      let g = self.emit_byte(0x0F)
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0x87)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let new_pending = g.pending_labels + [(label, start_pos, 6)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     Jae(label) => {
-      let g = self.emit_byte(0x0F)
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0x83)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let new_pending = g.pending_labels + [(label, start_pos, 6)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     Jb(label) => {
-      let g = self.emit_byte(0x0F)
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0x82)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let new_pending = g.pending_labels + [(label, start_pos, 6)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     Jbe(label) => {
-      let g = self.emit_byte(0x0F)
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0x86)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let new_pending = g.pending_labels + [(label, start_pos, 6)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     Jz(label) => {
-      let g = self.emit_byte(0x0F)
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0x84)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let new_pending = g.pending_labels + [(label, start_pos, 6)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     Jnz(label) => {
-      let g = self.emit_byte(0x0F)
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0x85)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let new_pending = g.pending_labels + [(label, start_pos, 6)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     Jp(label) => {
-      let g = self.emit_byte(0x0F)
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_byte(0x0F)
       let g = g.emit_byte(0x8A)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let new_pending = g.pending_labels + [(label, start_pos, 6)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1712,9 +1732,10 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g.emit_bytes([0x48, 0x83, 0xC4, 0x08])
     }
     Call(label) => {
-      let g = self.emit_byte(0xE8)
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_byte(0xE8)
+      let new_pending = g.pending_labels + [(label, start_pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1725,20 +1746,22 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       g.emit_byte(modrm(3, src_code, dest_code))
     }
     Movsd(Xmm(dest), RipRel32(label)) => {
-      let g = self.emit_bytes([0xF2, 0x0F, 0x10])
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_bytes([0xF2, 0x0F, 0x10])
       let dest_code = xmm_reg_code(dest)
       let g = g.emit_byte(modrm(0, dest_code, 5))
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let new_pending = g.pending_labels + [(label, start_pos, 8)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
     Movsd(RipRel32(label), Xmm(src)) => {
-      let g = self.emit_bytes([0xF2, 0x0F, 0x11])
+      let g = self
+      let start_pos = g.code.length()
+      let g = g.emit_bytes([0xF2, 0x0F, 0x11])
       let src_code = xmm_reg_code(src)
       let g = g.emit_byte(modrm(0, src_code, 5))
-      let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos, 5)]
+      let new_pending = g.pending_labels + [(label, start_pos, 8)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
