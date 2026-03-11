@@ -36,6 +36,7 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 | Phase 02 P02 | 2 min | 1 tasks | 1 files |
 | Phase 02-function-calls P03 | ~4 min | 2 tasks | 1 files |
 - [Phase 02-function-calls]: None - followed plan as specified — Plan executed exactly; auto-advance allowed smooth verification
+| Phase 01-setup-investigation P02 | 5min | 3 tasks | 3 files |
 
 ### Blockers
 
