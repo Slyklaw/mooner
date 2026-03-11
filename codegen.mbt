@@ -8250,7 +8250,7 @@ fn CodeGen::codegen_func(
   while j < params.length() {
     let (param_name, param_type) = params[j]
     if j < 6 {
-      let offset = -saved_regs_size - (j + 1) * 8
+      let offset = -saved_regs_size - j * 8
       let new_offsets = g.var_offsets
       new_offsets[param_name] = offset
       g = { ..g, var_offsets: new_offsets }
