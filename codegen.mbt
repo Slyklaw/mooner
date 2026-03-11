@@ -2,7 +2,7 @@
 pub struct CodeGen {
   code : Array[Byte]
   labels : Map[String, Int]
-  pending_labels : Array[(String, Int)]
+  pending_labels : Array[(String, Int, Int)]
   label_counter : Int
   var_offsets : Map[String, Int]
   var_is_float : Map[String, Bool]
@@ -216,7 +216,15 @@ fn inst_to_string(inst : X86Inst) -> String {
 fn CodeGen::trace_instruction(self : CodeGen, inst : X86Inst) -> CodeGen {
   if self.debug_level >= 1 {
     let s = inst_to_string(inst)
-    println("  " + s)
+    // Use syscall-based println implementation
+    let mut g = self
+    let (g2, label) = g.add_string("  " + s)
+    g = g2
+    g = g.emit_inst(Lea(Reg64("rsi"), RipRel32(label)))
+    g = g.emit_inst(Mov(Reg64("rdx"), Imm32(s.length())))
+    g = g.emit_inst(Mov(Reg64("rax"), Imm32(1)))
+    g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+    g = g.emit_inst(Syscall)
   }
   self
 }
@@ -408,7 +416,7 @@ fn CodeGen::emit_operand64(self : CodeGen, op : X86Operand) -> CodeGen {
     RipRel32(_label) => self.emit32(0)
     Label(name) => {
       let pos = self.code.length()
-      let new_pending = self.pending_labels + [(name, pos)]
+      let new_pending = self.pending_labels + [(name, pos, 5)]
       let g = { ..self, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1096,7 +1104,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
        let g = g.emit_byte(0x8D) // LEA
        let g = g.emit_byte(modrm(0, reg_code, 5)) // mod=00, reg=reg, rm=101 (RIP)
        let pos = g.code.length()
-       let new_pending = g.pending_labels + [(label, pos)]
+        let new_pending = g.pending_labels + [(label, pos, 5)]
        let g = { ..g, pending_labels: new_pending }
        g.emit32(0)
      }
@@ -1521,7 +1529,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     Jmp(label) => {
       let g = self.emit_byte(0xE9)
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1529,7 +1537,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x84)
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1537,7 +1545,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x85)
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1545,7 +1553,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x8F)
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1553,7 +1561,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x8D)
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1561,7 +1569,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x8C)
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1569,7 +1577,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x8E)
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1577,7 +1585,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x87)
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1585,7 +1593,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x83)
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1593,7 +1601,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x82)
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1601,7 +1609,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x86)
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1609,7 +1617,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x84)
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1617,7 +1625,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x85)
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1625,7 +1633,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let g = self.emit_byte(0x0F)
       let g = g.emit_byte(0x8A)
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1706,7 +1714,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
     Call(label) => {
       let g = self.emit_byte(0xE8)
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1721,7 +1729,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let dest_code = xmm_reg_code(dest)
       let g = g.emit_byte(modrm(0, dest_code, 5))
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -1730,7 +1738,7 @@ fn CodeGen::emit_inst(self : CodeGen, inst : X86Inst) -> CodeGen {
       let src_code = xmm_reg_code(src)
       let g = g.emit_byte(modrm(0, src_code, 5))
       let pos = g.code.length()
-      let new_pending = g.pending_labels + [(label, pos)]
+      let new_pending = g.pending_labels + [(label, pos, 5)]
       let g = { ..g, pending_labels: new_pending }
       g.emit32(0)
     }
@@ -2189,6 +2197,8 @@ fn get_struct_field_names(
 fn CodeGen::emit_call_print(self : CodeGen) -> CodeGen {
   let g = self.emit_inst(Mov(Reg64("rax"), Imm32(1)))
   let g = g.emit_inst(Mov(Reg64("rdi"), Imm32(1)))
+  let g = g.emit_inst(Mov(Reg64("rsi"), Reg64("rsi")))
+  let g = g.emit_inst(Mov(Reg64("rdx"), Reg64("rdx")))
   g.emit_inst(Syscall)
 }
 
@@ -3585,7 +3595,7 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
                                 g = g.emit_inst(
                                   Mov(Reg64("rax"), StackBP64(offset)),
                                 )
-                              None => ()
+      None => panic("undefined label: " + label_name)
                             }
                             g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
                             g = g.emit_inst(Jne(true_label))
@@ -5982,8 +5992,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g = g.define_label(else_label)
       match else_opt {
         Some(else_body) => g = g.codegen_expr(else_body)
-        None => ()
-      }
+        None => panic("undefined label: " + label_name)
+                            }
       g = g.define_label(end_label)
       g
     }
@@ -7071,8 +7081,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       // Execute init
       match init {
         Some(i) => g = g.codegen_expr(i)
-        None => ()
-      }
+        None => panic("undefined label: " + label_name)
+                            }
       // Define condition label
       g = g.define_label(cond_label)
       // Evaluate condition (default to true if none)
@@ -7082,8 +7092,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
           g = g.emit_inst(Cmp(Reg64("rax"), Imm32(0)))
           g = g.emit_inst(Je(end_label))
         }
-        None => ()
-      }
+        None => panic("undefined label: " + label_name)
+                            }
       // Evaluate body
       g = g.codegen_expr(body)
       // Define step label
@@ -7091,8 +7101,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       // Execute step
       match step {
         Some(s) => g = g.codegen_expr(s)
-        None => ()
-      }
+        None => panic("undefined label: " + label_name)
+                            }
       // Jump back to condition
       g = g.emit_inst(Jmp(cond_label))
       // Define end label
@@ -8378,16 +8388,16 @@ fn collect_funcs(
       let mut f = funcs
       match init {
         Some(i) => f = collect_funcs(i, f)
-        None => ()
-      }
+        None => panic("undefined label: " + label_name)
+                            }
       match cond {
         Some(c) => f = collect_funcs(c, f)
-        None => ()
-      }
+        None => panic("undefined label: " + label_name)
+                            }
       match step {
         Some(s) => f = collect_funcs(s, f)
-        None => ()
-      }
+        None => panic("undefined label: " + label_name)
+                            }
       collect_funcs(body, f)
     }
     _ => funcs
@@ -8520,20 +8530,21 @@ pub fn codegen(ast : AST, debug_level: Int) -> Bytes {
   let code = g.code
   let mut i = 0
   while i < g.pending_labels.length() {
-    let (label_name, ref_pos) = g.pending_labels[i]
+    let (label_name, start_pos, instr_len) = g.pending_labels[i]
     match g.labels.get(label_name) {
       Some(target_pos) => {
-        let offset = target_pos - (ref_pos + 4)
+        let offset = target_pos - (start_pos + instr_len)
+        let write_pos = start_pos + instr_len - 4
         let b0 = (offset.reinterpret_as_uint() & 0xFF).to_byte()
         let b1 = ((offset.reinterpret_as_uint() >> 8) & 0xFF).to_byte()
         let b2 = ((offset.reinterpret_as_uint() >> 16) & 0xFF).to_byte()
         let b3 = ((offset.reinterpret_as_uint() >> 24) & 0xFF).to_byte()
-        code[ref_pos] = b0
-        code[ref_pos + 1] = b1
-        code[ref_pos + 2] = b2
-        code[ref_pos + 3] = b3
+        code[write_pos] = b0
+        code[write_pos + 1] = b1
+        code[write_pos + 2] = b2
+        code[write_pos + 3] = b3
       }
-      None => ()
+      None => panic("undefined label: " + label_name)
     }
     i = i + 1
   }

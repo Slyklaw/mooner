@@ -1,11 +1,11 @@
 ///|
 /// Entry point for the CLI
 /// Run with `moon run cmd/main` from the project root
-/// Usage: main <input_file> [output_file] [--debug-codegen]
+/// Usage: main <input_file> [output_file] [--debug]
 fn main {
   let args = @env.args()
   if args.length() < 2 {
-    println("Usage: moon run cmd/main <input_file> [output_file] [--debug-codegen]")
+    println("Usage: moon run cmd/main <input_file> [output_file] [--debug]")
     return
   }
 
@@ -21,9 +21,9 @@ fn main {
     }
   }
 
-  // Determine debug level (1 if flag present, else 0)
-  let debug_level = if (args.length() >= 3 && args[2] == "--debug-codegen") ||
-                       (args.length() >= 4 && args[3] == "--debug-codegen") {
+  // Determine debug level (1 if --debug flag present, else 0)
+  let debug_level = if (args.length() >= 3 && args[2] == "--debug") ||
+                       (args.length() >= 4 && args[3] == "--debug") {
     1
   } else {
     0
