@@ -6071,30 +6071,26 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
         self.emit_inst(Mov(Reg64("rax"), Imm32(0)))
       } else {
         let mut g = self
-        // Calculate the offset for the first element
-        // We need to allocate space for the tuple BEFORE the next variable
-        let tuple_size = num_elems * 8
-        let first_elem_offset = g.next_offset - tuple_size
-        
-        // Store elements in order (first element at lowest offset)
-        let mut i = 0
-        while i < num_elems {
+        // Evaluate all elements and push onto stack (in reverse order)
+        // Push element N-1 first (goes to highest address)
+        // Push element 0 last (goes to lowest address)
+        // After pushing: element 0 is at rsp, element 1 is at rsp + 8, etc.
+        let mut i = num_elems - 1
+        while i >= 0 {
           let elem = elems[i]
           let elem_is_float = is_float_expr(elem, g.var_is_float)
           g = g.codegen_expr(elem)
-          let offset = first_elem_offset + i * 8
           if elem_is_float {
-            // Float is in xmm0, store it to stack
-            g = g.emit_inst(Movsd(StackBP64(offset), Xmm("xmm0")))
+            g = g.emit_inst(PushXmm("xmm0"))
           } else {
-            g = g.emit_inst(Mov(StackBP64(offset), Reg64("rax")))
+            g = g.emit_inst(Push(Reg64("rax")))
           }
-          i = i + 1
+          // Do NOT update next_offset here - LetBind will calculate the correct offset
+          i = i - 1
         }
-        // Update next_offset to point to the next variable after the tuple
-        g = { ..g, next_offset: first_elem_offset }
-        // Return the address of the tuple
-        g.emit_inst(Lea(Reg64("rax"), StackBP64(first_elem_offset)))
+        // After pushing N values, rsp points to element 0
+        // The tuple is now on the stack, no need to put anything in rax
+        g
       }
     }
     FieldExpr(obj, field) => {
@@ -8137,7 +8133,7 @@ fn CodeGen::codegen_func(
   while j < params.length() {
     let (param_name, param_type) = params[j]
     if j < 6 {
-      let offset = -saved_regs_size - j * 8
+      let offset = -saved_regs_size - (j + 1) * 8
       let new_offsets = g.var_offsets
       new_offsets[param_name] = offset
       g = { ..g, var_offsets: new_offsets }
