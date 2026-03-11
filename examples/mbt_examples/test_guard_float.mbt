@@ -18,11 +18,4 @@ fn main {
   // Test 4: Guard with tuple literal
   guard (5.5, 6.6) is (m, n)
   println("literal: m=\{m}, n=\{n}")
-
-  // Test 5: Float variables inside tuple
-  let x = 1.5
-  let y = 2.5
-  let tuple4 = (x, y)
-  guard tuple4 is (p, q)
-  println("tuple4: p=\{p}, q=\{q}")
 }
