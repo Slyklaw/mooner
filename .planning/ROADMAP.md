@@ -2,7 +2,7 @@
 
 ## Phases
 
-- [ ] **Phase 1: Setup & Investigation** - Instrument codegen, establish debug tracing, create minimal test cases
+- [x] **Phase 1: Setup & Investigation** - Instrument codegen, establish debug tracing, create minimal test cases (completed 2026-03-11)
 - [x] **Phase 2: Function Calls** - Fix calling convention and return value handling (COMP-01)
 - [ ] **Phase 3: Control Flow** - Fix jump offsets and label resolution (COMP-02)
 - [ ] **Phase 4: Enums** - Fix enum discriminants and pattern matching (COMP-03)

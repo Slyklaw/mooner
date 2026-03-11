@@ -11,7 +11,7 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 
 - **Phase:** 2 (Function Call Fixes)
 - **Plan:** Complete
-- **Status:** Milestone complete
+- **Status:** Ready to plan
 - **Progress:** [████████░░] 83%
 
 ## Performance Metrics
