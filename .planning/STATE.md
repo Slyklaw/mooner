@@ -11,14 +11,14 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 
 - **Phase:** 2 (Function Call Fixes)
 - **Plan:** Complete
-- **Status:** Completed
+- **Status:** Milestone complete
 - **Progress:** [████████░░] 83%
 
 ## Performance Metrics
 
 - Commits: 5 (planning commits: 5)
-- Examples passing: 7 / 13
-- Critical bugs: 4 (004, 009, 011, 013)
+- Examples passing: 8 / 13
+- Critical bugs: 3 (009, 011, 013)
 - Regressions: 0 (target: 0)
 
 ## Accumulated Context
