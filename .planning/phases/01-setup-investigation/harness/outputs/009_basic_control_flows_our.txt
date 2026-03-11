@@ -1,0 +1,6 @@
+Compiled to /home/box/source/moonbit/mooner/examples/mbt_examples/009_basic_control_flows.exe
+  → Running our executable...
+0
+timeout: the monitored command dumped core
+./harness.sh: line 39: 40040 Segmentation fault      timeout "$timeout_secs" bash -c "$cmd" 2>&1
+  ✗ Execution failed (exit code: 139)

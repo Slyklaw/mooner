@@ -1,0 +1,13 @@
+--- outputs/011_basic_enum_ref.txt	2026-03-11 03:03:01.983664250 -0700
++++ outputs/011_basic_enum_our.txt	2026-03-11 03:03:01.893661995 -0700
+@@ -1,6 +1,7 @@
++Compiled to /home/box/source/moonbit/mooner/examples/mbt_examples/011_basic_enum.exe
++  → Running our executable...
++Red
+ Red
+ Green
+ RGB: 0, 0, 255
+-Blue
+-RGBA: 255, 0, 0, 128
+-  ✓ Completed
++  ✗ Execution failed (exit code: 58)
