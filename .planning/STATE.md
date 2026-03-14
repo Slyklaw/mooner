@@ -9,9 +9,9 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 
 ## Current Position
 
-- **Phase:** 3 (Control Flow) - gap closure executed but bugs persist
-- **Plan:** 08 complete (loop label namespacing applied)
-- **Status:** Verification failed - bugs remain
+- **Phase:** 3 (Control Flow) - gap closure executed, array parameter tracking added
+- **Plan:** 09 complete (array parameter tracking added)
+- **Status:** Partial fix - direct array access works, loops still have issues
 - **Progress:** [████████░░] 80%
 
 ## Performance Metrics
@@ -35,6 +35,7 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 | Build minimal reproduction tests | Isolate bugs for faster debugging | ✓ Completed |
 | Tasks 1-3 of Plan 05 were already implemented in Plan 01 | Verified via code inspection, confirmed working | ✓ Deduplicated work |
 | Only Task 4 needed implementation | func_counter/Current_func_idx existed but were never incremented | ✓ Wired |
+| Add array parameter tracking | var_is_array_param map tracks array function parameters | Partial - infrastructure added, loops still broken |
 
 ### Blockers
 
@@ -52,6 +53,7 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 - [x] Phase 3 Plan 03: Control flow correctness testing (if/else, for, while, nested)
 - [x] Phase 3 Plan 05: Wire function index tracking for label namespace isolation
 - [x] Phase 3 Plan 08: Add function index to loop labels (WhileLoop, ForLoop, ForInLoop)
+- [x] Phase 3 Plan 09: Add array parameter tracking for C-style for loops
 
 ## Recent Work
 
@@ -72,6 +74,12 @@ See: .planning/PROJECT.md (updated 2026-03-11)
   - Added function index to WhileLoop, ForLoop, ForInLoop labels
   - Verification FAILED: C-style for loop still outputs 7 (not 15); while+break still hangs
   - Root cause analysis incomplete - more investigation needed
+- **2026-03-14:** Phase 3 Plan 09 executed:
+  - Added var_is_array_param tracking for array function parameters
+  - Added detection for Array[T] type annotations
+  - Direct array element access now works (arr[i] = correct value)
+  - While/for loops still hang due to pre-existing loop bug
+  - Tests pass (19/19)
 
 ## Handoff Notes
 
