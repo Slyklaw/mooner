@@ -7071,8 +7071,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       g.emit_inst(Ret)
     }
     WhileLoop(cond, body) => {
-      let start_label = ".Lwhile_start\{self.label_counter}"
-      let end_label = ".Lwhile_end\{self.label_counter + 1}"
+      let start_label = ".Lfn\{self.current_func_idx}_while_start\{self.label_counter}"
+      let end_label = ".Lfn\{self.current_func_idx}_while_end\{self.label_counter + 1}"
       let mut g = { ..self, label_counter: self.label_counter + 2 }
       // Push loop labels for break/continue
       // For while: continue goes to start (re-check condition)
@@ -7096,9 +7096,9 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       { ..g, loop_labels: new_labels }
     }
     ForLoop(init, cond, step, body) => {
-      let step_label = ".Lfor_step\{self.label_counter}"
-      let cond_label = ".Lfor_cond\{self.label_counter + 1}"
-      let end_label = ".Lfor_end\{self.label_counter + 2}"
+      let step_label = ".Lfn\{self.current_func_idx}_for_step\{self.label_counter}"
+      let cond_label = ".Lfn\{self.current_func_idx}_for_cond\{self.label_counter + 1}"
+      let end_label = ".Lfn\{self.current_func_idx}_for_end\{self.label_counter + 2}"
       let mut g = { ..self, label_counter: self.label_counter + 3 }
       // Push loop labels for break/continue
       // For for: continue goes to step label
@@ -7155,8 +7155,8 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
       // 3. Initialize counter at 0, save to r14
       g = g.emit_inst(Mov(Reg64("r14"), Imm32(0)))
       // 4. Create loop labels
-      let loop_label = ".Lforin_loop\{self.label_counter}"
-      let end_label = ".Lforin_end\{self.label_counter + 1}"
+      let loop_label = ".Lfn\{self.current_func_idx}_forin_loop\{self.label_counter}"
+      let end_label = ".Lfn\{self.current_func_idx}_forin_end\{self.label_counter + 1}"
       g = { ..g, label_counter: self.label_counter + 2 }
       g = { ..g, loop_labels: g.loop_labels + [(end_label, loop_label)] }
       // Define loop label
