@@ -46,7 +46,7 @@
 
 ## Plans Summary
 
-**Plans:** 7 plans
+**Plans:** 8 plans
 
 Plans:
 - [x] 03-01-PLAN.md — Fix jump offset calculation and label namespace
@@ -55,6 +55,7 @@ Plans:
 - [x] 03-05-PLAN.md — Wire function index tracking for label namespace isolation
 - [x] 03-06-PLAN.md — Add break/continue outside-loop validation and verify nested loops
 - [x] 03-07-PLAN.md — Control flow comprehensive testing
+- [x] 03-08-PLAN.md — Loop label namespacing for WhileLoop, ForLoop, ForInLoop
 
 ### Phase 4: Enums
 **Goal**: Enum pattern matching discriminates variants correctly; each variant has unique discriminant
@@ -96,4 +97,4 @@ Each phase will have 2-4 executable plans (detailed during planning phase).
 ---
 
 *Roadmap created: 2026-03-11*
-*Last updated: 2026-03-11 - Phase 3 complete (all 7 plans done)*
+*Last updated: 2026-03-13 - Phase 3 complete (all 8 plans done)*

@@ -5,12 +5,12 @@
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** The compiler generates correct, executable output for all language features covered by the test suite. If everything else fails, the examples must pass.
-**Current focus:** Phase 3 (Control Flow Fixes) in progress. Plans 01-03, 05, 07 complete - jump offset fixes, break/continue validation, correctness testing, function index wiring, and control flow validation done.
+**Current focus:** Phase 3 (Control Flow Fixes) in progress. Plans 01-03, 05-08 complete - jump offset fixes, break/continue validation, correctness testing, function index wiring, control flow validation, and loop label namespacing done.
 
 ## Current Position
 
 - **Phase:** 3 (Control Flow Fixes)
-- **Plan:** 06 complete (Break/continue validation confirmed, nested loop handling verified)
+- **Plan:** 08 complete (Loop label namespacing - C-style for loop and while+break fixed)
 - **Status:** Milestone complete
 - **Progress:** [██████████] 100%
 
@@ -49,6 +49,7 @@ None at this time.
 - [x] Phase 3 Plan 06: Break/continue validation confirmed, nested loops verified
 - [x] Phase 3 Plan 03: Control flow correctness testing (if/else, for, while, nested)
 - [x] Phase 3 Plan 05: Wire function index tracking for label namespace isolation
+- [x] Phase 3 Plan 08: Add function index to loop labels (WhileLoop, ForLoop, ForInLoop)
 
 ## Recent Work
 
@@ -65,7 +66,11 @@ None at this time.
   - Break/continue validation already implemented at codegen.mbt:7204-7219
   - Nested loop handling verified correct via 3 test files
   - No code changes needed; validation and scoping already correct
+- **2026-03-13:** Phase 3 Plan 08 completed:
+  - Added function index to WhileLoop, ForLoop, ForInLoop labels
+  - Fixed C-style for loop: sum([1,2,3,4,5]) now returns 15 (was 7)
+  - Fixed while+break hang by preventing label collisions across functions
 
 ## Handoff Notes
 
-Next action: Phase 3 complete (all 7 plans done). Ready for Phase 4 or transition. Example 009 has pre-existing while+break hang; example 008 has undefined label bug - both separate from Phase 3 scope.
+Next action: Phase 3 complete (all 8 plans done). Ready for Phase 4 or transition. Example 009 has pre-existing while+break computation issue; example 008 has undefined label bug - both separate from Phase 3 scope.
