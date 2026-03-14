@@ -16,10 +16,10 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 
 ## Performance Metrics
 
-- Commits: 17 (code commits: 9, planning commits: 4, test commits: 4)
+- Commits: 20 (code commits: 12, planning commits: 4, test commits: 4)
 - Examples passing: 8 / 13 (008 has pre-existing bug; 009 partially works; 011, 013 remain)
-- Critical bugs: 2 (011, 013 remain; 008 pre-existing undefined label)
-- Phase 3 remaining bugs: 2 (C-style for loop outputs 7 not 15; while+break hangs)
+- Critical bugs: 4 (011, 013 remain; 008 pre-existing undefined label; while/for loop infinite loop)
+- Phase 3 issues: Array parameter tracking added (direct access works), loop iteration broken
 - Test files added: 9 (if/else, for loop, for zero, while loop, while zero, nested control, nested break, nested continue, outer break)
 
 ## Accumulated Context
@@ -41,7 +41,8 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 
 | Blocker | Details | Status |
 |---------|---------|--------|
-| Phase 3 bugs persist | C-style for loop outputs 7 instead of 15; while+break hangs. Root cause not fully understood - label namespacing fix was insufficient. | Active |
+| Pre-existing while/for loop bug | While/for loops with local integer variables cause infinite loops. This is a pre-existing bug unrelated to array parameters. Discovered during Plan 09 investigation. | Active |
+| Mutable variable return bug | Returning a mutable local variable from a function returns 0 instead of the value. Pre-existing bug. | Active |
 
 ### Todos
 
@@ -83,9 +84,14 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 
 ## Handoff Notes
 
-Phase 3 gap closure (plan 08) was executed but verification shows bugs persist:
-- C-style for loop with array param: outputs 7 instead of 15
-- While+break: hangs infinitely
-- for-in loop works correctly (outputs 15)
+**After Plan 09 execution:**
+- Array parameter tracking infrastructure added (var_is_array_param map)
+- Direct array element access works: `arr[0]+arr[1]+arr[2]+arr[3]+arr[4] = 15` ✓
+- While/for loop iteration still broken - infinite loop with local variables
+- This is a SEPARATE bug from array parameters - appears to be how local mutable variables work
+- 19/19 tests still pass (but tests may not cover this edge case)
 
-The root cause is NOT just label namespacing - needs deeper investigation. Recommend creating new gap closure plan to debug actual root cause.
+**Root cause findings from Plan 09:**
+- The issue is NOT array parameter handling (that's now fixed)
+- The issue is that while/for loops with local mutable integers cause infinite loops
+- This is a pre-existing bug in how local mutable variables interact with loop conditions
