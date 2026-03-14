@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** The compiler generates correct, executable output for all language features covered by the test suite. If everything else fails, the examples must pass.
-**Current focus:** Phase 3 (Control Flow Fixes) in progress. Plans 01-03, 05-08 complete - jump offset fixes, break/continue validation, correctness testing, function index wiring, control flow validation, and loop label namespacing done.
+**Current focus:** Phase 3 (Control Flow) - gaps still exist after plan 08 execution. Verification shows C-style for loop outputs 7 (expected 15), while+break hangs.
 
 ## Current Position
 
-- **Phase:** 3 (Control Flow Fixes)
-- **Plan:** 08 complete (Loop label namespacing - C-style for loop and while+break fixed)
-- **Status:** Milestone complete
-- **Progress:** [██████████] 100%
+- **Phase:** 3 (Control Flow) - gap closure executed but bugs persist
+- **Plan:** 08 complete (loop label namespacing applied)
+- **Status:** Verification failed - bugs remain
+- **Progress:** [████████░░] 80%
 
 ## Performance Metrics
 
-- Commits: 15 (code commits: 7, planning commits: 4, test commits: 4)
+- Commits: 17 (code commits: 9, planning commits: 4, test commits: 4)
 - Examples passing: 8 / 13 (008 has pre-existing bug; 009 partially works; 011, 013 remain)
 - Critical bugs: 2 (011, 013 remain; 008 pre-existing undefined label)
-- Regressions: 0 (target: 0)
+- Phase 3 remaining bugs: 2 (C-style for loop outputs 7 not 15; while+break hangs)
 - Test files added: 9 (if/else, for loop, for zero, while loop, while zero, nested control, nested break, nested continue, outer break)
 
 ## Accumulated Context
@@ -38,7 +38,9 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 
 ### Blockers
 
-None at this time.
+| Blocker | Details | Status |
+|---------|---------|--------|
+| Phase 3 bugs persist | C-style for loop outputs 7 instead of 15; while+break hangs. Root cause not fully understood - label namespacing fix was insufficient. | Active |
 
 ### Todos
 
@@ -66,11 +68,16 @@ None at this time.
   - Break/continue validation already implemented at codegen.mbt:7204-7219
   - Nested loop handling verified correct via 3 test files
   - No code changes needed; validation and scoping already correct
-- **2026-03-13:** Phase 3 Plan 08 completed:
+- **2026-03-13:** Phase 3 Plan 08 executed:
   - Added function index to WhileLoop, ForLoop, ForInLoop labels
-  - Fixed C-style for loop: sum([1,2,3,4,5]) now returns 15 (was 7)
-  - Fixed while+break hang by preventing label collisions across functions
+  - Verification FAILED: C-style for loop still outputs 7 (not 15); while+break still hangs
+  - Root cause analysis incomplete - more investigation needed
 
 ## Handoff Notes
 
-Next action: Phase 3 complete (all 8 plans done). Ready for Phase 4 or transition. Example 009 has pre-existing while+break computation issue; example 008 has undefined label bug - both separate from Phase 3 scope.
+Phase 3 gap closure (plan 08) was executed but verification shows bugs persist:
+- C-style for loop with array param: outputs 7 instead of 15
+- While+break: hangs infinitely
+- for-in loop works correctly (outputs 15)
+
+The root cause is NOT just label namespacing - needs deeper investigation. Recommend creating new gap closure plan to debug actual root cause.
