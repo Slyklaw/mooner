@@ -19,6 +19,7 @@ pub struct CodeGen {
   var_tuple_field_bool_values : Map[String, Array[Bool]]
   var_tuple_field_array_values : Map[String, Array[Array[Int]]]
   var_array_len : Map[String, Int]
+  var_is_array_param : Map[String, Bool]
   var_types : Map[String, String]
   var_struct_fields : Map[String, Array[String]]
   enum_discriminants : Map[String, Int]
@@ -74,6 +75,7 @@ fn CodeGen::new() -> CodeGen {
     var_tuple_field_bool_values: Map::new(),
     var_tuple_field_array_values: Map::new(),
     var_array_len: Map::new(),
+    var_is_array_param: Map::new(),
     var_types: Map::new(),
     var_struct_fields: Map::new(),
     enum_discriminants: Map::new(),
@@ -2409,6 +2411,11 @@ fn CodeGen::codegen_expr(self : CodeGen, expr : AST) -> CodeGen {
             g
           } else if self.var_array_len.get(name) != None {
             // Array - load the address from stack (rbp + offset)
+            let g = self.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
+            g
+          } else if self.var_is_array_param.get(name) == Some(true) {
+            // Array parameter - load the pointer from stack
+            // The pointer is the array address (points to [length][elem0]...)
             let g = self.emit_inst(Mov(Reg64("rax"), StackBP64(offset)))
             g
           } else if self.var_is_tuple.get(name) == Some(true) {
@@ -8265,7 +8272,7 @@ fn CodeGen::codegen_func(
   // After setup: rbp points to old rbp, then rbx, r12-r15 (5 regs = 40 bytes)
   // So first param will be at rbp - 48
   let saved_regs_size = 6 * 8 // rbp, rbx, r12, r13, r14, r15
-  g = { ..g, var_offsets: Map::new(), next_offset: -saved_regs_size }
+  g = { ..g, var_offsets: Map::new(), var_array_len: Map::new(), next_offset: -saved_regs_size }
   // Save parameters to stack and add to var_offsets
   // Push in forward order so first param is at rbp - 48
   let mut i = 0
@@ -8285,6 +8292,7 @@ fn CodeGen::codegen_func(
   let new_var_tuple_field_types = g.var_tuple_field_types
   let new_var_tuple_field_float_values = g.var_tuple_field_float_values
   let new_var_tuple_field_bool_values = g.var_tuple_field_bool_values
+  let new_var_is_array_param = g.var_is_array_param
   while j < params.length() {
     let (param_name, param_type) = params[j]
     if j < 6 {
@@ -8293,7 +8301,7 @@ fn CodeGen::codegen_func(
       new_offsets[param_name] = offset
       g = { ..g, var_offsets: new_offsets }
     }
-    // Parse parameter type annotation to track tuple field types
+    // Parse parameter type annotation to track tuple field types and array params
     match param_type {
       Some(Tuple(type_elems)) => {
         // This parameter is a tuple - track its field types
@@ -8329,6 +8337,17 @@ fn CodeGen::codegen_func(
         new_var_tuple_field_float_values[param_name] = field_float_values
         new_var_tuple_field_bool_values[param_name] = field_bool_values
       }
+      Some(CallExpr(Ident("Array"), _)) => {
+        // This parameter is an array - track it as an array parameter
+        new_var_is_array_param[param_name] = true
+      }
+      Some(Ident(type_name)) => {
+        // Check if it's an array type like "Array[Int]" or "Array[Float]"
+        // DEBUG: print the type_name to see what it is
+        if type_name.contains("Array[") {
+          new_var_is_array_param[param_name] = true
+        }
+      }
       _ => ()
     }
     j = j + 1
@@ -8341,6 +8360,7 @@ fn CodeGen::codegen_func(
     var_tuple_field_types: new_var_tuple_field_types,
     var_tuple_field_float_values: new_var_tuple_field_float_values,
     var_tuple_field_bool_values: new_var_tuple_field_bool_values,
+    var_is_array_param: new_var_is_array_param,
   }
   g = { ..g, next_offset: -saved_regs_size - params.length() * 8 - 8 }
   g = g.codegen_expr(body)
