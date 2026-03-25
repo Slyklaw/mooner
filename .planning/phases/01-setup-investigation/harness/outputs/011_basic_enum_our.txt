@@ -1,7 +1,0 @@
-Compiled to /home/box/source/moonbit/mooner/examples/mbt_examples/011_basic_enum.exe
-  → Running our executable...
-Red
-Red
-Green
-RGB: 0, 0, 255
-  ✗ Execution failed (exit code: 58)

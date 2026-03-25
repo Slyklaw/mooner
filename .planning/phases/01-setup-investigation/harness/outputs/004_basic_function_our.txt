@@ -1,4 +1,0 @@
-Compiled to /home/box/source/moonbit/mooner/examples/mbt_examples/004_basic_function.exe
-  → Running our executable...
-80
-  ✓ Completed (exit code: 0)

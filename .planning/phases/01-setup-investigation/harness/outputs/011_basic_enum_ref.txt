@@ -1,6 +1,0 @@
-Red
-Green
-RGB: 0, 0, 255
-Blue
-RGBA: 255, 0, 0, 128
-  ✓ Completed
