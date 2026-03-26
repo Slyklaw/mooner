@@ -9,19 +9,19 @@ pub trait Backend {
   /// 
   /// Takes an AST and returns a ByteArray containing the generated code
   /// in the target architecture's format.
-  generate_module(AST) -> Array[Byte]
+  generate_module(Self, AST) -> Array[Byte]
 
   /// Get target-specific information
   /// 
   /// Returns details about the target architecture such as
   /// pointer size, endianness, and supported features.
-  get_target_info() -> TargetInfo
+  get_target_info(Self) -> TargetInfo
 
   /// Query whether the backend supports a specific feature
   /// 
   /// Used to determine available capabilities at compile time
   /// for conditional code generation.
-  supports_feature(Feature) -> Bool
+  supports_feature(Self, Feature) -> Bool
 }
 
 ///|

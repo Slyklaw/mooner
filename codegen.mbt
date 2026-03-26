@@ -8597,3 +8597,39 @@ pub fn codegen(ast : AST, debug_level: Int) -> Bytes {
 }
 
 ///|
+/// x86_64 Backend implementation for the Backend trait
+/// 
+/// This struct provides the x86_64 code generation implementation
+/// while implementing the Backend trait interface.
+
+pub struct X86_64Backend {
+  debug_level : Int
+}
+
+///|
+fn X86_64Backend::new(debug_level : Int) -> X86_64Backend {
+  { debug_level }
+}
+
+///|
+impl Backend for X86_64Backend with generate_module(self, ast) {
+  codegen(ast, self.debug_level).to_array()
+}
+
+///|
+impl Backend for X86_64Backend with get_target_info(self) {
+  { name: "x86_64", pointer_size: 64, endianness: Little }
+}
+
+///|
+impl Backend for X86_64Backend with supports_feature(self, feature) {
+  match feature {
+    FloatSupport => true
+    SIMD => false // x86_64 backend doesn't support SIMD yet
+    Atomics => false
+    Threads => false
+    Exceptions => false
+    TailCall => false
+  }
+}
+
