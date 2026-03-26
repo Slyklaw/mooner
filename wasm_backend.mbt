@@ -33,6 +33,13 @@ pub enum Signedness {
 }
 
 ///|
+/// Float type for WASM floating-point operations
+pub enum FloatType {
+  F32
+  F64
+}
+
+///|
 /// WebAssembly instructions for arithmetic
 pub enum WasmArithInst {
   // i32 arithmetic
@@ -51,6 +58,16 @@ pub enum WasmArithInst {
   I64DivU /// 0x80
   I64RemS /// 0x81
   I64RemU /// 0x82
+  // f32 arithmetic
+  F32Add /// 0x92
+  F32Sub /// 0x93
+  F32Mul /// 0x94
+  F32Div /// 0x95
+  // f64 arithmetic
+  F64Add /// 0xA0
+  F64Sub /// 0xA1
+  F64Mul /// 0xA2
+  F64Div /// 0xA3
 }
 
 ///|
@@ -71,6 +88,16 @@ fn arith_inst_to_bytes(inst : WasmArithInst) -> Array[Byte] {
     I64DivU => [0x80]
     I64RemS => [0x81]
     I64RemU => [0x82]
+    // f32 arithmetic
+    F32Add => [0x92]
+    F32Sub => [0x93]
+    F32Mul => [0x94]
+    F32Div => [0x95]
+    // f64 arithmetic
+    F64Add => [0xA0]
+    F64Sub => [0xA1]
+    F64Mul => [0xA2]
+    F64Div => [0xA3]
   }
 }
 
@@ -116,6 +143,46 @@ pub fn emit_i64_rem_s() -> WasmArithInst { I64RemS }
 ///|
 /// Emit i64.rem_u instruction (unsigned remainder)
 pub fn emit_i64_rem_u() -> WasmArithInst { I64RemU }
+
+// ============================================================================
+// f32 Floating-Point Arithmetic
+// ============================================================================
+
+///|
+/// Emit f32.add instruction
+pub fn emit_f32_add() -> WasmArithInst { F32Add }
+
+///|
+/// Emit f32.sub instruction
+pub fn emit_f32_sub() -> WasmArithInst { F32Sub }
+
+///|
+/// Emit f32.mul instruction
+pub fn emit_f32_mul() -> WasmArithInst { F32Mul }
+
+///|
+/// Emit f32.div instruction
+pub fn emit_f32_div() -> WasmArithInst { F32Div }
+
+// ============================================================================
+// f64 Floating-Point Arithmetic
+// ============================================================================
+
+///|
+/// Emit f64.add instruction
+pub fn emit_f64_add() -> WasmArithInst { F64Add }
+
+///|
+/// Emit f64.sub instruction
+pub fn emit_f64_sub() -> WasmArithInst { F64Sub }
+
+///|
+/// Emit f64.mul instruction
+pub fn emit_f64_mul() -> WasmArithInst { F64Mul }
+
+///|
+/// Emit f64.div instruction
+pub fn emit_f64_div() -> WasmArithInst { F64Div }
 
 ///|
 /// Emit the appropriate i32 arithmetic instruction based on operator and signedness
@@ -173,6 +240,44 @@ pub fn emit_arith(
   match int_type {
     IntType::I32 => emit_i32_arith(op, signedness)
     IntType::I64 => emit_i64_arith(op, signedness)
+  }
+}
+
+///|
+/// Emit the appropriate f32 arithmetic instruction based on operation
+pub fn emit_f32_arith(op : ArithOp) -> WasmArithInst {
+  match op {
+    ArithOp::Add => emit_f32_add()
+    ArithOp::Sub => emit_f32_sub()
+    ArithOp::Mul => emit_f32_mul()
+    ArithOp::Div => emit_f32_div()
+    ArithOp::Rem => emit_f32_add() // No remainder for floats
+  }
+}
+
+///|
+/// Emit the appropriate f64 arithmetic instruction based on operation
+pub fn emit_f64_arith(op : ArithOp) -> WasmArithInst {
+  match op {
+    ArithOp::Add => emit_f64_add()
+    ArithOp::Sub => emit_f64_sub()
+    ArithOp::Mul => emit_f64_mul()
+    ArithOp::Div => emit_f64_div()
+    ArithOp::Rem => emit_f64_add() // No remainder for floats
+  }
+}
+
+///|
+/// Emit floating-point arithmetic instruction based on type and operation
+/// 
+/// This is the main entry point for generating floating-point arithmetic instructions.
+pub fn emit_float_arith(
+  float_type : FloatType,
+  op : ArithOp
+) -> WasmArithInst {
+  match float_type {
+    FloatType::F32 => emit_f32_arith(op)
+    FloatType::F64 => emit_f64_arith(op)
   }
 }
 
@@ -682,6 +787,37 @@ pub fn generate_arith_expr(
   is_unsigned : Bool
 ) -> Array[Byte] {
   let inst = wasm_arith_op(op, int_type, is_unsigned)
+  arith_inst_to_bytes(inst)
+}
+
+///|
+/// Map a MoonBit operator string to WASM floating-point arithmetic operation
+/// 
+/// Returns the appropriate instruction for the given operator and float type.
+pub fn wasm_float_arith_op(
+  op : String,
+  float_type : FloatType
+) -> WasmArithInst {
+  match op {
+    "+" => emit_float_arith(float_type, ArithOp::Add)
+    "-" => emit_float_arith(float_type, ArithOp::Sub)
+    "*" => emit_float_arith(float_type, ArithOp::Mul)
+    "/" => emit_float_arith(float_type, ArithOp::Div)
+    _ => emit_float_arith(float_type, ArithOp::Add) // Default fallback
+  }
+}
+
+///|
+/// Generate WASM instructions for a floating-point arithmetic expression
+/// 
+/// This function demonstrates how to generate WASM bytecode for floating-point
+/// arithmetic expressions. The actual code generation would traverse the AST
+/// and emit these instructions in sequence.
+pub fn generate_float_arith_expr(
+  op : String,
+  float_type : FloatType
+) -> Array[Byte] {
+  let inst = wasm_float_arith_op(op, float_type)
   arith_inst_to_bytes(inst)
 }
 
