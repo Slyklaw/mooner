@@ -15,8 +15,10 @@ pub fn compile_file(
   // Parse into AST
   let ast = parse(tokens)
 
-  // Generate x86_64 code
-  let code = codegen(ast, debug_level)
+  // Generate code using Backend interface
+  // Currently uses x86_64 backend, structured for future backend selection
+  let backend = X86_64Backend::new(debug_level)
+  let code = Bytes::from_array(Backend::generate_module(backend, ast))
 
   // Header is 64 + 56 = 120 bytes (0x78)
   // Code should start at 0x401000 (like GCC -nostdlib -s)
