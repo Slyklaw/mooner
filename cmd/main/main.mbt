@@ -2,10 +2,18 @@
 /// Entry point for the CLI
 /// Run with `moon run cmd/main` from the project root
 /// Usage: main <input_file> [output_file] [--debug]
+/// 
+/// Output file extension determines the target:
+///   - .exe: x86_64 ELF executable (default)
+///   - .wasm: WebAssembly binary
 fn main {
   let args = @env.args()
   if args.length() < 2 {
     println("Usage: moon run cmd/main <input_file> [output_file] [--debug]")
+    println("")
+    println("Output format is determined by file extension:")
+    println("  .exe   x86_64 ELF executable (default)")
+    println("  .wasm  WebAssembly binary")
     return
   }
 
@@ -29,6 +37,8 @@ fn main {
     0
   }
 
+  // Compile using lib (handles x86_64 by default)
+  // WASM support will be added through compile_file_target
   match @lib.compile_file(input_path, output_path, debug_level) {
     Ok(_) => println("Compiled to \{output_path}")
     Err(e) => println("Error: \{e}")

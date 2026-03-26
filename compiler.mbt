@@ -1,8 +1,48 @@
 ///|
+/// Supported compilation targets
+pub enum Target {
+  X86_64  // Default: x86_64 ELF executable
+  Wasm    // WebAssembly binary
+}
+
+///|
+/// Default target is x86_64
+pub fn Target::default() -> Target {
+  X86_64
+}
+
+///|
+/// Parse target from string
+pub fn Target::from_string(s : String) -> Target? {
+  match s {
+    "x86_64" | "x86" | "elf" => Some(X86_64)
+    "wasm" | "wasm32" | "webassembly" => Some(Wasm)
+    _ => None
+  }
+}
+
+///|
 pub fn compile_file(
   input_path : String,
   output_path : String,
   debug_level : Int,
+) -> Result[Unit, String] {
+  // Auto-detect target from output file extension
+  let target = if output_path.ends_with(".wasm") {
+    Target::Wasm
+  } else {
+    Target::X86_64
+  }
+  compile_file_target(input_path, output_path, debug_level, target)
+}
+
+///|
+/// Compile to a specific target
+pub fn compile_file_target(
+  input_path : String,
+  output_path : String,
+  debug_level : Int,
+  target : Target,
 ) -> Result[Unit, String] {
   // Read input file
   let source = @fs.read_file_to_string(input_path) catch {
@@ -15,8 +55,20 @@ pub fn compile_file(
   // Parse into AST
   let ast = parse(tokens)
 
-  // Generate code using Backend interface
-  // Currently uses x86_64 backend, structured for future backend selection
+  match target {
+    X86_64 => compile_x86_64(ast, output_path, debug_level)
+    Wasm => compile_wasm(ast, output_path)
+  }
+}
+
+///|
+/// Compile to x86_64 ELF executable
+fn compile_x86_64(
+  ast : AST,
+  output_path : String,
+  debug_level : Int,
+) -> Result[Unit, String] {
+  // Generate code using x86_64 backend
   let backend = X86_64Backend::new(debug_level)
   let code = Bytes::from_array(Backend::generate_module(backend, ast))
 
@@ -25,7 +77,7 @@ pub fn compile_file(
   // File offset for 0x1000
   // Padding: 0x1000 - 0x78 = 0xF88 bytes
   let padding_len = 0x1000 - 0x78
-  let padding : Array[Byte] = Array::make(padding_len, 0x00B)
+  let _padding : Array[Byte] = Array::make(padding_len, 0x00B)
 
   let header : Array[Byte] = [
     // ELF header (64 bytes)
@@ -116,6 +168,24 @@ pub fn compile_file(
     @fs.write_bytes_to_file(output_path, result)
     Ok(())
   } catch {
-    e => Err("Failed to write output file: \\{e}")
+    e => Err("Failed to write output file: \{e}")
+  }
+}
+
+///|
+/// Compile to WebAssembly binary
+fn compile_wasm(
+  ast : AST,
+  output_path : String,
+) -> Result[Unit, String] {
+  // Generate code using WASM backend
+  let backend = WasmBackend::new(0)
+  let code = Bytes::from_array(Backend::generate_module(backend, ast))
+
+  try {
+    @fs.write_bytes_to_file(output_path, code)
+    Ok(())
+  } catch {
+    e => Err("Failed to write output file: \{e}")
   }
 }
