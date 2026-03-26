@@ -48,7 +48,7 @@ Plans:
 Plans:
 - [x] 02-01: Implement i32 and i64 arithmetic operations in WASM backend
 - [x] 02-02: Implement f32 and f64 arithmetic operations in WASM backend
-- [ ] 02-03: Implement if/else and loop control flow in WASM backend
+- [x] 02-03: Implement if/else and loop control flow in WASM backend
 - [ ] 02-04: Implement block labels, branching, and return statements
 
 ### Phase 3: Functions & Variables
