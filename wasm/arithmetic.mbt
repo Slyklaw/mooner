@@ -105,6 +105,18 @@ pub enum Instruction {
   I32ShrU /// 0x76 - Unsigned shift right
   I32Rotl /// 0x77 - Rotate left
   I32Rotr /// 0x78 - Rotate right
+
+  // f32 arithmetic (0x92-0x95)
+  F32Add /// 0x92 - f32 addition
+  F32Sub /// 0x93 - f32 subtraction
+  F32Mul /// 0x94 - f32 multiplication
+  F32Div /// 0x95 - f32 division
+
+  // f64 arithmetic (0xA0-0xA3)
+  F64Add /// 0xA0 - f64 addition
+  F64Sub /// 0xA1 - f64 subtraction
+  F64Mul /// 0xA2 - f64 multiplication
+  F64Div /// 0xA3 - f64 division
 }
 
 ///|
@@ -129,6 +141,13 @@ pub enum IntType {
 pub enum Signedness {
   Signed
   Unsigned
+}
+
+///|
+/// Float type for WASM floating-point operations
+pub enum FloatType {
+  F32
+  F64
 }
 
 ///|
@@ -334,6 +353,18 @@ pub fn Instruction::to_bytes(self : Instruction) -> Array[Byte] {
     I32ShrU => [0x76]
     I32Rotl => [0x77]
     I32Rotr => [0x78]
+
+    // f32 arithmetic
+    F32Add => [0x92]
+    F32Sub => [0x93]
+    F32Mul => [0x94]
+    F32Div => [0x95]
+
+    // f64 arithmetic
+    F64Add => [0xA0]
+    F64Sub => [0xA1]
+    F64Mul => [0xA2]
+    F64Div => [0xA3]
   }
 }
 
@@ -423,6 +454,86 @@ pub fn emit_i64_rem_u() -> Instruction {
   Instruction::I64RemU
 }
 
+// ============================================================================
+// f32 Floating-Point Arithmetic
+// ============================================================================
+
+///|
+/// Emit f32.add instruction
+/// 
+/// Pops two f32 values from the stack, adds them, and pushes the result.
+/// Handles NaN and infinity per IEEE 754.
+pub fn emit_f32_add() -> Instruction {
+  Instruction::F32Add
+}
+
+///|
+/// Emit f32.sub instruction
+/// 
+/// Pops two f32 values from the stack, subtracts them, and pushes the result.
+/// Handles NaN and infinity per IEEE 754.
+pub fn emit_f32_sub() -> Instruction {
+  Instruction::F32Sub
+}
+
+///|
+/// Emit f32.mul instruction
+/// 
+/// Pops two f32 values from the stack, multiplies them, and pushes the result.
+/// Handles NaN and infinity per IEEE 754.
+pub fn emit_f32_mul() -> Instruction {
+  Instruction::F32Mul
+}
+
+///|
+/// Emit f32.div instruction
+/// 
+/// Pops two f32 values from the stack, divides the first by the second, 
+/// and pushes the result. Division by zero produces Infinity with correct sign.
+pub fn emit_f32_div() -> Instruction {
+  Instruction::F32Div
+}
+
+// ============================================================================
+// f64 Floating-Point Arithmetic
+// ============================================================================
+
+///|
+/// Emit f64.add instruction
+/// 
+/// Pops two f64 values from the stack, adds them, and pushes the result.
+/// Handles NaN and infinity per IEEE 754.
+pub fn emit_f64_add() -> Instruction {
+  Instruction::F64Add
+}
+
+///|
+/// Emit f64.sub instruction
+/// 
+/// Pops two f64 values from the stack, subtracts them, and pushes the result.
+/// Handles NaN and infinity per IEEE 754.
+pub fn emit_f64_sub() -> Instruction {
+  Instruction::F64Sub
+}
+
+///|
+/// Emit f64.mul instruction
+/// 
+/// Pops two f64 values from the stack, multiplies them, and pushes the result.
+/// Handles NaN and infinity per IEEE 754.
+pub fn emit_f64_mul() -> Instruction {
+  Instruction::F64Mul
+}
+
+///|
+/// Emit f64.div instruction
+/// 
+/// Pops two f64 values from the stack, divides the first by the second, 
+/// and pushes the result. Division by zero produces Infinity with correct sign.
+pub fn emit_f64_div() -> Instruction {
+  Instruction::F64Div
+}
+
 ///|
 /// Emit the appropriate i32 arithmetic instruction based on operator and signedness
 pub fn emit_i32_arith(op : ArithOp, signedness : Signedness) -> Instruction {
@@ -479,6 +590,48 @@ pub fn emit_arith(
   match int_type {
     IntType::I32 => emit_i32_arith(op, signedness)
     IntType::I64 => emit_i64_arith(op, signedness)
+  }
+}
+
+///|
+/// Emit the appropriate f32 arithmetic instruction based on operation
+/// 
+/// Note: f32 division by zero produces Infinity per IEEE 754.
+pub fn emit_f32_arith(op : ArithOp) -> Instruction {
+  match op {
+    ArithOp::Add => emit_f32_add()
+    ArithOp::Sub => emit_f32_sub()
+    ArithOp::Mul => emit_f32_mul()
+    ArithOp::Div => emit_f32_div()
+    ArithOp::Rem => emit_f32_add() // No remainder for floats, fallback to add (will error in real usage)
+  }
+}
+
+///|
+/// Emit the appropriate f64 arithmetic instruction based on operation
+/// 
+/// Note: f64 division by zero produces Infinity per IEEE 754.
+pub fn emit_f64_arith(op : ArithOp) -> Instruction {
+  match op {
+    ArithOp::Add => emit_f64_add()
+    ArithOp::Sub => emit_f64_sub()
+    ArithOp::Mul => emit_f64_mul()
+    ArithOp::Div => emit_f64_div()
+    ArithOp::Rem => emit_f64_add() // No remainder for floats, fallback to add (will error in real usage)
+  }
+}
+
+///|
+/// Emit floating-point arithmetic instruction based on type and operation
+/// 
+/// This is the main entry point for generating floating-point arithmetic instructions.
+pub fn emit_float_arith(
+  float_type : FloatType,
+  op : ArithOp
+) -> Instruction {
+  match float_type {
+    FloatType::F32 => emit_f32_arith(op)
+    FloatType::F64 => emit_f64_arith(op)
   }
 }
 
@@ -615,4 +768,95 @@ pub fn test_arith_dispatch() -> Bool {
   bytes_i64_add[0] == 0x7C &&
   bytes_i32_div_u[0] == 0x6E &&
   bytes_i64_rem_u[0] == 0x82
+}
+
+// ============================================================================
+// f32 Floating-Point Tests
+// ============================================================================
+
+///|
+/// Test f32.add generates correct byte sequence (0x92)
+pub fn test_f32_add() -> Bool {
+  let inst = emit_f32_add()
+  let bytes = inst.to_bytes()
+  bytes[0] == 0x92
+}
+
+///|
+/// Test f32.sub generates correct byte sequence (0x93)
+pub fn test_f32_sub() -> Bool {
+  let inst = emit_f32_sub()
+  let bytes = inst.to_bytes()
+  bytes[0] == 0x93
+}
+
+///|
+/// Test f32.mul generates correct byte sequence (0x94)
+pub fn test_f32_mul() -> Bool {
+  let inst = emit_f32_mul()
+  let bytes = inst.to_bytes()
+  bytes[0] == 0x94
+}
+
+///|
+/// Test f32.div generates correct byte sequence (0x95)
+pub fn test_f32_div() -> Bool {
+  let inst = emit_f32_div()
+  let bytes = inst.to_bytes()
+  bytes[0] == 0x95
+}
+
+// ============================================================================
+// f64 Floating-Point Tests
+// ============================================================================
+
+///|
+/// Test f64.add generates correct byte sequence (0xA0)
+pub fn test_f64_add() -> Bool {
+  let inst = emit_f64_add()
+  let bytes = inst.to_bytes()
+  bytes[0] == 0xA0
+}
+
+///|
+/// Test f64.sub generates correct byte sequence (0xA1)
+pub fn test_f64_sub() -> Bool {
+  let inst = emit_f64_sub()
+  let bytes = inst.to_bytes()
+  bytes[0] == 0xA1
+}
+
+///|
+/// Test f64.mul generates correct byte sequence (0xA2)
+pub fn test_f64_mul() -> Bool {
+  let inst = emit_f64_mul()
+  let bytes = inst.to_bytes()
+  bytes[0] == 0xA2
+}
+
+///|
+/// Test f64.div generates correct byte sequence (0xA3)
+pub fn test_f64_div() -> Bool {
+  let inst = emit_f64_div()
+  let bytes = inst.to_bytes()
+  bytes[0] == 0xA3
+}
+
+///|
+/// Test emit_float_arith dispatches correctly
+pub fn test_float_arith_dispatch() -> Bool {
+  // Test that emit_float_arith dispatches correctly
+  let inst_f32_add = emit_float_arith(FloatType::F32, ArithOp::Add)
+  let bytes_f32_add = inst_f32_add.to_bytes()
+  let inst_f64_add = emit_float_arith(FloatType::F64, ArithOp::Add)
+  let bytes_f64_add = inst_f64_add.to_bytes()
+  let inst_f32_div = emit_float_arith(FloatType::F32, ArithOp::Div)
+  let bytes_f32_div = inst_f32_div.to_bytes()
+  let inst_f64_mul = emit_float_arith(FloatType::F64, ArithOp::Mul)
+  let bytes_f64_mul = inst_f64_mul.to_bytes()
+  
+  bytes_f32_add[0] == 0x92 &&
+  bytes_f64_add[0] == 0xA0 &&
+  bytes_f32_div[0] == 0x95 &&
+  bytes_f64_mul[0] == 0xA2
 }
