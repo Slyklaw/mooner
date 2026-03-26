@@ -23,10 +23,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Control Flow
 
-- [ ] **CTRL-01**: Support if/else conditional statements (WASM `if`/`else`/`end`)
-- [ ] **CTRL-02**: Support loop constructs (WASM `loop`/`br`/`br_if`)
-- [ ] **CTRL-03**: Support block labels and branching (WASM `block`, `br`, `br_table`)
-- [ ] **CTRL-04**: Support early returns from functions (WASM `return`)
+- [x] **CTRL-01**: Support if/else conditional statements (WASM `if`/`else`/`end`)
+- [x] **CTRL-02**: Support loop constructs (WASM `loop`/`br`/`br_if`)
+- [x] **CTRL-03**: Support block labels and branching (WASM `block`, `br`, `br_table`)
+- [x] **CTRL-04**: Support early returns from functions (WASM `return`)
 
 ### Functions
 
@@ -104,10 +104,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ARIT-02 | Phase 2 | Pending |
 | ARIT-03 | Phase 2 | Pending |
 | ARIT-04 | Phase 2 | Pending |
-| CTRL-01 | Phase 2 | Pending |
-| CTRL-02 | Phase 2 | Pending |
-| CTRL-03 | Phase 2 | Pending |
-| CTRL-04 | Phase 2 | Pending |
+| CTRL-01 | Phase 2 | Complete |
+| CTRL-02 | Phase 2 | Complete |
+| CTRL-03 | Phase 2 | Complete |
+| CTRL-04 | Phase 2 | Complete |
 | FUNC-01 | Phase 3 | Pending |
 | FUNC-02 | Phase 3 | Pending |
 | FUNC-03 | Phase 3 | Pending |

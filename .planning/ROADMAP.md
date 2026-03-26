@@ -13,7 +13,7 @@ Add WebAssembly compilation target to existing MoonBit-to-x86_64 compiler. Phase
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - WASM binary encoding and codegen abstraction (completed 2026-03-26)
-- [ ] **Phase 2: Basic Language Features** - Arithmetic operations and control flow
+- [x] **Phase 2: Basic Language Features** - Arithmetic operations and control flow (completed 2026-03-25)
 - [ ] **Phase 3: Functions & Variables** - Function calls, exports, and variable handling
 - [ ] **Phase 4: CLI Integration** - Command-line interface and compatibility
 
@@ -49,7 +49,7 @@ Plans:
 - [x] 02-01: Implement i32 and i64 arithmetic operations in WASM backend
 - [x] 02-02: Implement f32 and f64 arithmetic operations in WASM backend
 - [x] 02-03: Implement if/else and loop control flow in WASM backend
-- [ ] 02-04: Implement block labels, branching, and return statements
+- [x] 02-04: Implement block labels, branching, and return statements
 
 ### Phase 3: Functions & Variables
 **Goal**: Support functions and variables in WASM
@@ -91,7 +91,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete    | 2026-03-26 |
-| 2. Basic Language Features | 2/4 | In Progress | 2026-03-26 |
+| 2. Basic Language Features | 4/4 | Complete    | 2026-03-25 |
 | 3. Functions & Variables | 0/3 | Not started | - |
 | 4. CLI Integration | 3/3 | Planned | - |
 
