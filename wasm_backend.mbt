@@ -5,6 +5,178 @@
 /// from MoonBit AST.
 
 // ============================================================================
+// Arithmetic Types and Functions (from wasm/arithmetic.mbt)
+// ============================================================================
+
+///|
+/// Arithmetic operation types
+pub enum ArithOp {
+  Add
+  Sub
+  Mul
+  Div
+  Rem
+}
+
+///|
+/// Integer type for code generation
+pub enum IntType {
+  I32
+  I64
+}
+
+///|
+/// Signedness for division/remainder operations
+pub enum Signedness {
+  Signed
+  Unsigned
+}
+
+///|
+/// WebAssembly instructions for arithmetic
+pub enum WasmArithInst {
+  // i32 arithmetic
+  I32Add /// 0x6A
+  I32Sub /// 0x6B
+  I32Mul /// 0x6C
+  I32DivS /// 0x6D
+  I32DivU /// 0x6E
+  I32RemS /// 0x6F
+  I32RemU /// 0x70
+  // i64 arithmetic
+  I64Add /// 0x7C
+  I64Sub /// 0x7D
+  I64Mul /// 0x7E
+  I64DivS /// 0x7F
+  I64DivU /// 0x80
+  I64RemS /// 0x81
+  I64RemU /// 0x82
+}
+
+///|
+/// Convert WASM arithmetic instruction to bytes
+fn arith_inst_to_bytes(inst : WasmArithInst) -> Array[Byte] {
+  match inst {
+    I32Add => [0x6A]
+    I32Sub => [0x6B]
+    I32Mul => [0x6C]
+    I32DivS => [0x6D]
+    I32DivU => [0x6E]
+    I32RemS => [0x6F]
+    I32RemU => [0x70]
+    I64Add => [0x7C]
+    I64Sub => [0x7D]
+    I64Mul => [0x7E]
+    I64DivS => [0x7F]
+    I64DivU => [0x80]
+    I64RemS => [0x81]
+    I64RemU => [0x82]
+  }
+}
+
+///|
+/// Emit i32.add instruction
+pub fn emit_i32_add() -> WasmArithInst { I32Add }
+///|
+/// Emit i32.sub instruction
+pub fn emit_i32_sub() -> WasmArithInst { I32Sub }
+///|
+/// Emit i32.mul instruction
+pub fn emit_i32_mul() -> WasmArithInst { I32Mul }
+///|
+/// Emit i32.div_s instruction (signed division)
+pub fn emit_i32_div_s() -> WasmArithInst { I32DivS }
+///|
+/// Emit i32.div_u instruction (unsigned division)
+pub fn emit_i32_div_u() -> WasmArithInst { I32DivU }
+///|
+/// Emit i32.rem_s instruction (signed remainder)
+pub fn emit_i32_rem_s() -> WasmArithInst { I32RemS }
+///|
+/// Emit i32.rem_u instruction (unsigned remainder)
+pub fn emit_i32_rem_u() -> WasmArithInst { I32RemU }
+///|
+/// Emit i64.add instruction
+pub fn emit_i64_add() -> WasmArithInst { I64Add }
+///|
+/// Emit i64.sub instruction
+pub fn emit_i64_sub() -> WasmArithInst { I64Sub }
+///|
+/// Emit i64.mul instruction
+pub fn emit_i64_mul() -> WasmArithInst { I64Mul }
+///|
+/// Emit i64.div_s instruction (signed division)
+pub fn emit_i64_div_s() -> WasmArithInst { I64DivS }
+///|
+/// Emit i64.div_u instruction (unsigned division)
+pub fn emit_i64_div_u() -> WasmArithInst { I64DivU }
+///|
+/// Emit i64.rem_s instruction (signed remainder)
+pub fn emit_i64_rem_s() -> WasmArithInst { I64RemS }
+///|
+/// Emit i64.rem_u instruction (unsigned remainder)
+pub fn emit_i64_rem_u() -> WasmArithInst { I64RemU }
+
+///|
+/// Emit the appropriate i32 arithmetic instruction based on operator and signedness
+pub fn emit_i32_arith(op : ArithOp, signedness : Signedness) -> WasmArithInst {
+  match op {
+    ArithOp::Add => emit_i32_add()
+    ArithOp::Sub => emit_i32_sub()
+    ArithOp::Mul => emit_i32_mul()
+    ArithOp::Div => {
+      match signedness {
+        Signedness::Signed => emit_i32_div_s()
+        Signedness::Unsigned => emit_i32_div_u()
+      }
+    }
+    ArithOp::Rem => {
+      match signedness {
+        Signedness::Signed => emit_i32_rem_s()
+        Signedness::Unsigned => emit_i32_rem_u()
+      }
+    }
+  }
+}
+
+///|
+/// Emit the appropriate i64 arithmetic instruction based on operator and signedness
+pub fn emit_i64_arith(op : ArithOp, signedness : Signedness) -> WasmArithInst {
+  match op {
+    ArithOp::Add => emit_i64_add()
+    ArithOp::Sub => emit_i64_sub()
+    ArithOp::Mul => emit_i64_mul()
+    ArithOp::Div => {
+      match signedness {
+        Signedness::Signed => emit_i64_div_s()
+        Signedness::Unsigned => emit_i64_div_u()
+      }
+    }
+    ArithOp::Rem => {
+      match signedness {
+        Signedness::Signed => emit_i64_rem_s()
+        Signedness::Unsigned => emit_i64_rem_u()
+      }
+    }
+  }
+}
+
+///|
+/// Emit arithmetic instruction based on type and operation
+/// 
+/// This is the main entry point for generating arithmetic instructions.
+pub fn emit_arith(
+  int_type : IntType,
+  op : ArithOp,
+  signedness : Signedness
+) -> WasmArithInst {
+  match int_type {
+    IntType::I32 => emit_i32_arith(op, signedness)
+    IntType::I64 => emit_i64_arith(op, signedness)
+  }
+}
+
+// ============================================================================
 // LEB128 encoding (inlined from wasm/leb128.mbt for simplicity)
 // ============================================================================
 
@@ -29,16 +201,39 @@ fn encode_uleb128(value : UInt) -> Array[Byte] {
 
 ///|
 /// Encode a UTF-8 string as a vector (length + bytes).
+/// WebAssembly requires UTF-8 encoding for names.
 fn encode_string(s : String) -> Array[Byte] {
-  let bytes = s.to_bytes()
-  let len = bytes.length()
-  let len_uint = len.reinterpret_as_uint()
-  let len_bytes = encode_uleb128(len_uint)
-  let mut result = len_bytes
-  for i in 0..<len {
-    result = result + [bytes[i]]
+  // For simple ASCII strings, manually create UTF-8 bytes
+  // This handles common WASM export names like "memory"
+  let mut utf8_bytes : Array[Byte] = []
+  
+  // Check first few characters to determine encoding
+  let raw_bytes = s.to_bytes()
+  let raw_len = raw_bytes.length()
+  
+  // If raw length is exactly double the string length, it's likely UTF-16
+  // Extract only the low bytes (every other byte starting from 0)
+  let is_utf16 = (raw_len > 0) && (raw_len % 2 == 0)
+  
+  if is_utf16 {
+    // UTF-16: take every other byte (the low byte of each UTF-16 code unit)
+    let mut i = 0
+    while i < raw_len {
+      utf8_bytes = utf8_bytes + [raw_bytes[i]]
+      i = i + 2
+    }
+  } else {
+    // Already UTF-8 or single-byte encoding
+    let mut i = 0
+    while i < raw_len {
+      utf8_bytes = utf8_bytes + [raw_bytes[i]]
+      i = i + 1
+    }
   }
-  result
+  
+  let result_len = utf8_bytes.length()
+  let len_bytes = encode_uleb128(result_len.reinterpret_as_uint())
+  len_bytes + utf8_bytes
 }
 
 // ============================================================================
@@ -72,8 +267,8 @@ enum SectionId {
   Type     /// 1
   Import   /// 2
   Function /// 3
-  Memory   /// 4
-  Table    /// 5
+  Table    /// 4
+  Memory   /// 5
   Global   /// 6
   Export   /// 7
   Start    /// 8
@@ -90,8 +285,8 @@ fn SectionId::to_byte(self : SectionId) -> Byte {
     Type => 0x01
     Import => 0x02
     Function => 0x03
-    Memory => 0x04
-    Table => 0x05
+    Table => 0x04
+    Memory => 0x05
     Global => 0x06
     Export => 0x07
     Start => 0x08
@@ -251,7 +446,7 @@ fn SectionWriter::add_memory_section(
   // Write section header and content
   let section_size = content.length()
   let writer = self.write_section_header(SectionId::Memory, section_size)
-  { ..writer, buffer: writer.buffer + content, last_section_id: 4 }
+  { ..writer, buffer: writer.buffer + content, last_section_id: 5 }
 }
 
 ///|
@@ -449,4 +644,70 @@ fn add_data_section(sections : SectionWriter) -> SectionWriter {
   let section_size = content.length()
   let writer = sections.write_section_header(SectionId::Data, section_size)
   { ..writer, buffer: writer.buffer + content, last_section_id: 11 }
+}
+
+// ============================================================================
+// Arithmetic Code Generation Integration
+// ============================================================================
+
+///|
+/// Map a MoonBit operator string to WASM arithmetic operation
+/// 
+/// Returns the appropriate instruction for the given operator and type.
+pub fn wasm_arith_op(
+  op : String,
+  int_type : IntType,
+  is_unsigned : Bool
+) -> WasmArithInst {
+  let signedness = if is_unsigned { Signedness::Unsigned } else { Signedness::Signed }
+  match op {
+    "+" => emit_arith(int_type, ArithOp::Add, signedness)
+    "-" => emit_arith(int_type, ArithOp::Sub, signedness)
+    "*" => emit_arith(int_type, ArithOp::Mul, signedness)
+    "/" => emit_arith(int_type, ArithOp::Div, signedness)
+    "%" => emit_arith(int_type, ArithOp::Rem, signedness)
+    _ => emit_arith(int_type, ArithOp::Add, signedness) // Default fallback
+  }
+}
+
+///|
+/// Generate WASM instructions for an arithmetic expression
+/// 
+/// This function demonstrates how to generate WASM bytecode for arithmetic
+/// expressions using the arithmetic module. The actual code generation
+/// would traverse the AST and emit these instructions in sequence.
+pub fn generate_arith_expr(
+  op : String,
+  int_type : IntType,
+  is_unsigned : Bool
+) -> Array[Byte] {
+  let inst = wasm_arith_op(op, int_type, is_unsigned)
+  arith_inst_to_bytes(inst)
+}
+
+///|
+/// Example: Generate WASM code for i32 addition
+/// 
+/// Returns the WASM bytecode for: (a : i32) + (b : i32)
+pub fn generate_i32_add() -> Array[Byte] {
+  // i32.add instruction: 0x6A
+  [0x6A]
+}
+
+///|
+/// Example: Generate WASM code for i32 subtraction  
+/// 
+/// Returns the WASM bytecode for: (a : i32) - (b : i32)
+pub fn generate_i32_sub() -> Array[Byte] {
+  // i32.sub instruction: 0x6B
+  [0x6B]
+}
+
+///|
+/// Example: Generate WASM code for i64 multiplication
+/// 
+/// Returns the WASM bytecode for: (a : i64) * (b : i64)
+pub fn generate_i64_mul() -> Array[Byte] {
+  // i64.mul instruction: 0x7E
+  [0x7E]
 }
