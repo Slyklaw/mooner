@@ -847,3 +847,313 @@ pub fn generate_i64_mul() -> Array[Byte] {
   // i64.mul instruction: 0x7E
   [0x7E]
 }
+
+// ============================================================================
+// Control Flow Integration
+// ============================================================================
+
+///|
+/// Import control flow instructions from wasm/control module
+/// These would normally be imported but for simplicity we define the interface here
+
+///|
+/// Block type for control flow
+enum WasmBlockType {
+  Empty  // void return
+  I32    // i32 return
+  I64    // i64 return  
+  F32    // f32 return
+  F64    // f64 return
+}
+
+///|
+/// Generate WASM bytecode for an if/else statement
+/// 
+/// Parameters:
+/// - condition_bytes: WASM code that evaluates condition (must leave i32 on stack)
+/// - then_bytes: WASM code for then branch
+/// - else_bytes: Optional WASM code for else branch
+/// - has_result: Whether the block produces a result
+/// 
+/// Returns the complete WASM bytecode for the if/else
+pub fn generate_if_else(
+  condition_bytes : Array[Byte],
+  then_bytes : Array[Byte],
+  else_bytes : Option[Array[Byte]],
+  has_result : Bool
+) -> Array[Byte] {
+  let mut code : Array[Byte] = []
+  
+  // Emit condition (must leave i32 on stack: 0 = false, non-zero = true)
+  code = code + condition_bytes
+  
+  // Block type: 0x40 = empty/void, 0x7F = i32
+  let block_type : Byte = 
+    if has_result {
+      let v = 127
+      v.to_byte()
+    } else {
+      let v = 64
+      v.to_byte()
+    }
+  
+  // if instruction: 0x04 + block_type
+  code = code + [0x04, block_type]
+  
+  // Then branch code
+  code = code + then_bytes
+  
+  // Else branch (if present)
+  match else_bytes {
+    Some(else_code) => {
+      // else instruction: 0x05
+      code = code + [0x05]
+      // Else branch code
+      code = code + else_code
+    }
+    None => ()
+  }
+  
+  // end instruction: 0x0B
+  code = code + [0x0B]
+  
+  code
+}
+
+///|
+/// Generate WASM bytecode for a simple if without else
+/// 
+/// Parameters:
+/// - condition_bytes: WASM code that evaluates condition
+/// - then_bytes: WASM code for then branch
+/// - has_result: Whether the block produces a result
+pub fn generate_if(
+  condition_bytes : Array[Byte],
+  then_bytes : Array[Byte],
+  has_result : Bool
+) -> Array[Byte] {
+  generate_if_else(condition_bytes, then_bytes, None, has_result)
+}
+
+///|
+/// Generate WASM bytecode for a while loop
+/// 
+/// Parameters:
+/// - condition_bytes: WASM code that evaluates condition (leaves i32 on stack)
+/// - body_bytes: WASM code for loop body
+/// - has_result: Whether the loop produces a result
+/// 
+/// The generated code:
+/// - loop block start
+/// - condition evaluation
+/// - br_if 0 to break if condition is false (stack value is 0)
+/// - body code
+/// - br 0 to continue loop (back to condition)
+/// - end
+pub fn generate_while_loop(
+  condition_bytes : Array[Byte],
+  body_bytes : Array[Byte],
+  has_result : Bool
+) -> Array[Byte] {
+  let mut code : Array[Byte] = []
+  
+  // Block type as Byte
+  let block_type : Byte = 
+    if has_result {
+      let v = 127
+      v.to_byte()
+    } else {
+      let v = 64
+      v.to_byte()
+    }
+  
+  // loop instruction: 0x03 + block_type (creates label at start)
+  code = code + [0x03, block_type]
+  
+  // Emit condition
+  code = code + condition_bytes
+  
+  // br_if 0: branch to end (break) if condition is 0 (false)
+  // After condition, non-zero = execute body, zero = break
+  // br_if: 0x0D + label_idx (0 = innermost)
+  code = code + [0x0D, 0x00]
+  
+  // Emit body
+  code = code + body_bytes
+  
+  // br 0: continue loop (branch back to start/condition)
+  // br: 0x0C + label_idx
+  code = code + [0x0C, 0x00]
+  
+  // end instruction: 0x0B
+  code = code + [0x0B]
+  
+  code
+}
+
+///|
+/// Generate WASM bytecode for a simple loop (unconditional, infinite)
+/// 
+/// Parameters:
+/// - body_bytes: WASM code for loop body
+/// 
+/// Use br or br_if inside the body to control loop exit.
+pub fn generate_simple_loop(body_bytes : Array[Byte]) -> Array[Byte] {
+  let mut code : Array[Byte] = []
+  
+  // loop block (empty type for void)
+  code = code + [0x03, 0x40]
+  
+  // Loop body
+  code = code + body_bytes
+  
+  // end
+  code = code + [0x0B]
+  
+  code
+}
+
+///|
+/// Generate a break instruction (exit loop or block)
+/// 
+/// label_idx: 0 = innermost, 1 = next outer, etc.
+pub fn generate_br(label_idx : Int) -> Array[Byte] {
+  // br: 0x0C + varint(label_idx)
+  let mut code : Array[Byte] = [0x0C]
+  
+  // Encode label index as varint
+  let mut v = label_idx.reinterpret_as_uint()
+  while true {
+    let byte_val = v & 0x7F
+    v = v >> 7
+    if v == 0 {
+      code = code + [byte_val.to_byte()]
+      break
+    } else {
+      code = code + [(byte_val.reinterpret_as_int() | 0x80).to_byte()]
+    }
+  }
+  
+  code
+}
+
+///|
+/// Generate a conditional break instruction
+/// 
+/// Pops i32 from stack: if non-zero, branches to label
+pub fn generate_br_if(label_idx : Int) -> Array[Byte] {
+  // br_if: 0x0D + varint(label_idx)
+  let mut code : Array[Byte] = [0x0D]
+  
+  // Encode label index as varint
+  let mut v = label_idx.reinterpret_as_uint()
+  while true {
+    let byte_val = v & 0x7F
+    v = v >> 7
+    if v == 0 {
+      code = code + [byte_val.to_byte()]
+      break
+    } else {
+      code = code + [(byte_val.reinterpret_as_int() | 0x80).to_byte()]
+    }
+  }
+  
+  code
+}
+
+///|
+/// Generate a continue instruction (skip to next iteration)
+/// 
+/// This is equivalent to br 0 in a while loop context
+pub fn generate_continue() -> Array[Byte] {
+  // Continue = br 0 (branch to loop start)
+  generate_br(0)
+}
+
+///|
+/// Generate a break instruction (exit loop)
+/// 
+/// This is equivalent to br 0 in a while loop context (after condition check)
+pub fn generate_break() -> Array[Byte] {
+  // Break = br 0 (branch to end of innermost block)
+  generate_br(0)
+}
+
+///|
+/// Test that generate_if produces correct WASM bytecode
+/// 
+/// if (cond) { then_body } end
+/// Expected: [cond, 0x04, 0x40, then_body, 0x0B]
+test "generate_if produces valid bytecode" {
+  let condition : Array[Byte] = [0x41, 0x01] // i32.const 1
+  let then_body : Array[Byte] = [0x0F] // return (example)
+  
+  let code = generate_if(condition, then_body, false)
+  
+  // Check structure
+  assert_eq(code[0], 0x41) // i32.const
+  assert_eq(code[1], 0x01) // value 1
+  assert_eq(code[2], 0x04) // if
+  assert_eq(code[3], 0x40) // empty block type
+  assert_eq(code[4], 0x0F) // return
+  assert_eq(code[5], 0x0B) // end
+}
+
+///|
+/// Test that generate_if_else produces correct WASM bytecode
+test "generate_if_else produces valid bytecode" {
+  let condition : Array[Byte] = [0x41, 0x01] // i32.const 1
+  let then_body : Array[Byte] = [0x0F] // return
+  let else_body : Array[Byte] = [0x0B] // unreachable (example)
+  
+  let code = generate_if_else(condition, then_body, Some(else_body), false)
+  
+  // Check structure: condition + if + then + else + end
+  assert_eq(code[0], 0x41) // i32.const
+  assert_eq(code[2], 0x04) // if
+  assert_eq(code[3], 0x40) // empty
+  assert_eq(code[4], 0x0F) // return (then)
+  assert_eq(code[5], 0x05) // else
+  assert_eq(code[6], 0x0B) // unreachable (else)
+  assert_eq(code[7], 0x0B) // end
+}
+
+///|
+/// Test that generate_while_loop produces correct WASM bytecode
+test "generate_while_loop produces valid bytecode" {
+  let condition : Array[Byte] = [0x41, 0x01] // i32.const 1
+  let body : Array[Byte] = [0x0F] // return
+  
+  let code = generate_while_loop(condition, body, false)
+  
+  // Check structure: loop + condition + br_if + body + br + end
+  assert_eq(code[0], 0x03) // loop
+  assert_eq(code[1], 0x40) // empty
+  assert_eq(code[2], 0x41) // i32.const (condition)
+  assert_eq(code[4], 0x0D) // br_if
+  assert_eq(code[5], 0x00) // label 0
+  assert_eq(code[6], 0x0F) // body
+  assert_eq(code[7], 0x0C) // br
+  assert_eq(code[8], 0x00) // label 0
+  assert_eq(code[9], 0x0B) // end
+}
+
+///|
+/// Test generate_br produces correct opcode
+test "generate_br produces 0x0C" {
+  let code = generate_br(0)
+  assert_eq(code[0], 0x0C) // br opcode
+  assert_eq(code[1], 0x00) // label 0
+}
+
+test "generate_br with label 1" {
+  let code = generate_br(1)
+  assert_eq(code[0], 0x0C)
+  assert_eq(code[1], 0x01) // label 1
+}
+
+test "generate_br_if produces 0x0D" {
+  let code = generate_br_if(0)
+  assert_eq(code[0], 0x0D) // br_if opcode
+  assert_eq(code[1], 0x00) // label 0
+}
