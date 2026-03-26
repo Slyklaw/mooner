@@ -46,6 +46,36 @@ fn block_type_to_int(bt : BlockType) -> Int {
 }
 
 ///|
+/// Get empty block type (void return)
+pub fn block_type_empty() -> BlockType {
+  BlockType::Empty
+}
+
+///|
+/// Get i32 block type
+pub fn block_type_i32() -> BlockType {
+  BlockType::I32
+}
+
+///|
+/// Get i64 block type
+pub fn block_type_i64() -> BlockType {
+  BlockType::I64
+}
+
+///|
+/// Get f32 block type
+pub fn block_type_f32() -> BlockType {
+  BlockType::F32
+}
+
+///|
+/// Get f64 block type
+pub fn block_type_f64() -> BlockType {
+  BlockType::F64
+}
+
+///|
 /// Control flow instructions
 pub enum ControlInst {
   // Block instructions (0x02-0x05, 0x0B)
@@ -59,6 +89,7 @@ pub enum ControlInst {
   Br(LabelIdx)         /// 0x0C - Unconditional branch to label
   BrIf(LabelIdx)       /// 0x0D - Conditional branch to label
   BrTable(Array[LabelIdx], LabelIdx) /// 0x0E - Multi-way branch
+  Return               /// 0x0F - Return from function
   
   // Instruction markers for control flow generation
   /// Marker for condition evaluation point
@@ -115,6 +146,9 @@ pub fn ControlInst::to_bytes(self : ControlInst) -> Array[Byte] {
       bytes = bytes + encode_varint_ctrl(default_target)
       bytes
     }
+    
+    // Return instruction
+    Return => [0x0F]
     
     // Markers don't emit bytes
     Condition => []
@@ -207,6 +241,15 @@ pub fn emit_br_table(
   default_target : LabelIdx
 ) -> ControlInst {
   ControlInst::BrTable(targets, default_target)
+}
+
+///|
+/// Emit return instruction
+/// 
+/// Returns from the current function, optionally with a value.
+/// The return instruction unwinds all blocks and returns control to the caller.
+pub fn emit_return() -> ControlInst {
+  ControlInst::Return
 }
 
 // ============================================================================
@@ -446,9 +489,35 @@ pub fn LabelStack::continue_label(_self : LabelStack) -> Int {
   0
 }
 
+///|
+/// Get the depth of a specific labeled block
+/// 
+/// Returns the label index for a named label if it exists in the stack.
+pub fn LabelStack::get_label_depth(_self : LabelStack, _name : String) -> Int {
+  // For simple implementation, return 0 (innermost)
+  // A full implementation would track named labels
+  0
+}
+
 // ============================================================================
-// Tests
+// Tests for Return Instruction
 // ============================================================================
+
+///|
+/// Test that emit_return generates 0x0F
+test "emit_return generates 0x0F" {
+  let inst = emit_return()
+  let bytes = inst.to_bytes()
+  assert_eq(bytes[0], 0x0F)
+}
+
+///|
+/// Test return instruction length
+test "return instruction length is 1" {
+  let inst = emit_return()
+  let bytes = inst.to_bytes()
+  assert_eq(bytes.length(), 1)
+}
 
 ///|
 /// Test that emit_end generates 0x0B

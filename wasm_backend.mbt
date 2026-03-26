@@ -1080,6 +1080,47 @@ pub fn generate_break() -> Array[Byte] {
 }
 
 ///|
+/// Generate a return instruction
+/// 
+/// Returns from the current function. If a value is needed,
+/// it should already be on the stack before calling this.
+/// The return instruction pops values from the stack and
+/// returns control to the caller.
+pub fn generate_return() -> Array[Byte] {
+  // return: 0x0F (no operands)
+  [0x0F]
+}
+
+///|
+/// Generate a return with value
+/// 
+/// Convenience function that pushes the value onto stack then returns.
+/// - value: The constant value to return (as i32)
+/// 
+/// Generates: i32.const value, return
+pub fn generate_return_i32(value : Int) -> Array[Byte] {
+  let mut code : Array[Byte] = []
+  // i32.const: 0x41 + varint(value)
+  code = code + [0x41]
+  // Encode value as varint
+  let mut v = value.reinterpret_as_uint()
+  while true {
+    let byte_val = v & 0x7F
+    v = v >> 7
+    if v == 0 {
+      code = code + [byte_val.to_byte()]
+      break
+    } else {
+      let combined = byte_val.reinterpret_as_int() | 0x80
+      code = code + [combined.to_byte()]
+    }
+  }
+  // return: 0x0F
+  code = code + [0x0F]
+  code
+}
+
+///|
 /// Test that generate_if produces correct WASM bytecode
 /// 
 /// if (cond) { then_body } end
