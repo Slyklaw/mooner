@@ -30,8 +30,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans in 2 waves
 
 Plans:
-- [ ] 01-01: Implement LEB128 encoding and WASM section writing utilities
-- [ ] 01-02: Refactor codegen to support multiple backends (strategy pattern)
+- [x] 01-01: Implement LEB128 encoding and WASM section writing utilities
+- [x] 01-02: Refactor codegen to support multiple backends (strategy pattern)
 - [ ] 01-03: Create minimal WASM backend that emits empty module
 
 ### Phase 2: Basic Language Features
@@ -90,7 +90,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 1/3 | In Progress | 2026-03-25 |
+| 1. Foundation | 2/3 | In Progress | 2026-03-26 |
 | 2. Basic Language Features | 0/4 | Not started | - |
 | 3. Functions & Variables | 0/3 | Not started | - |
 | 4. CLI Integration | 3/3 | Planned | - |

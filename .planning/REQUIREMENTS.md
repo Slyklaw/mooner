@@ -51,9 +51,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Code Generation Abstraction
 
-- [ ] **ABST-01**: Refactor code generation to support multiple backends (strategy pattern)
-- [ ] **ABST-02**: Define backend interface for instruction emission
-- [ ] **ABST-03**: Keep existing x86_64 backend functional after abstraction
+- [x] **ABST-01**: Refactor code generation to support multiple backends (strategy pattern)
+- [x] **ABST-02**: Define backend interface for instruction emission
+- [x] **ABST-03**: Keep existing x86_64 backend functional after abstraction
 
 ## v2 Requirements
 
@@ -120,9 +120,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLI-02 | Phase 4 | Pending |
 | CLI-03 | Phase 4 | Pending |
 | CLI-04 | Phase 4 | Pending |
-| ABST-01 | Phase 1 | Pending |
-| ABST-02 | Phase 1 | Pending |
-| ABST-03 | Phase 1 | Pending |
+| ABST-01 | Phase 1 | Complete |
+| ABST-02 | Phase 1 | Complete |
+| ABST-03 | Phase 1 | Complete |
 
 **Coverage:**
 - v1 requirements: 27 total
@@ -131,4 +131,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-03-25 after roadmap creation*
+*Last updated: 2026-03-26 after Plan 01-02 completion*
