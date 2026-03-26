@@ -9,8 +9,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### WASM Binary
 
-- [ ] **WASM-01**: Generate valid WASM binary (correct magic number, version, section structure)
-- [ ] **WASM-02**: Implement LEB128 encoding for integers (required for WASM binary format)
+- [x] **WASM-01**: Generate valid WASM binary (correct magic number, version, section structure)
+- [x] **WASM-02**: Implement LEB128 encoding for integers (required for WASM binary format)
 - [ ] **WASM-03**: Write WASM sections (type, function, export, code, etc.)
 - [ ] **WASM-04**: Validate generated binary passes WASM validation tools (e.g., `wasm-validate`)
 
