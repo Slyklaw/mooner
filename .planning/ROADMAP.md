@@ -27,7 +27,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. Compiler can generate a valid WASM binary file (passes wasm-validate) from a trivial program
   2. Existing x86_64 backend still works after abstraction refactoring
   3. New backend can be added by implementing a simple interface (observable via code structure)
-**Plans**: TBD
+**Plans**: 3 plans in 2 waves
 
 Plans:
 - [ ] 01-01: Implement LEB128 encoding and WASM section writing utilities
@@ -76,12 +76,12 @@ Plans:
   2. Compiler auto-detects output format based on file extension (.wasm vs .exe)
   3. Existing x86_64 backend still works without breaking changes
   4. Output .wasm files have proper permissions (no chmod needed)
-**Plans**: TBD
+**Plans**: 3 plans in 1 wave
 
 Plans:
-- [ ] 04-01: Add --target wasm flag to CLI
-- [ ] 04-02: Implement auto-detection based on file extension
-- [ ] 04-03: Ensure output permissions are correct
+- [x] 04-01-PLAN.md — Add --target flag and auto-detection
+- [x] 04-02-PLAN.md — Wire WASM compilation to CLI
+- [x] 04-03-PLAN.md — Verify backward compatibility and permissions
 
 ## Progress
 
@@ -90,10 +90,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Not started | - |
+| 1. Foundation | 1/3 | In Progress | 2026-03-25 |
 | 2. Basic Language Features | 0/4 | Not started | - |
 | 3. Functions & Variables | 0/3 | Not started | - |
-| 4. CLI Integration | 0/3 | Not started | - |
+| 4. CLI Integration | 3/3 | Planned | - |
 
 ## Coverage
 
