@@ -47,7 +47,7 @@ Plans:
 
 Plans:
 - [x] 02-01: Implement i32 and i64 arithmetic operations in WASM backend
-- [ ] 02-02: Implement f32 and f64 arithmetic operations in WASM backend
+- [x] 02-02: Implement f32 and f64 arithmetic operations in WASM backend
 - [ ] 02-03: Implement if/else and loop control flow in WASM backend
 - [ ] 02-04: Implement block labels, branching, and return statements
 
@@ -91,7 +91,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete    | 2026-03-26 |
-| 2. Basic Language Features | 1/4 | In Progress | 2026-03-26 |
+| 2. Basic Language Features | 2/4 | In Progress | 2026-03-26 |
 | 3. Functions & Variables | 0/3 | Not started | - |
 | 4. CLI Integration | 3/3 | Planned | - |
 
