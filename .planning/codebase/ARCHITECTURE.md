@@ -1,119 +1,148 @@
 # Architecture
 
-**Analysis Date:** 2026-03-25
+**Analysis Date:** 2026-03-26
 
 ## Pattern Overview
 
-**Overall:** Monolithic compiler pipeline with distinct phases (lexer, parser, code generator, ELF linker).
+**Overall:** Multi-pass compiler with trait-based backend abstraction
 
 **Key Characteristics:**
-- Simple single-pass compilation without separate linking or optimization phases.
-- Each phase is implemented in a dedicated module (`lexer.mbt`, `parser.mbt`, `codegen.mbt`, `compiler.mbt`).
-- The compiler generates x86_64 ELF executables directly, embedding the ELF header generation within `compiler.mbt`.
-- No separate symbol table or type-checking passes; the language is dynamically typed (or type inference is implicit).
-- The codebase is written entirely in MoonBit, making it self-hosted (the compiler compiles its own language).
+- Classic compiler pipeline: Lexing → Parsing → Code Generation → Output
+- Trait-based backend system supports multiple target architectures
+- Stateful code generation with explicit instruction emission
+- Direct binary output generation (ELF for x86_64, WASM binary format)
 
 ## Layers
 
-**Frontend (Lexer):**
-- Purpose: Tokenizes source code into a stream of tokens.
+**Lexer Layer:**
+- Purpose: Tokenize source code into token stream
 - Location: `lexer.mbt`
-- Contains: `Token` enum (80+ token types), `Lexer` struct with `tokenize` function.
-- Depends on: Nothing external (pure transformation).
-- Used by: Parser.
+- Contains: `Token` enum, `Lexer` struct, lexing functions
+- Depends on: Nothing (pure string processing)
+- Used by: Parser
 
-**Frontend (Parser):**
-- Purpose: Parses token stream into an Abstract Syntax Tree (AST).
+**Parser Layer:**
+- Purpose: Build abstract syntax tree (AST) from token stream
 - Location: `parser.mbt`
-- Contains: `AST` enum (40+ node types), `Parser` struct with `parse` function.
-- Depends on: `Token` from lexer.
-- Used by: Code generator.
+- Contains: `AST` enum, `Parser` struct, parsing functions for all language constructs
+- Depends on: `Token` from lexer
+- Used by: CodeGen, Backend implementations
 
-**Backend (Code Generator):**
-- Purpose: Traverses AST and emits x86_64 machine code bytes.
-- Location: `codegen.mbt`
-- Contains: `CodeGen` struct with extensive state for tracking variables, labels, loops, strings, floats, etc.
-- Depends on: `AST` from parser.
-- Used by: Compiler entry point.
+**Code Generation Layer:**
+- Purpose: Convert AST to machine code/bytecode
+- Location: `codegen.mbt` (x86_64 specific), `wasm_backend.mbt` (WASM specific)
+- Contains: `CodeGen` struct (x86_64), `X86Inst`/`X86Operand` enums, `WasmModuleBuilder` (WASM)
+- Depends on: `AST` from parser
+- Used by: Compiler orchestration
 
-**Linker (ELF Builder):**
-- Purpose: Assembles generated machine code into a valid ELF executable with proper headers and padding.
-- Location: `compiler.mbt` (function `compile_file`)
-- Contains: ELF header constants, program header generation, padding logic.
-- Depends on: Code generator's byte output, external file I/O (`@fs`).
-- Used by: CLI entry point.
+**Backend Abstraction:**
+- Purpose: Provide unified interface for different target architectures
+- Location: `backend.mbt` (trait definition), implementations in `codegen.mbt` and `wasm_backend.mbt`
+- Contains: `Backend` trait, `TargetInfo` struct, `Endianness` enum
+- Depends on: Nothing (interface only)
+- Used by: Compiler orchestration
 
-**CLI Entry Point:**
-- Purpose: Parses command-line arguments and invokes the compilation pipeline.
-- Location: `cmd/main/main.mbt`
-- Contains: `main` function that reads args, calls `@mooner.compile_file`.
-- Depends on: Compiler's public API.
+**Orchestration Layer:**
+- Purpose: Coordinate compilation flow, handle I/O, select target
+- Location: `compiler.mbt`, `cmd/main/main.mbt`
+- Contains: `Target` enum, `compile_file`, `compile_file_target`, CLI argument parsing
+- Depends on: All lower layers
+- Used by: End user (via CLI)
 
 ## Data Flow
 
 **Compilation Pipeline:**
 
-1. **Source → Tokens:** `lexer.tokenize(source)` produces `Array[Token]`.
-2. **Tokens → AST:** `parser.parse(tokens)` produces `AST`.
-3. **AST → Machine Code:** `codegen.codegen(ast, debug_level)` produces `Array[Byte]`.
-4. **Machine Code → ELF File:** `compiler.compile_file` combines ELF header, program header, padding, and code bytes, then writes to disk.
+1. **Input**: Source file read via `@fs.read_file_to_string(input_path)`
+2. **Tokenization**: `tokenize(source)` → `Array[Token]`
+3. **Parsing**: `parse(tokens)` → `AST`
+4. **Target Selection**: Based on output extension (.exe vs .wasm) or `--target` flag
+5. **Code Generation**:
+   - x86_64: `X86_64Backend::new(debug_level)` → `Backend::generate_module(backend, ast)` → `Bytes`
+   - WASM: `WasmBackend::new(debug_level)` → `Backend::generate_module(backend, ast)` → `Bytes`
+6. **Output Formatting**:
+   - x86_64: Build ELF header (64 bytes) + program header (56 bytes) + padding + code, write to file
+   - WASM: Build WASM module (magic + version + sections), write to file directly
 
 **State Management:**
-- Lexer maintains position index.
-- Parser maintains token array and position index.
-- CodeGen maintains a complex state map (`CodeGen` struct) that tracks variable offsets, types, labels, string/float pools, etc.
-- No persistent state between compilation runs; each invocation creates fresh structs.
+- `CodeGen` struct maintains mutable code buffer, label table, variable offsets, and various metadata
+- State is threaded through functional updates (immutable style with shadowing)
+- `pending_labels` allows forward references for jumps/calls
 
 ## Key Abstractions
 
-**Token (`lexer.mbt`):**
-- Purpose: Represents lexical units of the source language.
-- Examples: `Token::Fn`, `Token::Int(Int)`, `Token::Plus`.
-- Pattern: Tagged union with variants for keywords, literals, operators.
+**Token System:**
+- `Token` enum in `lexer.mbt` represents all lexical tokens (keywords, operators, literals, punctuation)
+- `Token::Ident(String)`, `Token::Int(Int)`, `Token::Float(Double)`, `Token::String(String)` carry payloads
+- `token_eq` function for token comparison (pattern matching on enum variants)
 
-**AST (`parser.mbt`):**
-- Purpose: Represents syntactic structure of the program.
-- Examples: `AST::Func`, `AST::LetBind`, `AST::Binary`.
-- Pattern: Tagged union with recursive structure (AST nodes can contain other AST nodes).
+**AST Representation:**
+- `AST` enum in `parser.mbt` with 40+ variants representing all language constructs
+- Literal nodes: `Int`, `Float`, `String`, `Char`, `Bool`, `Unit`, `Ident`
+- Expression nodes: `Binary`, `Unary`, `CallExpr`, `FieldExpr`, `IndexExpr`, `IfExpr`, `MatchExpr`, etc.
+- Statement nodes: `Func`, `LetBind`, `LetTuple`, `WhileLoop`, `ForLoop`, `ReturnExpr`, etc.
+- Type/struct nodes: `TypeDecl`, `EnumDef`, `StructLit`, `StructUpdate`
+- Special: `Block(Array[AST])`, `TestBlock`
 
-**CodeGen (`codegen.mbt`):**
-- Purpose: Stateful code emitter that translates AST into x86_64 instructions.
-- Examples: `CodeGen` struct with fields for code buffer, label maps, variable offset maps.
-- Pattern: Single-pass code generation with forward label references resolved via pending labels array.
+**Instruction Set Abstraction:**
+- x86_64: `X86Inst` enum defines all supported instructions (Mov, Add, Sub, Jmp, etc.)
+- WASM: `WasmArithInst` enum, `WasmBlockType`, section-based binary format
+- Operands: `X86Operand` enum (Imm8/32/64, Reg64, Stack, Label, MemIndirect, etc.)
+
+**Backend Trait:**
+- `Backend` trait defines `generate_module(self, AST) -> Array[Byte]`
+- `get_target_info(self) -> TargetInfo`
+- `supports_feature(self, Feature) -> Bool`
+- Implementations: `X86_64Backend` (in `codegen.mbt`), `WasmBackend` (in `wasm_backend.mbt`)
 
 ## Entry Points
 
-**CLI Entry Point:**
-- Location: `cmd/main/main.mbt`
-- Triggers: User runs `moon run cmd/main <input_file> [output_file] [--debug]`.
-- Responsibilities: Parse args, call `@mooner.compile_file`.
+**Public API:**
+- `compiler.mbt`:
+  - `compile_file(input_path, output_path, debug_level) -> Result[Unit, String]` (auto-detect target)
+  - `compile_file_target(input_path, output_path, debug_level, target) -> Result[Unit, String]` (explicit target)
+  - `Target` enum with `x86_64()`, `wasm()`, `default()`, `from_string(String) -> Target?`
 
-**Compiler API Entry Point:**
-- Location: `compiler.mbt`
-- Triggers: Called by CLI or other MoonBit code.
-- Responsibilities: Orchestrate tokenization, parsing, code generation, and ELF assembly.
-
-**Public API Functions (exported from root package):**
-- `tokenize(source: String) -> Array[Token]` (`lexer.mbt`)
-- `parse(tokens: Array[Token]) -> AST` (`parser.mbt`)
-- `codegen(ast: AST, debug_level: Int) -> Array[Byte]` (`codegen.mbt`)
-- `compile_file(input_path: String, output_path: String, debug_level: Int) -> Result[Unit, String]` (`compiler.mbt`)
+**CLI:**
+- `cmd/main/main.mbt`: `main` function
+- Parses command-line arguments: input file, output file, `--target`, `--debug`
+- Calls `@lib.compile_file_target` with appropriate parameters
+- Entry configured in `moon.mod.json`
 
 ## Error Handling
 
-**Strategy:** Result monad (`Result[T, E]`) for fallible operations; errors are `String` messages.
+**Strategy:** `Result[Unit, String]` return types for compilation operations
 
 **Patterns:**
-- `compile_file` returns `Result[Unit, String]` for file I/O errors.
-- Lexer/parser/codegen currently assume valid input (no error recovery).
-- External library calls (e.g., `@fs.read_file_to_string`) are wrapped in `catch` blocks that convert exceptions to `Err(...)`.
+- File I/O wrapped in `try/catch` with user-friendly error messages
+- Parser recovers from errors by skipping tokens (prevents infinite loops)
+- Tokenization returns `Eof` to terminate loop
+- Validation errors return `Err("message")` with context
+
+**Examples:**
+- `@fs.read_file_to_string(input_path) catch { e => return Err("Failed to read input file: \{e}") }`
+- `@fs.write_bytes_to_file(output_path, result) catch { e => Err("Failed to write output file: \{e}") }`
 
 ## Cross-Cutting Concerns
 
-**Logging:** No logging framework; debug output via `println` when `debug_level > 0` (in codegen).
-**Validation:** No explicit validation; malformed input may cause panics or incorrect output.
-**Authentication:** Not applicable (offline compiler).
+**Logging/Tracing:**
+- Debug output via `CodeGen::trace_instruction` when `debug_level >= 1`
+- Uses syscall-based println for x86_64 backend
+- CLI `--debug` and `--debug-codegen` flags
+
+**Validation:**
+- Target validation: `Target::from_string` returns `None` for unknown targets
+- AST validation implicitly during code generation (missing handlers default to stubs)
+
+**File I/O:**
+- All file operations use `@fs` module from `moonbitlang/x/fs`
+- Binary write: `@fs.write_bytes_to_file(path, bytes)`
+- Text read: `@fs.read_file_to_string(path)`
+
+**Formatting:**
+- `moon fmt` used for consistent code style (per AGENTS.md)
+- No runtime formatting; all code is pre-formatted
 
 ---
 
-*Architecture analysis: 2026-03-25*
+*Architecture analysis: 2026-03-26*

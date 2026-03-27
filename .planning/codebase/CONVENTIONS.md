@@ -1,111 +1,305 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-03-25
+**Analysis Date:** 2026-03-26
 
-## Naming Patterns
+## Block Structure
 
-**Files:**
-- Snake case with `.mbt` extension: `lexer.mbt`, `parser.mbt`, `codegen.mbt`, `double_ryu_nonjs.mbt`
-- Test files follow MoonBit convention: `*_test.mbt` for blackbox tests, `*_wbtest.mbt` for whitebox tests
-- Example files in `examples/` directory: `test_*.mbt` for test examples, `*.mbt` for sample programs
+MoonBit code is organized in **block style**, with each logical block separated by the `///|` delimiter. The order of blocks is irrelevant, allowing flexible code organization.
 
-**Functions:**
-- Snake case for all functions and methods: `char_at`, `is_whitespace`, `read_ident`, `parse_int`, `parse_double`
-- Method names use `Type::method` syntax: `Lexer::new`, `Lexer::advance`, `Parser::parse_expr`
-- Private functions (not exported) use snake case: `self_token_eq`, `has_dot`, `has_exp`
+**Example from `lexer.mbt` (lines 1-4):**
+```moonbit
+///|
+/// Self-hosted MoonBit compiler - generates x86_64 ELF executables
+pub enum Token {
+  Fn
+  Let
+```
 
-**Variables:**
-- Snake case for local variables: `input_path`, `output_path`, `debug_level`
-- Mutable variables prefixed with `mut`: `let mut lexer = self`, `let mut result = ""`
+**Example from `parser.mbt` (lines 1-3):**
+```moonbit
+///|
+pub enum AST {
+  Unit
+```
 
-**Types:**
-- PascalCase for type definitions: `Token` (enum), `Lexer` (struct), `AST` (enum)
-- Enum variants use PascalCase: `Token::Fn`, `Token::Ident(String)`, `AST::Func(...)`
-- Struct fields use snake case: `input`, `pos`, `line`, `column`
+Each block typically contains:
+- A documentation comment (optional, using `///`)
+- The `///|` separator
+- A single declaration or set of related declarations
 
-**Constants:**
-- No explicit constant definitions observed; literals used directly
+## Naming Conventions
 
-## Code Style
+**Files:** snake_case with `.mbt` extension
+- `lexer.mbt`, `parser.mbt`, `codegen.mbt`, `compiler.mbt`
+- Test files: `mooner_test.mbt`, `mooner_wbtest.mbt`
 
-**Formatting:**
-- Tool: `moon fmt` (MoonBit's standard formatter)
-- Block separation: `///|` on its own line separates independent blocks
-- Indentation: 2 spaces (default MoonBit formatting)
-- Braces: same line for control structures (`if ... {`, `match ... {`)
+**Types (enums, structs, traits):** PascalCase
+- `Token`, `AST`, `Lexer`, `Parser`, `CodeGen`, `X86Inst`, `X86Operand`, `Target`
 
-**Linting:**
-- No dedicated linting configuration found; rely on `moon fmt` and compiler warnings
-- Compiler warnings: reserved keyword warnings (e.g., `method` is reserved)
+**Enum Variants:** PascalCase (mostly match language keywords)
+- Keywords: `Fn`, `Let`, `Mut`, `If`, `Else`, `Match`, `Case`, `While`, `For`
+- Literals: `True`, `False`, `Unit`, `Int`, `Float`, `String`, `Char`, `Bool`
+- Operators: `Plus`, `Minus`, `Star`, `Slash`, `EqEq`, `BangEqual`, `Lt`, `Gt`
+- Punctuation: `LParen`, `RParen`, `LBracket`, `RBracket`, `LBrace`, `RBrace`
+- Special: `Ident`, `Eof`, `Underscore`
 
-## Import Organization
+**Functions:** snake_case
+- Public: `tokenize`, `parse`, `Lexer::new`, `Parser::parse`
+- Private: `read_ident`, `is_whitespace`, `parse_binary`, `emit_byte`
 
-**Pattern:**
-- No explicit import statements; dependencies declared in `moon.mod.json`
-- External packages accessed via `@` prefix: `@fs.read_file_to_string`, `@env.args()`
-- Standard library functions accessed directly: `println`, `Array::make`, `String::length`
+**Variables and Struct Fields:** snake_case
+- `input`, `pos`, `line`, `column`, `tokens`, `code`, `labels`
+- `var_offsets`, `var_is_float`, `var_float_values`
 
-**Path Aliases:**
-- Not applicable; MoonBit uses package-based imports
+**Constants:** Used sparingly; prefer module-level values
+- `X86_64`, `Wasm` (enum variants) or module constants like `block_type_empty`
+
+## Type System Patterns
+
+**Option Types:** `Type?` for nullable values
+```moonbit
+fn char_at(s : String, i : Int) -> Char? {  // lexer.mbt:108
+  if i < s.length() {
+    let c = s[i]
+    c.to_char()
+  } else {
+    None
+  }
+}
+```
+
+**Result Types:** `Result[T, String]` for error handling
+```moonbit
+pub fn compile_file(
+  input_path : String,
+  output_path : String,
+  debug_level : Int,
+) -> Result[Unit, String] {  // compiler.mbt:37
+```
+
+**Arrays:** `Array[Element]` for sequences
+- Used extensively: `Array[Token]`, `Array[AST]`, `Array[Byte]`
+
+**Maps:** `Map[Key, Value]` for associative data
+- `Map[String, Int]`, `Map[String, Bool]` used in codegen for tracking variables
+
+**Tuples:** `(Type1, Type2, ...)` for multiple return values
+```moonbit
+fn Lexer::read_ident(self : Lexer) -> (String, Lexer) {  // lexer.mbt:213
+```
+
+## Struct Definitions
+
+**Struct initializer:** Record syntax with `{ ... }`
+```moonbit
+pub struct Lexer {
+  input : String
+  pos : Int
+  line : Int
+  column : Int
+}
+
+pub fn Lexer::new(input : String) -> Lexer {
+  { input, pos: 0, line: 1, column: 1 }  // lexer.mbt:103-105
+}
+```
+
+Note: Immutable by default; use `mut` for mutable bindings.
+
+## Enum Definitions
+
+**Simple enums:** No payload
+```moonbit
+pub enum Token {
+  Fn
+  Let
+  Mut
+  // ...
+  Eof
+} derive(Show)  // lexer.mbt:3-92
+```
+
+**Tagged enums:** With associated data
+```moonbit
+pub enum AST {
+  Unit
+  Int(Int)
+  Float(Double)
+  String(String)
+  Char(Char)
+  Bool(Bool)
+  Ident(String)
+  Block(Array[AST])
+  Func(String, Array[(String, AST?)], AST?, AST)
+  // ...
+} derive(Show)  // parser.mbt:2-40
+```
 
 ## Error Handling
 
-**Patterns:**
-- `Result[T, E]` type for fallible operations: `fn compile_file(...) -> Result[Unit, String]`
-- `catch` blocks for error handling: `catch { e => return Err("Failed to read input file: \{e}") }`
-- `try/catch` for I/O operations: `try { @fs.write_bytes_to_file(...) } catch { e => Err(...) }`
-- Pattern matching on `Result` in caller: `match @lib.compile_file(...) { Ok(_) => ..., Err(e) => ... }`
+**Pattern:** Return `Result[T, String]` for operations that can fail.
 
-**Error Messages:**
-- Descriptive strings with interpolation: `"Failed to read input file: \{e}"`
+**Common patterns:**
+1. **File I/O:** Use `@fs.read_file_to_string(path) catch { e => ... }`
+```moonbit
+let source = @fs.read_file_to_string(input_path) catch {
+  e => return Err("Failed to read input file: \{e}")
+}  // compiler.mbt:60-62
+```
 
-## Logging
+2. **Propagate errors with context:**
+```moonbit
+try {
+  @fs.write_bytes_to_file(output_path, result)
+  Ok(())
+} catch {
+  e => Err("Failed to write output file: \{e}")
+}  // compiler.mbt:179-184
+```
 
-**Framework:** `println` for standard output
+3. **Early returns:** Use `return` to exit early on error.
 
-**Patterns:**
-- Diagnostic output via `println("Compiled to \{output_path}")`
-- Error output via `println("Error: \{e}")`
-- No structured logging framework
+## Pattern Matching
+
+**Match expressions:** Exhaustive pattern matching with `match`
+```moonbit
+match self.current() {
+  Ident(name) => (name, self.advance())
+  _ => ("", self)
+}  // parser.mbt:98-101
+```
+
+**Destructuring:** Use pattern matching to unpack enums and tuples
+```moonbit
+match c {
+  Some(c) => // handle Some
+  None => // handle None
+}  // lexer.mbt:124-128
+```
+
+**Guards:** Conditions in match arms using `if`
+```moonbit
+Some(c) if is_whitespace(c) => // whitespace handling
+```
+
+## Mutability
+
+**Default:** All bindings are immutable.
+```moonbit
+let mut lexer = self  // mutable binding with `mut`
+```
+
+**Mutating structs:** Update syntax `{ ..struct, field: new_value }`
+```moonbit
+fn Lexer::advance(self : Lexer) -> Lexer {
+  match self.current_char() {
+    Some('\n') => { ..self, pos: self.pos + 1, line: self.line + 1, column: 1 }
+    Some(_) => { ..self, pos: self.pos + 1, column: self.column + 1 }
+    None => self
+  }
+}  // lexer.mbt:123-129
+```
+
+**Array mutation:** Use `array = array + [element]` (functional update)
+```moonbit
+tokens = tokens + [token]  // lexer.mbt:1014
+stmts = stmts + [expr]     // parser.mbt:1613
+```
+
+## AST Types and Design
+
+**AST node types:** Comprehensive representation of language constructs
+- **Literals:** `Unit`, `Int`, `Float`, `String`, `Char`, `Bool`, `Ident`
+- **Compound:** `Block`, `Tuple`, `ArrayLit`, `MapLit`, `StringConcat`
+- **Control flow:** `IfExpr`, `MatchExpr`, `WhileLoop`, `ForLoop`, `ForInLoop`
+- **Bindings:** `LetBind`, `LetTuple`, `Assign`, `AssignOp`
+- **Expressions:** `Binary`, `Unary`, `CallExpr`, `IndexExpr`, `FieldExpr`, `Spread`
+- **Functions:** `Func`, `ReturnExpr`, `Break`, `Continue`
+- **Types:** `TypeDecl`, `EnumDef`, `StructLit`, `StructUpdate`
+- **Advanced:** `GuardExpr`, `TestBlock`
+
+**AST construction:** Hand-written recursive descent parser building AST nodes directly.
+
+## Trait Usage
+
+**`derive(Show)`:** Used on enums to enable printing for debugging.
+```moonbit
+pub enum Token { ... } derive(Show)  // lexer.mbt:92
+```
+
+No custom traits are defined in the core compiler files; the codebase relies on built-in traits and standard library functions.
+
+## Code Layout and Indentation
+
+**Indentation:** 2 spaces per level (observed in all source files)
+
+**Block content:** Indented one level from the block header
+```moonbit
+pub fn Lexer::new(input : String) -> Lexer {
+  { input, pos: 0, line: 1, column: 1 }  // 2-space indent
+}
+```
+
+**Nested match arms:** Indented within the match block
+```moonbit
+match c {
+  Some(c) =>
+    if is_whitespace(c) {
+      lexer = lexer.advance()
+    } else {
+      done = true
+    }
+  None => done = true
+}  // lexer.mbt:158-167
+```
 
 ## Comments
 
-**When to Comment:**
-- Block separators: `///|` on its own line between logical sections
-- Inline comments for complex logic: `// Header is 64 + 56 = 120 bytes (0x78)`
-- TODO comments for future work: `/// TODO: ryu_to_logger[T:Logger](Double/Float, T) -> Unit`
-- Unicode escape notes: `// Unicode escape: \u{XXXX}`
+**File header:** Optional `///` comment at top of file
+```moonbit
+///|
+/// Self-hosted MoonBit compiler - generates x86_64 ELF executables
+```
 
-**JSDoc/TSDoc:**
-- Not used; MoonBit uses its own documentation system
+**Block comments:** `///` before each block
+- Describes purpose of the block
+- Can be multi-line
 
-## Function Design
+**Inline comments:** `//` for short explanations
+```moonbit
+let has_dot = num_str.contains(".")  // Check if it's a float
+```
 
-**Size:**
-- Functions tend to be focused (20-50 lines typical)
-- Large functions broken into helpers (e.g., `Lexer::read_number` calls `read_decimal_number`, `parse_hex`, `parse_binary`)
+## String Interpolation
 
-**Parameters:**
-- Explicit type annotations required
-- `self` parameter for methods: `fn Lexer::advance(self : Lexer) -> Lexer`
-- Tuple returns for multiple values: `(String, Lexer)` from `read_ident`
+**Syntax:** `\{expression}` inside strings
+- Used in error messages: `"Failed to read file: \{e}"`
+- Used in token parsing: `"\[name}[\{inner}]"`
 
-**Return Values:**
-- Explicit return types required
-- Unit `()` for side-effect functions
-- `Option[T]` for partial functions: `fn char_at(s : String, i : Int) -> Char?`
+## Access Modifiers
 
-## Module Design
+**`pub`:** Public declarations exported from the package
+- `pub enum Token`, `pub struct Lexer`, `pub fn tokenize`
 
-**Exports:**
-- Public items marked with `pub`: `pub enum Token`, `pub struct Lexer`, `pub fn Lexer::new`
-- Internal helpers are private by default
+**No modifier:** Private to the package/module
+- `fn char_at`, `fn is_whitespace`, `fn read_ident` are private helpers
 
-**Barrel Files:**
-- Not used; each module is a single `.mbt` file
-- Package entry point: `compiler.mbt` exports `compile_file`
-- CLI entry point: `cmd/main/main.mbt`
+## Derive Attributes
 
----
+**`derive(Show)`:** Automatically generates `to_string` for debug printing.
+Applied to `Token`, `AST`, `Operand`, `X86Inst`, `X86Operand`.
 
-*Convention analysis: 2026-03-25*
+## Deprecated Code
+
+**Handling:** Projects may include `deprecated.mbt` files per AGENTS.md, but this codebase does not currently use deprecated blocks.
+
+## Code Style Summary
+
+- **Immutable-first:** Use immutable bindings; mutate via shadowing or functional updates
+- **Exhaustive matching:** Always handle all enum variants in match expressions
+- **Explicit returns:** Use `return` for early exits; otherwise last expression returns
+- **Error as strings:** Error messages are human-readable `String`s
+- **Functional updates:** Arrays and structs updated with `+` and `{ .. }` syntax
+- **Spaces over tabs:** 2-space indentation throughout
+- **Self methods:** Use `self::method` syntax for struct methods
+- **Option handling:** Prefer `match` over `unwrap`-style functions (MoonBit uses `?` option type)

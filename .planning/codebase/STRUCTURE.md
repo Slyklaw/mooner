@@ -1,163 +1,169 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-03-25
+**Analysis Date:** 2026-03-26
 
 ## Directory Layout
 
 ```
-moonbit/mooner/
-├── lexer.mbt                 # Tokenizer implementation (Token enum, Lexer struct)
-├── parser.mbt                # Parser implementation (AST enum, Parser struct)
-├── codegen.mbt               # x86_64 code generator (CodeGen struct)
-├── compiler.mbt              # ELF header generation and compilation orchestration
-├── double_ryu_nonjs.mbt      # Ryu float-to-string algorithm (for IEEE 754 doubles)
-├── mooner_test.mbt           # Blackbox tests (E2E compilation tests)
-├── mooner_wbtest.mbt         # Whitebox tests (internal unit tests)
-├── moon.mod.json             # Module metadata (dependencies, version)
-├── moon.pkg                  # Package dependencies (imports)
-├── pkg.generated.mbti        # Generated interface file (do not edit)
-├── cmd/
+[project-root]/
+├── .mooncakes/              # Dependency package cache (generated, not committed)
+│   └── moonbitlang/
+│       ├── x/               # Standard library packages (fs, sys, crypto, etc.)
+│       └── ...
+├── .planning/               # Project planning documents
+│   └── codebase/            # Codebase analysis documents (this directory)
+├── cmd/                     # Command-line interface and entry points
 │   └── main/
-│       ├── main.mbt          # CLI entry point
-│       └── moon.pkg          # Subpackage dependencies
-├── examples/                 # Example MoonBit source files and compiled outputs
-│   ├── mbt_examples/         # Official MoonBit examples for verification
-│   └── test_*.mbt            # Various test programs (each with .exe counterpart)
-├── harness/
-│   └── minimal/              # Minimal executable examples (with README)
-├── .github/
-│   └── workflows/            # CI configuration (copilot-setup-steps.yml)
-├── .githooks/                # Git hooks (pre-commit)
-├── .mooncakes/               # MoonBit package cache (external dependencies)
-├── _build/                   # Build artifacts (generated)
-└── *.py                      # Utility scripts (fix_all.py, add_jmp.py, etc.)
+│       └── main.mbt         # CLI entry point
+├── examples/                # Sample MoonBit source files for testing
+│   ├── *.mbt
+│   └── mbt_examples/
+├── .gitignore               # Git ignore rules
+├── AGENTS.md                # Agent instructions and project conventions
+├── backend.mbt              # Backend trait and target abstraction
+├── codegen.mbt              # x86_64 code generator (CodeGen, X86Inst, X86Operand)
+├── compiler.mbt             # Compilation orchestration, ELF generation
+├── double_ryu_nonjs.mbt     # Float-to-string algorithm (IEEE 754)
+├── lexer.mbt                # Lexical analyzer (Token, Lexer)
+├── parser.mbt               # Parser (AST, Parser)
+├── wasm_backend.mbt         # WebAssembly backend implementation
+├── moon.mod.json            # MoonBit module metadata
+├── moon.pkg                 # Package dependencies (per-directory)
+├── README.md                # Project documentation
+└── [test files]             # mooner_test.mbt, mooner_wbtest.mbt
 ```
 
 ## Directory Purposes
 
-**Root directory:**
-- Purpose: Contains core compiler modules and package configuration.
-- Contains: All main `.mbt` source files, `moon.mod.json`, `moon.pkg`.
-- Key files: `lexer.mbt`, `parser.mbt`, `codegen.mbt`, `compiler.mbt`.
+**Root Directory:**
+- Purpose: Contains all core compiler source files and project configuration
+- Contains: `.mbt` source files for lexer, parser, codegen, compiler; backend implementations; configuration files
+- Key files: `lexer.mbt`, `parser.mbt`, `codegen.mbt`, `compiler.mbt`, `backend.mbt`, `wasm_backend.mbt`
 
 **`cmd/main/`:**
-- Purpose: Command‑line interface entry point.
-- Contains: `main.mbt` (CLI logic), `moon.pkg` (sub‑package config).
-- Key files: `main.mbt` (invokes `@mooner.compile_file`).
+- Purpose: Command-line interface and executable entry point
+- Contains: `main.mbt` - argument parsing, target selection, invocation of compiler
+- Key files: `cmd/main/main.mbt`
 
 **`examples/`:**
-- Purpose: Test programs and their compiled outputs.
-- Contains: `.mbt` source files and corresponding `.exe` executables.
-- Key files: `mbt_examples/` (official examples for verification).
-
-**`harness/minimal/`:**
-- Purpose: Minimal working examples for reference.
-- Contains: Small `.mbt` programs with pre‑compiled `.exe` files.
-- Key files: `README.md` (description of minimal examples).
-
-**`.github/workflows/`:**
-- Purpose: Continuous integration configuration.
-- Contains: `copilot-setup-steps.yml` (GitHub Actions workflow).
-
-**`.githooks/`:**
-- Purpose: Git hooks for code quality.
-- Contains: `pre-commit` (formatting checks via `moon fmt`).
+- Purpose: Sample MoonBit source files for manual testing and demonstration
+- Contains: Various `.mbt` files showcasing language features
+- Key files: Multiple test programs (e.g., `test_for_loop.mbt`, `test_for_in.mbt`, `debug_fn.mbt`)
 
 **`.mooncakes/`:**
-- Purpose: External MoonBit package cache (managed by MoonBit toolchain).
-- Contains: Dependencies (`moonbitlang/x`, `moonbitlang/core`).
-- Generated: Yes (do not edit).
-- Committed: No (should be in `.gitignore`).
+- Purpose: MoonBit package dependency cache (auto-generated)
+- Contains: Downloaded dependencies from `moon.mod.json`
+- Generated: Yes (by `moon fetch` or build)
+- Committed: No (in `.gitignore`)
+
+**`.planning/codebase/`:**
+- Purpose: Architecture and codebase analysis documents for GSD tooling
+- Contains: `ARCHITECTURE.md`, `STRUCTURE.md`, and other analysis docs
+- Generated: Yes (by `gsd-map-codebase`)
+- Committed: Yes (reviewed documentation)
 
 ## Key File Locations
 
 **Entry Points:**
-- `cmd/main/main.mbt`: CLI entry point (`main` function).
-- `compiler.mbt`: Compilation API entry point (`compile_file` function).
+- `cmd/main/main.mbt`: CLI entry point (`fn main`)
+- `compiler.mbt`: Library API (`compile_file`, `compile_file_target`)
 
 **Configuration:**
-- `moon.mod.json`: Module metadata (name, version, dependencies).
-- `moon.pkg`: Package‑level imports.
-- `cmd/main/moon.pkg`: Sub‑package imports.
+- `moon.mod.json`: Module name, version, dependencies, repository, license
+- `moon.pkg`: Per-package dependencies (top-level imports `moonbitlang/x/fs`)
 
-**Core Logic:**
-- `lexer.mbt`: Tokenization (token types and lexer).
-- `parser.mbt`: Parsing (AST nodes and parser).
-- `codegen.mbt`: x86_64 instruction generation.
-- `compiler.mbt`: ELF header assembly and file output.
-- `double_ryu_nonjs.mbt`: Float‑to‑string conversion (used for printing floats).
+**Core Compiler Logic:**
+- `lexer.mbt`: Tokenization engine (1024 lines)
+- `parser.mbt`: Parser and AST definitions (1724 lines)
+- `codegen.mbt`: x86_64 code generator with instruction emission (1800+ lines)
+- `compiler.mbt`: Compilation orchestration and ELF binary generation (203 lines)
+- `backend.mbt`: Backend trait and target info abstractions
+- `wasm_backend.mbt`: WebAssembly backend with WASM binary generation (1573 lines)
 
-**Testing:**
-- `mooner_test.mbt`: Blackbox integration tests (run via `moon test`).
-- `mooner_wbtest.mbt`: Whitebox unit tests (internal package tests).
-- `run_e2e_tests.sh`: End‑to‑end verification script (compares with official compiler).
-- `test_examples.sh`: Batch verification of example outputs.
+**Supporting:**
+- `double_ryu_nonjs.mbt`: Float-to-string conversion for printing
+- `AGENTS.md`: Project-specific agent guidelines
 
 ## Naming Conventions
 
 **Files:**
-- Core compiler modules: lowercase with underscores (`lexer.mbt`, `parser.mbt`, `codegen.mbt`).
-- Entry point: `main.mbt` (inside `cmd/main/`).
-- Test files: `_test.mbt` (blackbox) and `_wbtest.mbt` (whitebox).
-- Generated interface: `pkg.generated.mbti`.
+- Pattern: `snake_case.mbt` for all source files
+- Examples: `lexer.mbt`, `parser.mbt`, `codegen.mbt`, `wasm_backend.mbt`
+- Entry point: `cmd/main/main.mbt`
 
-**Directories:**
-- Lowercase, single‑word where possible (`cmd`, `examples`, `harness`).
-- Multi‑word uses underscores (`moon.bit` → `.mooncakes`).
+**Types (structs, enums):**
+- Pattern: `PascalCase`
+- Examples: `Token`, `Lexer`, `AST`, `Parser`, `CodeGen`, `X86Inst`, `X86Operand`, `Backend`, `TargetInfo`
 
 **Functions:**
-- CamelCase for public functions (`compile_file`, `tokenize`, `parse`, `codegen`).
-- Snake_case for internal helpers (e.g., `parse_expression` inside parser).
-
-**Types:**
-- PascalCase for enum/struct names (`Token`, `AST`, `CodeGen`, `Parser`).
-- Enum variants: PascalCase (`Token::Fn`, `AST::Int`).
+- Pattern: `snake_case` with module prefix for associated functions
+- Examples: `tokenize`, `parse`, `compile_file`, `Lexer::new`, `Parser::parse_expr`, `CodeGen::emit_byte`
+- Associated function style: `Type::fn_name(params) -> Return`
 
 **Variables:**
-- Snake_case (`input_path`, `output_path`, `debug_level`).
-- Prefix `var_` for tracked variables in `CodeGen` (e.g., `var_offsets`, `var_types`).
+- Pattern: `snake_case` for locals and mutable vars
+- Pattern: `camelCase` for struct fields (MoonBit convention)
+- Examples: `input_path`, `output_path`, `debug_level`, `tokens`, `ast`
+
+**Constants:**
+- Pattern: `SCREAMING_SNAKE_CASE` for module-level constants
+- Examples: None prominent, but literals like byte opcodes are inline
 
 ## Where to Add New Code
 
-**New Language Feature:**
-- Lexer changes: Add new token variants to `Token` enum in `lexer.mbt`.
-- Parser changes: Add new AST variants to `AST` enum in `parser.mbt` and parsing rules.
-- Code generation: Extend `codegen.mbt` to emit instructions for new constructs.
+**New Language Feature (syntax/semantics):**
+1. Extend `Token` enum in `lexer.mbt` if new token needed
+2. Add lexer logic in `Lexer::next_token` to recognize new syntax
+3. Extend `AST` enum in `parser.mbt` with new variant
+4. Add parsing logic in appropriate `Parser::parse_*` function
+5. Extend code generation in `codegen.mbt` (x86_64) and/or `wasm_backend.mbt` (WASM)
 
-**New Compiler Pass (e.g., optimization):**
-- Create a new file (e.g., `optimize.mbt`) in the root directory.
-- Import and use it in `compiler.mbt` between parsing and code generation.
+**New Backend Target:**
+1. Create `new_backend.mbt` implementing `Backend` trait
+2. Define target-specific struct and instruction set
+3. Add to `Target` enum in `compiler.mbt`
+4. Update `Target::from_string` and `compile_file_target` switch
 
-**New CLI Subcommand:**
-- Add a new subdirectory under `cmd/` (e.g., `cmd/interpret/`).
-- Follow same pattern as `cmd/main/` with its own `moon.pkg`.
+**New CLI Option:**
+1. Modify `cmd/main/main.mbt` argument parsing logic
+2. Propagate flag to `compile_file_target` parameters
 
 **Utility Functions:**
-- Place in a new `util.mbt` file in the root directory.
-- Export public functions for reuse across modules.
+- Place in relevant module (e.g., string helpers in `lexer.mbt`, arithmetic helpers in `wasm_backend.mbt`)
+- If generic across modules, consider new file like `utils.mbt`
 
 **Tests:**
-- Blackbox tests: Add to `mooner_test.mbt` or create new `*_test.mbt` files.
-- Whitebox tests: Add to `mooner_wbtest.mbt` or create new `*_wbtest.mbt` files.
-- Example programs: Add `.mbt` files to `examples/` (and compile to `.exe`).
+- Unit tests: `_test.mbt` suffix for blackbox tests
+- Whitebox tests: `_wbtest.mbt` suffix
+- Co-located with implementation or separate `tests/` directory? Current pattern: co-located
+- Existing tests: `parser` has inline test blocks with `test "name" { ... }`
 
 ## Special Directories
 
-**`.mooncakes/`:**
-- Purpose: External MoonBit package cache (managed by MoonBit toolchain).
-- Generated: Yes.
-- Committed: No (should be in `.gitignore`).
+**`/.mooncakes/`:**
+- Purpose: MoonBit package manager cache
+- Generated: Yes (automatic)
+- Committed: No (listed in `.gitignore`)
+- Contains: Downloaded dependencies (`moonbitlang/x`, `moonbitlang/async`, etc.)
 
-**`_build/`:**
-- Purpose: Build artifacts (compiled packages, etc.).
-- Generated: Yes.
-- Committed: No.
+**`/.planning/codebase/`:**
+- Purpose: GSD tooling analysis documents
+- Generated: Partially (by `gsd-map-codebase`)
+- Committed: Yes (documentation)
+- Contains: `ARCHITECTURE.md`, `STRUCTURE.md`, `CONVENTIONS.md`, `TESTING.md`, `CONCERNS.md`, `STACK.md`, `INTEGRATIONS.md`
 
-**`.git/`:**
-- Purpose: Git repository metadata.
-- Generated: Yes.
-- Committed: Yes.
+**`/examples/`:**
+- Purpose: Demonstration and manual testing
+- Generated: No
+- Committed: Yes
+- Contains: User-facing example programs
+
+**`/cmd/`:**
+- Purpose: Executable entry points (can have multiple subcommands)
+- Generated: No
+- Committed: Yes
+- Contains: CLI implementations; `main` is the default entry point
 
 ---
 
-*Structure analysis: 2026-03-25*
+*Structure analysis: 2026-03-26*
