@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 ## Current Position
 
 Phase: 3 of 4 (Functions & Variables)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In Progress
-Last activity: 2026-03-27 — Completed Plan 03-01 (Function signatures and local variables)
+Last activity: 2026-03-27 — Completed Plan 03-02 (Function calls, exports, imports)
 
 Progress: [████████████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
+- Total plans completed: 9
 - Average duration: 13 min
 - Total execution time: 1.22 hours
 
@@ -29,15 +29,15 @@ Progress: [████████████████] 100%
 |-------|-------|-------|----------|
 | 1. Foundation | 3 | 3 | 14 min |
 | 2. Basic Language Features | 4 | 4 | 13 min |
-| 3. Functions & Variables | 1 | 3 | 17 min |
+| 3. Functions & Variables | 2 | 3 | 12 min |
 | 4. CLI Integration | 0 | 3 | - |
 
 **Recent Trend:**
-- Last 8 plans: 6, 18, 15, 12, 15, 13, 10, 17 min
+- Last 9 plans: 6, 18, 15, 12, 15, 13, 10, 17, 7 min
 - Trend: Stable
 
 *Updated after each plan completion*
-| Phase 03-functions-variables P03-01 | 17 | 2 tasks | 3 files |
+| Phase 03-functions-variables P03-02 | 7 | 4 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -49,6 +49,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 1]: Start with basic WASM features, defer advanced (SIMD, threads)
 - [Phase 2]: Integrate arithmetic directly in wasm_backend.mbt for simplicity
 - [Phase 02-04]: Used helper functions for BlockType to avoid MoonBit enum read-only issue
+- [Phase 03-02]: Import indices come first (0 to N-1), then defined function indices for correct call targeting
 
 ### Pending Todos
 
@@ -64,6 +65,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27 00:XX
-Stopped at: Completed Plan 03-01 (Function signatures and local variables)
+Last session: 2026-03-27 00:12
+Stopped at: Completed Plan 03-02 (Function calls, exports, imports, and local variables)
 Resume file: None
