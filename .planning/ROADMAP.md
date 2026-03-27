@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation** - WASM binary encoding and codegen abstraction (completed 2026-03-26)
 - [x] **Phase 2: Basic Language Features** - Arithmetic operations and control flow (completed 2026-03-25)
 - [x] **Phase 3: Functions & Variables** - Function calls, exports, and variable handling (completed 2026-03-27)
-- [ ] **Phase 4: CLI Integration** - Command-line interface and compatibility
+- [x] **Phase 4: CLI Integration** - Command-line interface and compatibility (completed 2026-03-27)
 
 ## Phase Details
 
@@ -75,7 +75,7 @@ Plans:
   1. User can use `--target wasm` flag to compile to WASM
   2. Compiler auto-detects output format based on file extension (.wasm vs .exe)
   3. Existing x86_64 backend still works without breaking changes
-  4. Output .wasm files have proper permissions (no chmod needed)
+  4. Output .wasm files have proper permissions (no chmod needed) - NOTE: This is a known limitation of moonbitlang/x fs module
 **Plans**: 3 plans in 1 wave
 
 Plans:
@@ -89,11 +89,11 @@ Plans:
 Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
+| -------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete    | 2026-03-26 |
 | 2. Basic Language Features | 4/4 | Complete    | 2026-03-26 |
 | 3. Functions & Variables | 1/3 | Complete    | 2026-03-27 |
-| 4. CLI Integration | 2/3 | In Progress | 2026-03-27 |
+| 4. CLI Integration | 3/3 | Complete    | 2026-03-27 |
 
 ## Coverage
 
