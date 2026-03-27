@@ -55,6 +55,28 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **ABST-02**: Define backend interface for instruction emission
 - [x] **ABST-03**: Keep existing x86_64 backend functional after abstraction
 
+## v1.1 Requirements
+
+Stabilization milestone: fix critical bugs and add regression tests.
+
+### Bug Fixes
+
+- [ ] **BUGF-01**: Fix control flow crash — 009_basic_control_flows example runs without segfault
+- [ ] **BUGF-02**: Fix pattern matching crash — 013_pattern_matching example runs without segfault
+- [ ] **BUGF-03**: Fix return value corruption — 004_basic_function returns correct values (e.g., add(2,40)=42)
+- [ ] **BUGF-04**: Fix enum pattern mismatch — 011_basic_enum produces correct discriminants and variants
+
+### Testing
+
+- [ ] **TEST-01**: Write unit test that reproduces and verifies BUGF-01 fix
+- [ ] **TEST-02**: Write unit test that reproduces and verifies BUGF-02 fix
+- [ ] **TEST-03**: Write unit test that reproduces and verifies BUGF-03 fix
+- [ ] **TEST-04**: Write unit test that reproduces and verifies BUGF-04 fix
+- [ ] **TEST-05**: Add regression test for 009_basic_control_flows to prevent future regressions
+- [ ] **TEST-06**: Add regression test for 013_pattern_matching to prevent future regressions
+- [ ] **TEST-07**: Add regression test for 004_basic_function to prevent future regressions
+- [ ] **TEST-08**: Add regression test for 011_basic_enum to prevent future regressions
+
 ## v2 Requirements
 
 Deferred to future release. Tracked but not in current roadmap.

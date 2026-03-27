@@ -8,6 +8,22 @@ A WebAssembly compilation target for the MoonBit compiler. Currently compiles Mo
 
 Enable MoonBit programs to run in WebAssembly environments (browsers, WASI runtimes) while reusing the existing MoonBit compiler frontend.
 
+## Current Milestone: v1.1 Stabilization
+
+**Goal:** Fix critical bugs that make the WASM backend unstable
+
+**Target features:**
+- Fix control flow crash (009 example) — segfaults on if/for constructs
+- Fix pattern matching crash (013 example) — segfaults on struct patterns
+- Fix function return value corruption (004 example) — incorrect return values
+- Fix enum pattern mismatch (011 example) — incorrect discriminant handling
+- Add verification tests for each bug fix
+- Add regression tests to prevent reoccurrence
+
+**Excluded:**
+- Float parsing exponent support (defer to v1.2)
+- New language features or optimizations
+
 ## Requirements
 
 ### Validated
@@ -17,22 +33,32 @@ Enable MoonBit programs to run in WebAssembly environments (browsers, WASI runti
 - ✓ Command-line interface (`moon run cmd/main`) — existing
 - ✓ File I/O (read source, write output) — existing
 - ✓ Basic language features (functions, variables, arithmetic, control flow) — existing
+- ✓ WebAssembly backend (WASM binary generation) — v1.0
+- ✓ Integration with existing frontend (reuse lexer/parser) — v1.0
+- ✓ Maintain compatibility with existing CLI — v1.0
+- ✓ WASM module structure (sections, exports, imports) — v1.0
+- ✓ Support for basic language features in WASM (functions, locals, control flow) — v1.0
+- ✓ Code generation abstraction (strategy pattern) — v1.0
 
 ### Active
 
-- [ ] WebAssembly backend (WASM binary generation)
-- [ ] Integration with existing frontend (reuse lexer/parser)
-- [ ] Maintain compatibility with existing CLI
-- [ ] WASM module structure (sections, exports, imports)
-- [ ] Support for basic language features in WASM (functions, locals, control flow)
+- [ ] Fix control flow crash (009 example) — segfaults on if/for
+- [ ] Fix pattern matching crash (013 example) — segfaults on struct patterns
+- [ ] Fix function return value corruption (004 example) — wrong return values
+- [ ] Fix enum pattern mismatch (011 example) — incorrect discriminants
+- [ ] Add verification tests for bug fixes
+- [ ] Add regression tests to prevent reoccurrence
 
 ### Out of Scope
 
 - Rewriting frontend — reuse existing lexer/parser
-- Adding new language features — focus on WASM backend only
+- Adding new language features — focus on stabilization first
 - Optimizing existing x86_64 backend — parallel work
 - Advanced WASM features (SIMD, threads, bulk memory) — defer to future
 - WASI integration — initial target is standalone WASM modules
+- Float parsing exponent support — deferred to v1.2
+- Component Model support — adds complexity
+- Debug information (DWARF) — useful but not required for correctness
 
 ## Context
 
@@ -68,6 +94,7 @@ Enable MoonBit programs to run in WebAssembly environments (browsers, WASI runti
 | Abstract code generation | Enable multiple backends without duplication | — Pending |
 | Start with basic WASM features | Validate approach before adding complexity | — Pending |
 | Keep CLI compatible | Users shouldn't need new commands | — Pending |
+| Stabilize before new features | Cannot add functionality on broken foundation | ✓ Good (v1.1 focused on bug fixes) |
 
 ---
-*Last updated: 2026-03-25 after initialization*
+*Last updated: 2026-03-26 after starting v1.1 stabilization milestone*
