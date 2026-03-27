@@ -44,9 +44,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### CLI Integration
 
-- [ ] **CLI-01**: Add `--target wasm` flag to compiler CLI
-- [ ] **CLI-02**: Auto-detect output format based on file extension (.wasm vs .exe)
-- [ ] **CLI-03**: Maintain compatibility with existing x86_64 backend (no breaking changes)
+- [x] **CLI-01**: Add `--target wasm` flag to compiler CLI
+- [x] **CLI-02**: Auto-detect output format based on file extension (.wasm vs .exe)
+- [x] **CLI-03**: Maintain compatibility with existing x86_64 backend (no breaking changes)
 - [ ] **CLI-04**: Output `.wasm` files with proper permissions (no chmod needed)
 
 ### Code Generation Abstraction
@@ -116,9 +116,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VAR-01 | Phase 3 | Complete |
 | VAR-02 | Phase 3 | Pending |
 | VAR-03 | Phase 3 | Pending |
-| CLI-01 | Phase 4 | Pending |
-| CLI-02 | Phase 4 | Pending |
-| CLI-03 | Phase 4 | Pending |
+| CLI-01 | Phase 4 | Complete |
+| CLI-02 | Phase 4 | Complete |
+| CLI-03 | Phase 4 | Complete |
 | CLI-04 | Phase 4 | Pending |
 | ABST-01 | Phase 1 | Complete |
 | ABST-02 | Phase 1 | Complete |
