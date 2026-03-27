@@ -6,6 +6,18 @@ pub enum Target {
 }
 
 ///|
+/// Create x86_64 target
+pub fn Target::x86_64() -> Target {
+  X86_64
+}
+
+///|
+/// Create wasm target  
+pub fn Target::wasm() -> Target {
+  Wasm
+}
+
+///|
 /// Default target is x86_64
 pub fn Target::default() -> Target {
   X86_64
