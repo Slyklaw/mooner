@@ -8610,7 +8610,7 @@ pub fn codegen(ast : AST, debug_level: Int) -> Bytes {
     i = i + 1
   }
   if debug_level >= 1 {
-    @fs.write_bytes_to_file("/tmp/codegen.bin", code)
+    // Debug output disabled due to API issues
   }
   Bytes::from_array(code)
 }
