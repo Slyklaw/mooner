@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 
 ## Current Position
 
-Phase: 5 (Control Flow Stabilization) - upcoming
-Plan: —
-Status: Roadmap defined, planning pending
-Last activity: 2026-03-26 — Milestone v1.1 roadmap created
+Phase: 5 (Control Flow Stabilization) - in progress
+Plan: 05-01
+Status: Investigation complete, fix pending
+Last activity: 2026-03-27 — Investigated label resolution bug in codegen.mbt
 
 ## Accumulated Context
 
@@ -26,6 +26,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 03-02]: Import indices come first (0 to N-1), then defined function indices for correct call targeting
 - [ v1.0 Complete ]: Stabilize before new features — ✓ Good
 - [ v1.1 Approach ]: Group bug fixes with their verification tests into stabilization phases; regression tests co-located with corresponding fixes
+- [Phase 5-01]: Investigated label resolution bug in codegen.mbt; added debug output for further analysis
 
 ### Pending Todos
 

@@ -142,7 +142,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Basic Language Features | 4/4 | Complete | 2026-03-26 |
 | 3. Functions & Variables | 1/3 | In progress | - |
 | 4. CLI Integration | 3/3 | Complete | 2026-03-27 |
-| 5. Control Flow Stabilization | 0/3 | Not started | - |
+| 5. Control Flow Stabilization | 1/2 | In Progress|  |
 | 6. Pattern Matching Stabilization | 0/3 | Not started | - |
 | 7. Return Value Stabilization | 0/3 | Not started | - |
 | 8. Enum Pattern Stabilization | 0/3 | Not started | - |
