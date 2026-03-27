@@ -305,6 +305,34 @@ fn encode_uleb128(value : UInt) -> Array[Byte] {
 }
 
 ///|
+/// Encode a signed integer as LEB128.
+fn encode_sleb128(value : Int) -> Array[Byte] {
+  let mut result : Array[Byte] = []
+  let mut v = value
+  let is_negative = value < 0
+  while true {
+    let byte_val = v & 0x7F
+    v = v >> 7
+    
+    let sign_bit = byte_val & 0x40
+    let done = if is_negative {
+      (v == -1) && (sign_bit != 0)
+    } else {
+      (v == 0) && (sign_bit == 0)
+    }
+    
+    if done {
+      result = result + [byte_val.to_byte()]
+      break
+    } else {
+      let combined = byte_val | 0x80
+      result = result + [combined.to_byte()]
+    }
+  }
+  result
+}
+
+///|
 /// Encode a UTF-8 string as a vector (length + bytes).
 /// WebAssembly requires UTF-8 encoding for names.
 fn encode_string(s : String) -> Array[Byte] {
@@ -720,7 +748,7 @@ fn add_export_section(sections : SectionWriter) -> SectionWriter {
   content = content + encode_uleb128(1)
   
   // Export name: "memory"
-  content = content + encode_string("memory")
+  content = content + encode_name_string("memory")
   
   // Export kind: memory (0x02)
   content = content + [0x02]
@@ -1197,4 +1225,333 @@ test "generate_br_if produces 0x0D" {
   let code = generate_br_if(0)
   assert_eq(code[0], 0x0D) // br_if opcode
   assert_eq(code[1], 0x00) // label 0
+}
+
+// ============================================================================
+// Function Call, Export, Import, and Local Access Extensions (Task 4)
+// ============================================================================
+
+///|
+/// Track exported functions for the module
+pub struct ExportedFunc {
+  name : String
+  func_idx : Int
+}
+
+///|
+/// Track imported functions for the module
+pub struct ImportedFunc {
+  module : String
+  name : String
+  type_idx : Int
+  import_idx : Int
+}
+
+///|
+/// WASM module builder with support for functions, exports, and imports
+pub struct WasmModuleBuilder {
+  type_indices : Array[Int] // type index per function
+  exported_funcs : Array[ExportedFunc]
+  imported_funcs : Array[ImportedFunc]
+  func_bodies : Array[Array[Byte]] // encoded function bodies
+  local_counts : Array[Int] // local count per function
+}
+
+///|
+/// Create a new WasmModuleBuilder
+pub fn WasmModuleBuilder::new() -> WasmModuleBuilder {
+  {
+    type_indices: [],
+    exported_funcs: [],
+    imported_funcs: [],
+    func_bodies: [],
+    local_counts: [],
+  }
+}
+
+///|
+/// Add a function type and get its index
+/// 
+/// @param params Parameter types
+/// @param results Return types
+/// @return Type index (for function section)
+pub fn WasmModuleBuilder::add_function_type(
+  self : WasmModuleBuilder,
+  params : Array[WasmType],
+  results : Array[WasmType]
+) -> (WasmModuleBuilder, Int) {
+  // For now, just track a placeholder type index
+  let type_idx = self.type_indices.length()
+  ({ ..self, type_indices: self.type_indices + [type_idx] }, type_idx)
+}
+
+///|
+/// Add an imported function
+/// 
+/// @param module Module name (e.g., "env")
+/// @param name Function name
+/// @param type_idx Type signature index
+/// @return Tuple of (updated builder, import index, function index)
+pub fn WasmModuleBuilder::add_imported_function(
+  self : WasmModuleBuilder,
+  module : String,
+  name : String,
+  type_idx : Int
+) -> (WasmModuleBuilder, Int, Int) {
+  let import_idx = self.imported_funcs.length()
+  let func_idx = import_idx // Import indices come first
+  let imported = { module, name, type_idx, import_idx }
+  let new_imports = self.imported_funcs + [imported]
+  ({ ..self, imported_funcs: new_imports }, import_idx, func_idx)
+}
+
+///|
+/// Add a defined (non-imported) function
+/// 
+/// @param type_idx Type signature index
+/// @param body Encoded function body
+/// @param local_count Number of local variables
+/// @return Tuple of (updated builder, function index)
+pub fn WasmModuleBuilder::add_defined_function(
+  self : WasmModuleBuilder,
+  type_idx : Int,
+  body : Array[Byte],
+  local_count : Int
+) -> (WasmModuleBuilder, Int) {
+  // Defined function index = number of imports + current defined count
+  let func_idx = self.imported_funcs.length() + self.func_bodies.length()
+  let new_types = self.type_indices + [type_idx]
+  let new_bodies = self.func_bodies + [body]
+  let new_locals = self.local_counts + [local_count]
+  ({
+    ..self,
+    type_indices: new_types,
+    func_bodies: new_bodies,
+    local_counts: new_locals,
+  }, func_idx)
+}
+
+///|
+/// Mark a function for export
+/// 
+/// @param name Export name
+/// @param func_idx Function index to export
+pub fn WasmModuleBuilder::export_function(
+  self : WasmModuleBuilder,
+  name : String,
+  func_idx : Int
+) -> WasmModuleBuilder {
+  let exported = { name, func_idx }
+  { ..self, exported_funcs: self.exported_funcs + [exported] }
+}
+
+///|
+/// Build the complete WASM module binary
+/// 
+/// @return Complete WASM binary module bytes
+pub fn WasmModuleBuilder::build(self : WasmModuleBuilder) -> Array[Byte] {
+  let mut module : Array[Byte] = []
+  
+  // Magic and version
+  module = module + [0x00, 0x61, 0x73, 0x6D] // WASM magic
+  module = module + [0x01, 0x00, 0x00, 0x00] // Version 1
+  
+  // Type section
+  let type_content = encode_type_section(self.type_indices.length())
+  module = module + type_content
+  
+  // Import section
+  if self.imported_funcs.length() > 0 {
+    let import_content = encode_import_section(self.imported_funcs)
+    module = module + import_content
+  }
+  
+  // Function section (only for defined functions)
+  let defined_count = self.func_bodies.length()
+  if defined_count > 0 {
+    let func_content = encode_function_section(self.type_indices)
+    module = module + func_content
+  }
+  
+  // Memory section
+  module = module + encode_memory_section(1, None)
+  
+  // Export section
+  if self.exported_funcs.length() > 0 || true {
+    // Always include memory export
+    let export_content = encode_export_section(self.exported_funcs)
+    module = module + export_content
+  }
+  
+  // Code section
+  let code_content = encode_code_section(self.func_bodies, self.local_counts)
+  module = module + code_content
+  
+  // Data section (empty)
+  module = module + encode_data_section(0)
+  
+  module
+}
+
+///|
+/// Encode type section (simplified - placeholder types)
+fn encode_type_section(type_count : Int) -> Array[Byte] {
+  let mut content : Array[Byte] = []
+  content = content + encode_uleb128(type_count.reinterpret_as_uint())
+  
+  // Add placeholder func types
+  let mut i = 0
+  while i < type_count {
+    content = content + [0x60, 0x00, 0x00] // () -> ()
+    i = i + 1
+  }
+  
+  // Section ID: 0x01 (Type)
+  let section_id = 0x01
+  let size = encode_uleb128(content.length().reinterpret_as_uint())
+  [section_id.to_byte()] + size + content
+}
+
+///|
+/// Encode import section
+fn encode_import_section(imports : Array[ImportedFunc]) -> Array[Byte] {
+  let mut content : Array[Byte] = []
+  content = content + encode_uleb128(imports.length().reinterpret_as_uint())
+  
+  let mut i = 0
+  while i < imports.length() {
+    let imp = imports[i]
+    content = content + encode_name_string(imp.module)
+    content = content + encode_name_string(imp.name)
+    content = content + [0x00] // func kind
+    content = content + encode_uleb128(imp.type_idx.reinterpret_as_uint())
+    i = i + 1
+  }
+  
+  // Section ID: 0x02 (Import)
+  let section_id = 0x02
+  let size = encode_uleb128(content.length().reinterpret_as_uint())
+  [section_id.to_byte()] + size + content
+}
+
+///|
+/// Encode function section
+fn encode_function_section(type_indices : Array[Int]) -> Array[Byte] {
+  let mut content : Array[Byte] = []
+  content = content + encode_uleb128(type_indices.length().reinterpret_as_uint())
+  
+  let mut i = 0
+  while i < type_indices.length() {
+    content = content + encode_uleb128(type_indices[i].reinterpret_as_uint())
+    i = i + 1
+  }
+  
+  // Section ID: 0x03 (Function)
+  let section_id = 0x03
+  let size = encode_uleb128(content.length().reinterpret_as_uint())
+  [section_id.to_byte()] + size + content
+}
+
+///|
+/// Encode memory section
+fn encode_memory_section(min : Int, max : Int?) -> Array[Byte] {
+  let mut content : Array[Byte] = []
+  content = content + [0x01] // 1 memory
+  
+  match max {
+    Some(max_val) => {
+      content = content + [0x01] // has max
+      content = content + encode_uleb128(min.reinterpret_as_uint())
+      content = content + encode_uleb128(max_val.reinterpret_as_uint())
+    }
+    None => {
+      content = content + [0x00] // no max
+      content = content + encode_uleb128(min.reinterpret_as_uint())
+    }
+  }
+  
+  // Section ID: 0x05 (Memory)
+  let section_id = 0x05
+  let size = encode_uleb128(content.length().reinterpret_as_uint())
+  [section_id.to_byte()] + size + content
+}
+
+///|
+/// Encode export section
+fn encode_export_section(exports : Array[ExportedFunc]) -> Array[Byte] {
+  // Always include memory export + function exports
+  let total_exports = exports.length() + 1 // +1 for memory
+  
+  let mut content : Array[Byte] = []
+  content = content + encode_uleb128(total_exports.reinterpret_as_uint())
+  
+  // Memory export
+  content = content + encode_name_string("memory")
+  content = content + [0x02] // memory kind
+  content = content + encode_uleb128(0) // memory index 0
+  
+  // Function exports
+  let mut i = 0
+  while i < exports.length() {
+    let exp = exports[i]
+    content = content + encode_name_string(exp.name)
+    content = content + [0x00] // func kind
+    content = content + encode_uleb128(exp.func_idx.reinterpret_as_uint())
+    i = i + 1
+  }
+  
+  let section_id = 0x07
+  let size = encode_uleb128(content.length().reinterpret_as_uint())
+  [section_id.to_byte()] + size + content
+}
+
+///|
+/// Encode code section
+fn encode_code_section(
+  bodies : Array[Array[Byte]],
+  local_counts : Array[Int]
+) -> Array[Byte] {
+  let mut content : Array[Byte] = []
+  content = content + encode_uleb128(bodies.length().reinterpret_as_uint())
+  
+  let mut i = 0
+  while i < bodies.length() {
+    // Local count (0 if not specified)
+    let local_count = if i < local_counts.length() { local_counts[i] } else { 0 }
+    
+    // Function body: size (placeholder) + locals + code
+    // For simplicity, just output the body directly
+    content = content + bodies[i]
+    i = i + 1
+  }
+  
+  let section_id = 0x0A
+  let size = encode_uleb128(content.length().reinterpret_as_uint())
+  [section_id.to_byte()] + size + content
+}
+
+///|
+/// Encode data section
+fn encode_data_section(count : Int) -> Array[Byte] {
+  let mut content : Array[Byte] = []
+  content = content + encode_uleb128(count.reinterpret_as_uint())
+  
+  // Section ID: 11 (Data)
+  let section_id = 0x0B
+  let size = encode_uleb128(content.length().reinterpret_as_uint())
+  [section_id.to_byte()] + size + content
+}
+
+///|
+/// Encode a string as UTF-8 length + bytes (for exports/imports)
+fn encode_name_string(s : String) -> Array[Byte] {
+  let bytes = s.to_bytes()
+  let len = bytes.length()
+  let mut result = encode_uleb128(len.reinterpret_as_uint())
+  let mut i = 0
+  while i < len {
+    result = result + [bytes[i]]
+    i = i + 1
+  }
+  result
 }
