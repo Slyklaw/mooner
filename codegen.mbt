@@ -8578,6 +8578,22 @@ pub fn codegen(ast : AST, debug_level: Int) -> Bytes {
     let (label_name, start_pos, instr_len) = g.pending_labels[i]
     match g.labels.get(label_name) {
       Some(target_pos) => {
+        // BUG INVESTIGATION: Label backpatching issue
+        // The relative offset calculation appears correct: offset = target - (start_pos + instr_len)
+        // write_pos = start_pos + instr_len - 4 is where the 4-byte offset starts in the code buffer
+        //
+        // However, testing shows:
+        // - Individual loops (while, for-in, for) work in isolation
+        // - Functions fib(), sum(), sum2() work when called from main
+        // - sum3() (while true + if-break) hangs when called from main
+        //
+        // Root cause: Likely label namespace collision in multi-function programs.
+        // When main calls functions that use while loops with if-break conditions,
+        // the label resolution may be incorrect due to shared global label map.
+        //
+        // The fix requires ensuring labels are unique AND resolved correctly across
+        // function boundaries, or using a different approach (e.g., two-pass codegen
+        // with forward declaration of all labels).
         let offset = target_pos - (start_pos + instr_len)
         let write_pos = start_pos + instr_len - 4
         let b0 = (offset.reinterpret_as_uint() & 0xFF).to_byte()
