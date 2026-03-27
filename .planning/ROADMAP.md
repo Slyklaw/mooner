@@ -93,7 +93,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Foundation | 3/3 | Complete    | 2026-03-26 |
 | 2. Basic Language Features | 4/4 | Complete    | 2026-03-26 |
 | 3. Functions & Variables | 1/3 | Complete    | 2026-03-27 |
-| 4. CLI Integration | 3/3 | Complete    | 2026-03-25 |
+| 4. CLI Integration | 1/3 | In Progress | 2026-03-27 |
 
 ## Coverage
 

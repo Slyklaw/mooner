@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Current Position
 
-Phase: 3 of 4 (Functions & Variables)
-Plan: 2 of 3 in current phase
+Phase: 4 of 4 (CLI Integration)
+Plan: 1 of 3 in current phase
 Status: In Progress
-Last activity: 2026-03-27 — Completed Plan 03-02 (Function calls, exports, imports)
+Last activity: 2026-03-27 — Completed Plan 04-01 (--target flag and auto-detection)
 
 Progress: [████████████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
+- Total plans completed: 10
 - Average duration: 13 min
-- Total execution time: 1.22 hours
+- Total execution time: 1.30 hours
 
 **By Phase:**
 
@@ -30,7 +30,7 @@ Progress: [████████████████] 100%
 | 1. Foundation | 3 | 3 | 14 min |
 | 2. Basic Language Features | 4 | 4 | 13 min |
 | 3. Functions & Variables | 2 | 3 | 12 min |
-| 4. CLI Integration | 0 | 3 | - |
+| 4. CLI Integration | 1 | 3 | 8 min |
 
 **Recent Trend:**
 - Last 9 plans: 6, 18, 15, 12, 15, 13, 10, 17, 7 min
@@ -39,6 +39,7 @@ Progress: [████████████████] 100%
 *Updated after each plan completion*
 | Phase 03-functions-variables P03-02 | 7 | 4 tasks | 4 files |
 | Phase 03-functions-variables P03-03 | 3min | 3 tasks | 4 files |
+| Phase 04-cli-integration P04-01 | 8 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
