@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 
 ## Current Position
 
-Phase: 5 (Control Flow Stabilization) - in progress
-Plan: 05-01
-Status: Investigation complete, fix pending
-Last activity: 2026-03-27 — Investigated label resolution bug in codegen.mbt
+Phase: 5 (Control Flow Stabilization)
+Current Plan: 1 of 1
+Status: Investigation complete, fix pending (see SUMMARY)
+Progress: ████████░░░░░░░░░░░░░░░░░░░░░░░ 33%
 
 ## Accumulated Context
 

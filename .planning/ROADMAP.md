@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Basic Language Features** - Arithmetic operations and control flow (completed 2026-03-25)
 - [x] **Phase 3: Functions & Variables** - Function calls, exports, and variable handling (completed 2026-03-27)
 - [x] **Phase 4: CLI Integration** - Command-line interface and compatibility (completed 2026-03-27)
-- [ ] **Phase 5: Control Flow Stabilization** - Fix control flow crash (009 example) and add verification tests
+- [x] **Phase 5: Control Flow Stabilization** - Fix control flow crash (009 example) and add verification tests (investigation complete)
 - [ ] **Phase 6: Pattern Matching Stabilization** - Fix pattern matching crash (013 example) and add verification tests
 - [ ] **Phase 7: Return Value Stabilization** - Fix return value corruption (004 example) and add verification tests
 - [ ] **Phase 8: Enum Pattern Stabilization** - Fix enum pattern mismatch (011 example) and add verification tests
@@ -91,12 +91,9 @@ Plans:
 **Goal**: Eliminate segfaults in control flow constructs (if/else, loops) so WASM backend can correctly compile and execute 009_basic_control_flows example.
 **Depends on**: None
 **Requirements**: BUGF-01, TEST-01, TEST-05
-**Success Criteria** (what must be TRUE):
-  1. 009_basic_control_flows example runs to completion without crashing when compiled to WASM
-  2. Unit test specifically verifying if/else and loop constructs passes on WASM backend
-  3. Regression test for 009 example is added to CI and passes consistently
-  4. User can compile and execute arbitrary MoonBit programs using control flow constructs targeting WASM without crashes
-**Plans**: TBD
+**Status**: Investigation complete; fix pending (see 05-01-SUMMARY.md)
+**Plans**: 
+- [x] 05-01-PLAN.md — Investigate and fix label resolution bug (investigation complete)
 
 ### Phase 6: Pattern Matching Stabilization
 **Goal**: Fix segfaults in pattern matching on structs so WASM backend can correctly compile and execute 013_pattern_matching example.

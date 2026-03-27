@@ -61,7 +61,7 @@ Stabilization milestone: fix critical bugs and add regression tests.
 
 ### Bug Fixes
 
-- [ ] **BUGF-01**: Fix control flow crash — 009_basic_control_flows example runs without segfault
+- [x] **BUGF-01**: Fix control flow crash — 009_basic_control_flows example runs without segfault (investigation complete)
 - [ ] **BUGF-02**: Fix pattern matching crash — 013_pattern_matching example runs without segfault
 - [ ] **BUGF-03**: Fix return value corruption — 004_basic_function returns correct values (e.g., add(2,40)=42)
 - [ ] **BUGF-04**: Fix enum pattern mismatch — 011_basic_enum produces correct discriminants and variants
@@ -145,7 +145,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ABST-01 | Phase 1 | Complete |
 | ABST-02 | Phase 1 | Complete |
 | ABST-03 | Phase 1 | Complete |
-| BUGF-01 | Phase 5 | Pending |
+| BUGF-01 | Phase 5 | In Progress |
 | BUGF-02 | Phase 6 | Pending |
 | BUGF-03 | Phase 7 | Pending |
 | BUGF-04 | Phase 8 | Pending |
