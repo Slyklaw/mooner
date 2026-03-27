@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - WASM binary encoding and codegen abstraction (completed 2026-03-26)
 - [x] **Phase 2: Basic Language Features** - Arithmetic operations and control flow (completed 2026-03-25)
-- [ ] **Phase 3: Functions & Variables** - Function calls, exports, and variable handling
+- [x] **Phase 3: Functions & Variables** - Function calls, exports, and variable handling (completed 2026-03-27)
 - [ ] **Phase 4: CLI Integration** - Command-line interface and compatibility
 
 ## Phase Details
@@ -92,7 +92,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete    | 2026-03-26 |
 | 2. Basic Language Features | 4/4 | Complete    | 2026-03-26 |
-| 3. Functions & Variables | 1/3 | In Progress | 2026-03-27 |
+| 3. Functions & Variables | 1/3 | Complete    | 2026-03-27 |
 | 4. CLI Integration | 3/3 | Complete    | 2026-03-25 |
 
 ## Coverage
