@@ -145,12 +145,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ABST-01 | Phase 1 | Complete |
 | ABST-02 | Phase 1 | Complete |
 | ABST-03 | Phase 1 | Complete |
+| BUGF-01 | Phase 5 | Pending |
+| BUGF-02 | Phase 6 | Pending |
+| BUGF-03 | Phase 7 | Pending |
+| BUGF-04 | Phase 8 | Pending |
+| TEST-01 | Phase 5 | Pending |
+| TEST-02 | Phase 6 | Pending |
+| TEST-03 | Phase 7 | Pending |
+| TEST-04 | Phase 8 | Pending |
+| TEST-05 | Phase 5 | Pending |
+| TEST-06 | Phase 6 | Pending |
+| TEST-07 | Phase 7 | Pending |
+| TEST-08 | Phase 8 | Pending |
 
 **Coverage:**
 - v1 requirements: 27 total
 - Mapped to phases: 27
 - Unmapped: 0 ✓
+- v1.1 requirements: 12 total
+- Mapped to phases: 12
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-03-26 after Plan 01-02 completion*
+*Last updated: 2026-03-26 after v1.1 roadmap creation*
