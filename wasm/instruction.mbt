@@ -396,6 +396,24 @@ pub fn tee_local(idx : Int) -> Array[Byte] {
 }
 
 ///|
+/// Encode a get_global instruction
+/// 
+/// @param idx The global variable index
+/// @return Array[Byte] containing the get_global instruction
+pub fn get_global(idx : Int) -> Array[Byte] {
+  encode_instr(GetGlobal(idx))
+}
+
+///|
+/// Encode a set_global instruction
+/// 
+/// @param idx The global variable index
+/// @return Array[Byte] containing the set_global instruction
+pub fn set_global(idx : Int) -> Array[Byte] {
+  encode_instr(SetGlobal(idx))
+}
+
+///|
 /// Encode an i32.const instruction
 /// 
 /// @param value The integer value
@@ -477,4 +495,40 @@ test "encode i32.const negative" {
 test "encode return instruction" {
   let code = return_()
   assert_eq(code[0], 0x0F)
+}
+
+///|
+/// Test: encode get_global instruction
+test "encode get_global instruction" {
+  let code = get_global(0)
+  // get_global: 0x23 + uleb128(0)
+  assert_eq(code[0], 0x23)
+  assert_eq(code[1], 0x00)
+}
+
+///|
+/// Test: encode get_global with index
+test "encode get_global with index" {
+  let code = get_global(5)
+  // get_global: 0x23 + uleb128(5) = 0x05
+  assert_eq(code[0], 0x23)
+  assert_eq(code[1], 0x05)
+}
+
+///|
+/// Test: encode set_global instruction
+test "encode set_global instruction" {
+  let code = set_global(0)
+  // set_global: 0x24 + uleb128(0)
+  assert_eq(code[0], 0x24)
+  assert_eq(code[1], 0x00)
+}
+
+///|
+/// Test: encode set_global with index
+test "encode set_global with index" {
+  let code = set_global(3)
+  // set_global: 0x24 + uleb128(3) = 0x03
+  assert_eq(code[0], 0x24)
+  assert_eq(code[1], 0x03)
 }
