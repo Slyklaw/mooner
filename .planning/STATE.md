@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Enable MoonBit programs to run in WebAssembly environments (browsers, WASI runtimes) while reusing the existing MoonBit compiler frontend.
-**Current focus:** Phase 2: Basic Language Features
+**Current focus:** Phase 3: Functions & Variables
 
 ## Current Position
 
-Phase: 2 of 4 (Basic Language Features)
-Plan: 4 of 4 in current phase
-Status: Complete
-Last activity: 2026-03-25 — Completed Plan 02-04 (Block labels, branching, and returns)
+Phase: 3 of 4 (Functions & Variables)
+Plan: 1 of 3 in current phase
+Status: In Progress
+Last activity: 2026-03-27 — Completed Plan 03-01 (Function signatures and local variables)
 
 Progress: [████████████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
+- Total plans completed: 8
 - Average duration: 13 min
-- Total execution time: 1.05 hours
+- Total execution time: 1.22 hours
 
 **By Phase:**
 
@@ -29,14 +29,15 @@ Progress: [████████████████] 100%
 |-------|-------|-------|----------|
 | 1. Foundation | 3 | 3 | 14 min |
 | 2. Basic Language Features | 4 | 4 | 13 min |
-| 3. Functions & Variables | 0 | 3 | - |
+| 3. Functions & Variables | 1 | 3 | 17 min |
 | 4. CLI Integration | 0 | 3 | - |
 
 **Recent Trend:**
-- Last 7 plans: 6, 18, 15, 12, 15, 13, 10 min
+- Last 8 plans: 6, 18, 15, 12, 15, 13, 10, 17 min
 - Trend: Stable
 
 *Updated after each plan completion*
+| Phase 03-functions-variables P03-01 | 17 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25 21:XX
-Stopped at: Completed Plan 02-04 (Block labels, branching, and returns)
+Last session: 2026-03-27 00:XX
+Stopped at: Completed Plan 03-01 (Function signatures and local variables)
 Resume file: None

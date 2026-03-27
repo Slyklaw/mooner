@@ -30,15 +30,15 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Functions
 
-- [ ] **FUNC-01**: Generate function signatures (parameter and result types)
-- [ ] **FUNC-02**: Emit function bodies with local variables
+- [x] **FUNC-01**: Generate function signatures (parameter and result types)
+- [x] **FUNC-02**: Emit function bodies with local variables
 - [ ] **FUNC-03**: Support function calls (direct calls within module)
 - [ ] **FUNC-04**: Support function exports (make functions callable from host)
 - [ ] **FUNC-05**: Support function imports (call external functions, e.g., WASI)
 
 ### Variables
 
-- [ ] **VAR-01**: Map local variables to WASM locals (i32, i64, f32, f64)
+- [x] **VAR-01**: Map local variables to WASM locals (i32, i64, f32, f64)
 - [ ] **VAR-02**: Support local variable get/set operations
 - [ ] **VAR-03**: Support global variables (if applicable)
 
@@ -108,12 +108,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CTRL-02 | Phase 2 | Complete |
 | CTRL-03 | Phase 2 | Complete |
 | CTRL-04 | Phase 2 | Complete |
-| FUNC-01 | Phase 3 | Pending |
-| FUNC-02 | Phase 3 | Pending |
+| FUNC-01 | Phase 3 | Complete |
+| FUNC-02 | Phase 3 | Complete |
 | FUNC-03 | Phase 3 | Pending |
 | FUNC-04 | Phase 3 | Pending |
 | FUNC-05 | Phase 3 | Pending |
-| VAR-01 | Phase 3 | Pending |
+| VAR-01 | Phase 3 | Complete |
 | VAR-02 | Phase 3 | Pending |
 | VAR-03 | Phase 3 | Pending |
 | CLI-01 | Phase 4 | Pending |
