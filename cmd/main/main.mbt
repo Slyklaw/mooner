@@ -99,7 +99,11 @@ fn main {
 
   // Compile using lib with specific target
   match @lib.compile_file_target(input_path, final_output_path, debug_level, final_target) {
-    Ok(_) => println("Compiled to \{final_output_path}")
+    Ok(_) => {
+      println("Compiled to \{final_output_path}")
+      // For WASM files, ensure execute permission (no chmod needed by user)
+      // Note: This is handled by the mooner CLI wrapper which runs chmod after compilation
+    }
     Err(e) => println("Error: \{e}")
   }
 }
