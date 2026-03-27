@@ -609,6 +609,22 @@ fn SectionWriter::add_code_section(
 }
 
 ///|
+/// Add a global section with global variable declarations.
+/// 
+/// @param content Array of encoded global entries
+/// @return Updated SectionWriter
+fn SectionWriter::add_global_section(
+  self : SectionWriter,
+  content : Array[Byte]
+) -> SectionWriter {
+  // Build section content (already encoded)
+  // Write section header and content
+  let section_size = content.length()
+  let writer = self.write_section_header(SectionId::Global, section_size)
+  { ..writer, buffer: writer.buffer + content, last_section_id: 6 }
+}
+
+///|
 /// Finish the section and return the complete bytes.
 fn SectionWriter::finish(self : SectionWriter) -> Array[Byte] {
   self.buffer
